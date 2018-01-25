@@ -1,0 +1,34 @@
+{
+    "first_section": 1023, 
+    "last_section": 1034, 
+    "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/", 
+    "input_stack": {
+        "owner": "gayathri",
+        "project": "MM2",
+        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_Rough_rev1039_v2",
+        "host": "em-131fs",
+        "port": 8080,
+        "mongo_host": "em-131fs",
+        "mongo_port": 27017,
+        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "collection_type": "stack",
+        "db_interface": "mongo"
+    }, 
+    "pointmatch": {
+        "owner": "danielk", 
+        "name": "NewPMS_combined_with_montage", 
+        "host": "em-131fs", 
+        "port": 8080, 
+        "mongo_host": "em-131fs", 
+        "mongo_port": 27017,
+        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "collection_type": "pointmatch",
+        "db_interface": "mongo"
+    },
+    "matrix_assembly": {
+        "depth": 2, 
+        "cross_pt_weight": 1.0, 
+        "montage_pt_weight": 1.0,
+        "chunks_per_file": 5 
+    } 
+}

@@ -27,7 +27,7 @@
     "output_options": {
         "output_mode": "hdf5",
         "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/",
-        "chunks_per_file": 3 
+        "chunks_per_file": -1
     },
     "matrix_assembly": {
         "depth": 2, 

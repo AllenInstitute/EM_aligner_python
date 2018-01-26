@@ -105,6 +105,11 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options
     sorter = np.argsort(tile_ids)
     file_chunks = 0
 
+    if output_options['chunks_per_file']==-1:
+        nmod=0.1 # np.mod(n+1,0.1) never == 0
+    else:
+        nmod = output_options['chunks_per_file']
+
     for i in np.arange(len(zvals)):
     #for i in np.arange(1):
         print ' upward-looking for z %d'%zvals[i]
@@ -150,11 +155,6 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options
             qinds[backwards] = ptmp
             del qtmp,ptmp
 
-            #to keep things roughly ordered
-            #order = np.argsort(pinds)
-            #matches = matches[order]
-            #p0col = pinds[order]*6
-            #q0col = qinds[order]*6
             p0col = pinds*6
             q0col = qinds*6
             
@@ -237,7 +237,7 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options
                 file_indptr = np.append(file_indptr,indptr[1:]+lastptr)
             file_chunks += 1
 
-        if (np.mod(i+1,output_options['chunks_per_file'])==0)|(i==len(zvals)-1):
+        if (np.mod(i+1,nmod)==0)|(i==len(zvals)-1):
             fname = output_options['output_dir']+'/%d.h5'%file_number
             c = csr_matrix((file_data,file_indices,file_indptr))
             print ' from %d chunks, canonical format: '%output_options['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz

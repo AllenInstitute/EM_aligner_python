@@ -52,9 +52,9 @@ def get_tileids_and_tforms(stack,zvals):
                 tile_tforms.append(np.array(ts['transforms']['specList'][1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
 
     print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
-    return np.array(tile_ids),np.array(tile_tforms)
+    return np.array(tile_ids),np.array(tile_tforms).flatten()
 
-def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options):
+def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
     #connect to the database
     dbconnection = make_dbconnection(collection)
 
@@ -68,6 +68,8 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options
         nmod=0.1 # np.mod(n+1,0.1) never == 0
     else:
         nmod = output_options['chunks_per_file']
+
+    file_zlist=[]
 
     for i in np.arange(len(zvals)):
     #for i in np.arange(1):
@@ -195,13 +197,15 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options
                 lastptr = file_indptr[-1]
                 file_indptr = np.append(file_indptr,indptr[1:]+lastptr)
             file_chunks += 1
+            file_zlist.append(zvals[i])
 
         if (np.mod(i+1,nmod)==0)|(i==len(zvals)-1):
-            fname = output_options['output_dir']+'/%d.h5'%file_number
+            fname = '%d_%d.h5'%(file_zlist[0],file_zlist[-1])
+            fullname = output_options['output_dir']+'/'+fname
             c = csr_matrix((file_data,file_indices,file_indptr))
             print ' from %d chunks, canonical format: '%output_options['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
-            print ' writing to file: %s'%fname
-            f = h5py.File(fname,"w")
+            print ' writing to file: %s'%fullname
+            f = h5py.File(fullname,"w")
             dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int32')
             dset[:] = c.indptr
             dset = f.create_dataset("indices",(c.indices.size,),dtype='int32')
@@ -211,12 +215,32 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options
             dset = f.create_dataset("weights",(file_weights.size,),dtype='float16')
             dset[:] = file_weights
             f.close()
-            print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
+            print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fullname)/(2.**30))
+            f=open(output_options['output_dir']+'/index.txt','a')
+            f.write('file %s contains %ld rows\n'%(fname,c.shape[0]))
+            f.close()
             del c
             file_chunks = 0
             file_number += 1
+            file_zlist = []
 
     return 1
+
+def create_regularization(regularization,tile_tforms,output_options):
+    #write the input transforms to disk
+    fname = output_options['output_dir']+'/regularization.h5'
+    f = h5py.File(fname,"w")
+    dset = f.create_dataset("transforms",(tile_tforms.size,),dtype='float64')
+    dset[:] = tile_tforms
+
+    #create a regularization vector
+    reg = np.ones_like(tile_tforms).astype('float32')*regularization['default_lambda']
+    reg[2::3] = regularization['translation_lambda']
+    dset = f.create_dataset("lambda",(reg.size,),dtype='float32')
+    dset[:] = reg
+    f.close()
+    print 'wrote regularization file'
+    return
 
 if __name__=='__main__':
     t0 = time.time()
@@ -228,8 +252,11 @@ if __name__=='__main__':
     #get the tile IDs and transforms
     tile_ids,tile_tforms = get_tileids_and_tforms(mod.args['input_stack'],zvals)
 
-    #create compressed sparse row format files
-    write_csrtype_files(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
+    #create A matrix in compressed sparse row (CSR) format
+    create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
+
+    #create the regularization vectors
+    create_regularization(mod.args['regularization'],tile_tforms,mod.args['output_options'])
 
     print 'total time: %0.1f'%(time.time()-t0)
 

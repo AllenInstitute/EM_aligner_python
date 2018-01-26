@@ -21,11 +21,15 @@ class db_params(argschema.ArgSchema):
     db_interface = argschema.fields.String(default='mongo')
     client_scripts = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts',description='render bin path')
 
+class output_options(argschema.ArgSchema):
+    output_mode = argschema.fields.String(default='hdf5')
+    output_dir = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
+    chunks_per_file = argschema.fields.Int(default=5,description='how many sections with upward-looking cross section to write per .h5 file')
+
 class matrix_assembly(argschema.ArgSchema):
     depth = argschema.fields.Int(default=2,description='depth in z for matrix assembly point matches')
     cross_pt_weight = argschema.fields.Float(default=1.0,description='weight of cross section point matches')
     montage_pt_weight = argschema.fields.Float(default=1.0,description='weight of montage point matches')
-    chunks_per_file = argschema.fields.Int(default=5,description='how many sections with upward-looking cross section to write per .h5 file')
 
 class regularization(argschema.ArgSchema):
     default_lambda = argschema.fields.Float(0.005,description='regularization factor')
@@ -41,7 +45,9 @@ class MySchema(argschema.ArgSchema):
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
     input_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)
+    output_options = argschema.fields.Nested(output_options)
     matrix_assembly = argschema.fields.Nested(matrix_assembly)
+    regularization = argschema.fields.Nested(regularization)
     showtiming = argschema.fields.Int(default=1,description = 'have the routine showhow long each process takes')
     output_dir = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/',description='where to send logs and results')
 
@@ -89,7 +95,7 @@ def get_tileids_and_tforms(stack,zvals):
     print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
     return np.array(tile_ids),np.array(tile_tforms)
 
-def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
+def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_options):
     #connect to the database
     dbconnection = make_dbconnection(collection)
 
@@ -145,10 +151,12 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
             del qtmp,ptmp
 
             #to keep things roughly ordered
-            order = np.argsort(pinds)
-            matches = matches[order]
-            p0col = pinds[order]*6
-            q0col = qinds[order]*6
+            #order = np.argsort(pinds)
+            #matches = matches[order]
+            #p0col = pinds[order]*6
+            #q0col = qinds[order]*6
+            p0col = pinds*6
+            q0col = qinds*6
             
             drow = np.zeros(6).astype('float64')
             dblock = np.zeros(6*nmax).astype('float64')
@@ -162,8 +170,11 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
             #conservative pre-allocation
             nmatches = len(matches)
             data = np.zeros(6*nmax*nmatches*2).astype('float64')
+            weights = np.zeros(6*nmax*nmatches*2).astype('float16')
             indices = np.zeros(6*nmax*nmatches*2).astype('int64')
             indptr = np.zeros(2*nmax*nmatches+1).astype('int64')
+            halfp_ones = np.ones(2*6*nmax).astype('float16')
+
             indptr[0] = 0
             nrows = 0
 
@@ -182,6 +193,11 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
                 else:
                     dorder = dforw
 
+                if i==j:
+                    matchweight = matrix_assembly['montage_pt_weight']
+                else:
+                    matchweight = matrix_assembly['cross_pt_weight']
+
                 m = np.arange(npts)
                 m6 = m*6
                 dblock[dorder[0]+m6] = np.array(matches[k]['matches']['p'][0])[m]
@@ -191,13 +207,16 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
                 dblock[dorder[4]+m6] = -1.0*np.array(matches[k]['matches']['q'][1])[m]
                 dblock[dorder[5]+m6] = -1.0
                 data[(nrows*6):(nrows*6+6*npts*2)] = np.tile(dblock[0:npts*6],2)  #xrows, then duplicate for y rows
+                weights[(nrows*6):(nrows*6+6*npts*2)] = matchweight*halfp_ones[0:2*npts*6]  #xrows, then duplicate for y rows
                 indices[(nrows*6):(nrows*6+6*npts)] = np.tile(xindices,npts) #xrow column indices
                 indices[(nrows*6+6*npts):(nrows*6+6*npts*2)] = np.tile(yindices,npts) #yrow column indices
                 indptr[(nrows+1):(nrows+1+2*npts)] = np.arange(1,2*npts+1)*6+indptr[nrows]
+
                 nrows += 2*npts
             
             #truncate, because we allocated conservatively
             data = data[0:nrows*6]
+            weights = weights[0:nrows*6]
             indices = indices[0:nrows*6]
             indptr = indptr[0:nrows+1]
 
@@ -207,19 +226,21 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
         
             if file_chunks==0:
                 file_data = copy.deepcopy(data)
+                file_weights = copy.deepcopy(weights)
                 file_indices = copy.deepcopy(indices)
                 file_indptr = copy.deepcopy(indptr)
             else:
                 file_data = np.append(file_data,data)
+                file_weights = np.append(file_weights,weights)
                 file_indices = np.append(file_indices,indices)
                 lastptr = file_indptr[-1]
                 file_indptr = np.append(file_indptr,indptr[1:]+lastptr)
             file_chunks += 1
 
-        if (np.mod(i+1,matrix_assembly['chunks_per_file'])==0)|(i==len(zvals)-1):
-            fname = output_dir+'/%d.h5'%file_number
+        if (np.mod(i+1,output_options['chunks_per_file'])==0)|(i==len(zvals)-1):
+            fname = output_options['output_dir']+'/%d.h5'%file_number
             c = csr_matrix((file_data,file_indices,file_indptr))
-            print ' from %d chunks, canonical format: '%matrix_assembly['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
+            print ' from %d chunks, canonical format: '%output_options['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
             print ' writing to file: %s'%fname
             f = h5py.File(fname,"w")
             dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int32')
@@ -228,6 +249,8 @@ def write_csrtype_files(collection,matrix_assembly,tile_ids,zvals,output_dir):
             dset[:] = c.indices
             dset = f.create_dataset("data",(c.data.size,),dtype='float64')
             dset[:] = c.data
+            dset = f.create_dataset("weights",(file_weights.size,),dtype='float16')
+            dset[:] = file_weights
             f.close()
             print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
             del c
@@ -247,7 +270,7 @@ if __name__=='__main__':
     tile_ids,tile_tforms = get_tileids_and_tforms(mod.args['input_stack'],zvals)
 
     #create compressed sparse row format files
-    write_csrtype_files(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_dir'])
+    write_csrtype_files(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
 
     print 'total time: %0.1f'%(time.time()-t0)
 

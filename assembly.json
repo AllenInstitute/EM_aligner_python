@@ -1,7 +1,6 @@
 {
     "first_section": 1023, 
-    "last_section": 1034, 
-    "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/", 
+    "last_section": 1027, 
     "input_stack": {
         "owner": "gayathri",
         "project": "MM2",
@@ -25,10 +24,18 @@
         "collection_type": "pointmatch",
         "db_interface": "mongo"
     },
+    "output_options": {
+        "output_mode": "hdf5",
+        "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/",
+        "chunks_per_file": 3 
+    },
     "matrix_assembly": {
         "depth": 2, 
-        "cross_pt_weight": 1.0, 
         "montage_pt_weight": 1.0,
-        "chunks_per_file": 5 
-    } 
+        "cross_pt_weight": 0.5 
+    },
+    "regularization": {
+        "default_lambda": 0.005,
+        "translation_lambda": 0.005 
+    }
 }

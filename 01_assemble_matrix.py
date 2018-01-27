@@ -63,6 +63,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
 
     sorter = np.argsort(tile_ids)
     file_chunks = 0
+    tiles_used = []
 
     if output_options['chunks_per_file']==-1:
         nmod=0.1 # np.mod(n+1,0.1) never == 0
@@ -92,10 +93,11 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                     cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))})
                     matches = np.append(matches,list(cursor))
 
-            print '  loaded %d matches for z1=%d z2=%d in %0.1f sec using interface: %s'%(len(matches),zvals[i],zvals[j],time.time()-t0,collection['db_interface'])
+            if len(matches)==0:
+                print 'WARNING: %d matches for z1=%d z2=%d in pointmatch collection'%(len(matches),zvals[i],zvals[j])
+                continue
 
-            t0 = time.time()
-
+            #extract IDs for checking
             pids = []
             qids = []
             for m in matches:
@@ -104,6 +106,20 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             pids = np.array(pids)
             qids = np.array(qids)
 
+            #remove matches that don't have both IDs in tile_ids
+            instack = np.in1d(pids,tile_ids)&np.in1d(qids,tile_ids)
+            matches = matches[instack]
+            pids = pids[instack]
+            qids = qids[instack]
+ 
+            if len(matches)==0:
+                print 'WARNING: no tile pairs in stack for pointmatches in z1=%d z2=%d'%(zvals[i],zvals[j])
+                continue
+
+            print '  loaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,collection['db_interface'])
+        
+            t0 = time.time()
+            
             #for the given point matches, these are the indices in tile_ids that are being called
             pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
             qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
@@ -115,7 +131,6 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             pinds[backwards] = qtmp
             qinds[backwards] = ptmp
             del qtmp,ptmp
-
             p0col = pinds*6
             q0col = qinds*6
             
@@ -139,11 +154,17 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             indptr[0] = 0
             nrows = 0
 
-            for k in np.arange(len(matches)):
-            #for k in np.arange(5400):
+            for k in np.arange(nmatches):
                 npts = len(matches[k]['matches']['q'][0])
                 if npts > nmax: #really dumb filter for limiting size
                     npts=nmax
+                if npts==0:
+                    print 'zero length point match entry?'
+                    continue
+
+                #add both tile ids to the list
+                tiles_used.append(matches[k]['pId'])
+                tiles_used.append(matches[k]['qId'])
 
                 #what column indices will we be writing to?
                 xindices = np.hstack((colx+p0col[k],colx+q0col[k])).astype('int64')
@@ -204,27 +225,32 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             fullname = output_options['output_dir']+'/'+fname
             c = csr_matrix((file_data,file_indices,file_indptr))
             print ' from %d chunks, canonical format: '%output_options['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
-            print ' writing to file: %s'%fullname
-            f = h5py.File(fullname,"w")
-            dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int32')
-            dset[:] = c.indptr
-            dset = f.create_dataset("indices",(c.indices.size,),dtype='int32')
-            dset[:] = c.indices
-            dset = f.create_dataset("data",(c.data.size,),dtype='float64')
-            dset[:] = c.data
-            dset = f.create_dataset("weights",(file_weights.size,),dtype='float16')
-            dset[:] = file_weights
-            f.close()
-            print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fullname)/(2.**30))
-            f=open(output_options['output_dir']+'/index.txt','a')
-            f.write('file %s contains %ld rows\n'%(fname,c.shape[0]))
-            f.close()
-            del c
+            cnnz = np.argwhere(c.getnnz(0)==0).flatten().size
+            print ' matrix contains %d all-zero columns (%d tiles in stack were not matched)'%(cnnz,cnnz/6)
+            if output_options['output_mode']=='hdf5':
+                print ' writing to file: %s'%fullname
+                f = h5py.File(fullname,"w")
+                dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int32')
+                dset[:] = c.indptr
+                dset = f.create_dataset("indices",(c.indices.size,),dtype='int32')
+                dset[:] = c.indices
+                dset = f.create_dataset("data",(c.data.size,),dtype='float64')
+                dset[:] = c.data
+                dset = f.create_dataset("weights",(file_weights.size,),dtype='float16')
+                dset[:] = file_weights
+                f.close()
+                print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fullname)/(2.**30))
+                fmode='a'
+                if file_number==0:
+                    fmode='w'
+                f=open(output_options['output_dir']+'/index.txt',fmode)
+                f.write('file %s contains %ld rows\n'%(fname,c.shape[0]))
+                f.close()
             file_chunks = 0
             file_number += 1
             file_zlist = []
 
-    return 1
+    return c,file_weights,np.unique(np.array(tiles_used))
 
 def create_regularization(regularization,tile_tforms,output_options):
     #write the input transforms to disk
@@ -239,7 +265,7 @@ def create_regularization(regularization,tile_tforms,output_options):
     dset = f.create_dataset("lambda",(reg.size,),dtype='float32')
     dset[:] = reg
     f.close()
-    print 'wrote regularization file'
+    print 'wrote %s'%fname
     return
 
 if __name__=='__main__':
@@ -253,7 +279,7 @@ if __name__=='__main__':
     tile_ids,tile_tforms = get_tileids_and_tforms(mod.args['input_stack'],zvals)
 
     #create A matrix in compressed sparse row (CSR) format
-    create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
+    c,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
 
     #create the regularization vectors
     create_regularization(mod.args['regularization'],tile_tforms,mod.args['output_options'])

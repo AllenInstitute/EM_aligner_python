@@ -16,22 +16,19 @@ nlines = 8
 space = (overlap-nlines*lw)/nlines-1
 for i in np.arange(nlines+1):
     edge = (i+1)*space
-    full[0:2*overlap,edge:edge+lw] = 255
-    full[edge:edge+lw,0:2*overlap] = 255
-for i in np.arange(1,n/2):
-    full[0:2*overlap,i*2*overlap:(i+1)*2*overlap] = full[0:2*overlap,0:2*overlap]
+    full[:,edge:edge+lw] = 255
+for i in np.arange(1,n):
+    full[:,i*overlap:(i+1)*overlap] = full[:,0:overlap]
 
 #reflect top edge to left side
 full = full + np.rot90(np.fliplr(full),1)
 
-#make the bottom overlap pixels exactly match the top overlap pixels
-full[(h-overlap):h,:] = full[0:overlap,:]
-#make the right overlap pixels exactly match the left overlap pixels
-full[:,(w-overlap):w] = full[:,0:overlap]
-
 #make mark to break the symmetries
-full[1100:1920,1100:1920] = 255
-full[1200:1920,1200:1920] = 0
+full[1100:1400,1100:1200] = full[1100:1400,1100:1200]+255
+full[1100:1200,1100:1400] = full[1100:1200,1100:1400]+255
+#mark the center
+csize = 500
+full[(w/2-csize):(w/2+csize),(w/2-csize):(w/2+csize)] = 255
 
 p = Image.fromarray(full)
 p.save('test_pattern.tif')

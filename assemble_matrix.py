@@ -6,7 +6,9 @@ import renderapi
 from assembly_schema import *
 import copy
 import time
+import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import spsolve
 import h5py
 import os
 
@@ -52,7 +54,7 @@ def get_tileids_and_tforms(stack,zvals):
                 tile_tforms.append(np.array(ts['transforms']['specList'][1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
 
     print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
-    return np.array(tile_ids),np.array(tile_tforms).flatten()
+    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tspecs)
 
 def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
     #connect to the database
@@ -146,10 +148,10 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             #conservative pre-allocation
             nmatches = len(matches)
             data = np.zeros(6*nmax*nmatches*2).astype('float64')
-            weights = np.zeros(6*nmax*nmatches*2).astype('float16')
             indices = np.zeros(6*nmax*nmatches*2).astype('int64')
             indptr = np.zeros(2*nmax*nmatches+1).astype('int64')
-            halfp_ones = np.ones(2*6*nmax).astype('float16')
+            weights = np.zeros(2*nmax*nmatches).astype('float16')
+            halfp_ones = np.ones(2*nmax).astype('float16')
 
             indptr[0] = 0
             nrows = 0
@@ -189,18 +191,18 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 dblock[dorder[4]+m6] = -1.0*np.array(matches[k]['matches']['q'][1])[m]
                 dblock[dorder[5]+m6] = -1.0
                 data[(nrows*6):(nrows*6+6*npts*2)] = np.tile(dblock[0:npts*6],2)  #xrows, then duplicate for y rows
-                weights[(nrows*6):(nrows*6+6*npts*2)] = matchweight*halfp_ones[0:2*npts*6]  #xrows, then duplicate for y rows
                 indices[(nrows*6):(nrows*6+6*npts)] = np.tile(xindices,npts) #xrow column indices
                 indices[(nrows*6+6*npts):(nrows*6+6*npts*2)] = np.tile(yindices,npts) #yrow column indices
                 indptr[(nrows+1):(nrows+1+2*npts)] = np.arange(1,2*npts+1)*6+indptr[nrows]
+                weights[(nrows):(nrows+2*npts)] = matchweight*halfp_ones[0:2*npts]  #xrows, then duplicate for y rows
 
                 nrows += 2*npts
             
             #truncate, because we allocated conservatively
             data = data[0:nrows*6]
-            weights = weights[0:nrows*6]
             indices = indices[0:nrows*6]
             indptr = indptr[0:nrows+1]
+            weights = weights[0:nrows]
 
             c = csr_matrix((data,indices,indptr))
             print '  created submatrix in %0.1f sec.'%(time.time()-t0),'canonical format: ',c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
@@ -249,24 +251,33 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             file_chunks = 0
             file_number += 1
             file_zlist = []
-
-    return c,file_weights,np.unique(np.array(tiles_used))
+ 
+    outw = sparse.eye(file_weights.size,format='csr')
+    outw.data = file_weights
+    return c,outw,np.unique(np.array(tiles_used))
 
 def create_regularization(regularization,tile_tforms,output_options):
-    #write the input transforms to disk
-    fname = output_options['output_dir']+'/regularization.h5'
-    f = h5py.File(fname,"w")
-    dset = f.create_dataset("transforms",(tile_tforms.size,),dtype='float64')
-    dset[:] = tile_tforms
-
     #create a regularization vector
     reg = np.ones_like(tile_tforms).astype('float32')*regularization['default_lambda']
     reg[2::3] = regularization['translation_lambda']
-    dset = f.create_dataset("lambda",(reg.size,),dtype='float32')
-    dset[:] = reg
-    f.close()
-    print 'wrote %s'%fname
-    return
+
+    if output_options['output_mode']=='hdf5':
+        #write the input transforms to disk
+        fname = output_options['output_dir']+'/regularization.h5'
+        f = h5py.File(fname,"w")
+        dset = f.create_dataset("transforms",(tile_tforms.size,),dtype='float64')
+        dset[:] = tile_tforms
+
+        #create a regularization vector
+        dset = f.create_dataset("lambda",(reg.size,),dtype='float32')
+        dset[:] = reg
+        f.close()
+        print 'wrote %s'%fname
+
+    outr = sparse.eye(reg.size,format='csr')
+    outr.data = reg
+
+    return outr
 
 if __name__=='__main__':
     t0 = time.time()
@@ -275,11 +286,40 @@ if __name__=='__main__':
     #specify the z values
     zvals = np.arange(mod.args['first_section'],mod.args['last_section']+1)
 
-    #get the tile IDs and transforms
-    tile_ids,tile_tforms = get_tileids_and_tforms(mod.args['input_stack'],zvals)
 
-    #create A matrix in compressed sparse row (CSR) format
-    c,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
+    if mod.args['solve_type']=='montage':
+        for z in zvals:
+            #get the tile IDs and transforms
+            tile_ids,tile_tforms,tile_tspecs = get_tileids_and_tforms(mod.args['input_stack'],[z])
+
+            #create A matrix in compressed sparse row (CSR) format
+            A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,[z],mod.args['output_options'])
+            tile_ind = np.in1d(tile_ids,tiles_used)
+            mont_ids = tile_ids[tile_ind]
+            mont_tspecs = tile_tspecs[tile_ind]
+            mont_tforms = tile_tforms[np.repeat(tile_ind,6)]
+            
+            #create the regularization vectors
+            mont_reg = create_regularization(mod.args['regularization'],mont_tforms,mod.args['output_options'])
+
+            #regularized least squares
+            ATW = A.transpose().dot(weights)
+            K = ATW.dot(A) + mont_reg
+            print ' created K: %d x %d'%K.shape
+            Lm = mont_reg.dot(mont_tforms)
+     
+            #solve
+            mont_x = spsolve(K,Lm)
+            print ' solved'
+            print ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
+            print ' error     [norm(Ax-b)] = %0.1e'%(np.linalg.norm(A.dot(mont_x)))
+
+    else:
+        #get the tile IDs and transforms
+        tile_ids,tile_tforms,tile_tspecs = get_tileids_and_tforms(mod.args['input_stack'],zvals)
+
+        #create A matrix in compressed sparse row (CSR) format
+        c,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
 
     #create the regularization vectors
     create_regularization(mod.args['regularization'],tile_tforms,mod.args['output_options'])

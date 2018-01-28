@@ -35,11 +35,11 @@ class stack(db_params):
 class MySchema(argschema.ArgSchema):
     first_section = argschema.fields.Int(default=1000, description = 'first section for matrix assembly')
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
+    solve_type = argschema.fields.String(default='')
     input_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)
     output_options = argschema.fields.Nested(output_options)
     matrix_assembly = argschema.fields.Nested(matrix_assembly)
     regularization = argschema.fields.Nested(regularization)
     showtiming = argschema.fields.Int(default=1,description = 'have the routine showhow long each process takes')
-    output_dir = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/',description='where to send logs and results')
 

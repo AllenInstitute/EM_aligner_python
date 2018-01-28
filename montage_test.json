@@ -1,11 +1,11 @@
 {
-    "first_section": 1023, 
-    "last_section": 1024,
+    "first_section": 1020, 
+    "last_section": 1021,
     "solve_type": "montage",
     "input_stack": {
         "owner": "gayathri",
         "project": "MM2",
-        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_Rough_rev1039_v2",
+        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_rev1039",
         "host": "em-131fs",
         "port": 8080,
         "mongo_host": "em-131fs",
@@ -15,8 +15,8 @@
         "db_interface": "mongo"
     }, 
     "pointmatch": {
-        "owner": "danielk", 
-        "name": "NewPMS_combined_with_montage", 
+        "owner": "gayathri_MM2", 
+        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_Fine_rev1039",
         "host": "em-131fs", 
         "port": 8080, 
         "mongo_host": "em-131fs", 
@@ -26,7 +26,7 @@
         "db_interface": "mongo"
     },
     "output_options": {
-        "output_mode": "hdf5",
+        "output_mode": "stack",
         "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/",
         "chunks_per_file": -1
     },
@@ -37,6 +37,6 @@
     },
     "regularization": {
         "default_lambda": 0.005,
-        "translation_lambda": 0.005 
+        "translation_lambda": 0.005
     }
 }

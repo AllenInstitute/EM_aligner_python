@@ -1,33 +1,29 @@
 {
-    "width": 3840.0,
-    "height": 3840.0,
-    "z": 1000.0,
-    "layout": {
-        "camera": "fake_camera",
-        "imageCol": 0,
-        "imageRow": 0,
-        "sectionId": "1000.0",
-        "stageX": 0.0,
-        "stageY": 0.0,
-        "temca": "-1"
+    "ntile_x": 10,
+    "ntile_y": 10,
+    "ntile_z": 10,
+    "overlap": 240,
+    "new_stack": {
+        "owner": "danielk",
+        "project": "fake",
+        "name": "perfect_stack",
+        "host": "em-131fs",
+        "port": 8080,
+        "mongo_host": "em-131fs",
+        "mongo_port": 27017,
+        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "collection_type": "stack",
+        "db_interface": "render"
     },
-    "maxIntensity": 255.0,
-    "maxX": 222535.0,
-    "maxY": 294360.0,
-    "meshCellSize": 64.0,
-    "minIntensity": 0.0,
-    "minX": 218686.0,
-    "minY": 290484.0,
-    "mipmapLevels": {
-        "0": {"imageUrl": "file:/allen/programs/celltypes/workgroups/em-connectomics/test_pattern.tif"
-        }
-    },
-    "tileId": "fake_tile_0_0.1000.0",
-    "transforms": {
-        "specList": [{
-            "className": "mpicbg.trakem2.transform.AffineModel2D",
-            "dataString": "1.0 0.0 0.0 1.0 0.0 0.0",
-            "type": "leaf"
-            }],
-        "type": "list"}
+    "new_pointmatch": {
+        "owner": "danielk", 
+        "name": "fake_match_collection",
+        "host": "em-131fs", 
+        "port": 8080, 
+        "mongo_host": "em-131fs", 
+        "mongo_port": 27017,
+        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "collection_type": "pointmatch",
+        "db_interface": "mongo"
+    }
 }

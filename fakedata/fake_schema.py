@@ -24,8 +24,10 @@ class MySchema(argschema.ArgSchema):
     ntile_x = argschema.fields.Int(default=10, description = 'number of tiles along x axis')
     ntile_y = argschema.fields.Int(default=10, description = 'number of tiles along y axis')
     ntile_z = argschema.fields.Int(default=10, description = 'number of tiles along z axis (nsections)')
-    overlap = argschema.fields.Float(default=0.1, description = 'fractional overlap of images')
+    overlap = argschema.fields.Float(default=240, description = 'fractional overlap of images')
     npts = argschema.fields.Int(default=50, description = 'number of points per tile pair')
     new_stack = argschema.fields.Nested(stack)
     new_pointmatch = argschema.fields.Nested(pointmatch)
+    intermediate_name = argschema.fields.String(default='sections_moved',description="for visually checking section movement")
+    raw_name = argschema.fields.String(default='raw_stack',description="name of the fake raw stack")
 

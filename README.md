@@ -30,7 +30,7 @@ ingest
 ```
 python not_ready_yet.py --input_json not_ready_yet.json
 tar cvzf the_files
-scp the_files user@big_machine:
+scp the_files.tar.gz user@big_machine:
 user@big_machine$ tar -xvzf the_files.tar.gz
 user@big_machine$ solve the_files
 scp user@big_machine:the_solution ./

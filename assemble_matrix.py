@@ -48,12 +48,24 @@ def get_tileids_and_tforms(stack,zvals):
             #cursor = dbconnection.find({'z':float(z)}) #no order
             cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)])
             tspecs = list(cursor)
+            refids = []
+            for ts in tspecs:
+                #print ts
+                for m in np.arange(len(ts['transforms']['specList'])):
+                    if 'refId' in ts['transforms']['specList'][m]:
+                        refids.append(ts['transforms']['specList'][m]['refId'])
+            refids = np.unique(np.array(refids))
+
+            shared_tforms=[]
             dbconnection2 = make_dbconnection(stack,which='transform')
-            cursor = dbconnection2.find({})
-            shared_tforms = list(cursor)
+            for refid in refids:
+                shared_tforms.append(renderapi.transform.load_transform_json(list(dbconnection2.find({"id":refid}))[0]))
+            #shared_tforms = list(cursor)
             #will import these to new stack using renderapi
-            for j in np.arange(len(shared_tforms)):
-                shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
+            #for j in np.arange(len(shared_tforms)):
+            #    shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
+
+        #only pass on the shared transforms that are in the tiles
 
         #make lists of IDs and transforms
         for k in np.arange(len(tspecs)):
@@ -311,6 +323,7 @@ if __name__=='__main__':
         for z in zvals:
             #get the tile IDs and transforms
             tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],[z])
+            #raw_input('abc')
 
             #create A matrix in compressed sparse row (CSR) format
             A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,[z],mod.args['output_options'])
@@ -333,9 +346,11 @@ if __name__=='__main__':
      
             #solve
             mont_x = spsolve(K,Lm)
-            print ' assembled and solved in %0.1f sec'%(time.time()-t0)
-            print ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
-            print ' error     [norm(Ax-b)] = %0.3f'%(np.linalg.norm(A.dot(mont_x)))
+            message = ''
+            message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)
+            message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
+            message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(A.dot(mont_x)))
+            print message
             del A,K,ATW,Lm
 
             #replace the last transform in the tilespec with the new one
@@ -350,6 +365,8 @@ if __name__=='__main__':
             #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
             renderapi.client.import_tilespecs_parallel(output['name'],mont_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
             del shared_tforms,mont_x,mont_tspecs
+
+            print message
 
         if mod.args['close_stack']:
             renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)

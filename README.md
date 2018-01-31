@@ -1,3 +1,5 @@
 # EM_aligner_python
-## assemble a matrix
-`python 01_assemble_matrix.py --input_json 'assembly.json'`
+## montage: loop over z values, assemble and solve montages, ingest
+`python assemble_matrix.py --input_json montage_test.json'`
+## 3D : working on it
+`...`

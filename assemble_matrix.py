@@ -46,26 +46,20 @@ def get_tileids_and_tforms(stack,zvals):
             shared_tforms = tmp.transforms
         if stack['db_interface']=='mongo':
             #cursor = dbconnection.find({'z':float(z)}) #no order
-            cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)])
+            cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)]) #like renderapi order?
             tspecs = list(cursor)
             refids = []
             for ts in tspecs:
-                #print ts
                 for m in np.arange(len(ts['transforms']['specList'])):
                     if 'refId' in ts['transforms']['specList'][m]:
                         refids.append(ts['transforms']['specList'][m]['refId'])
             refids = np.unique(np.array(refids))
 
+            #be selective of which transforms to pass on to the new stack
             shared_tforms=[]
             dbconnection2 = make_dbconnection(stack,which='transform')
             for refid in refids:
                 shared_tforms.append(renderapi.transform.load_transform_json(list(dbconnection2.find({"id":refid}))[0]))
-            #shared_tforms = list(cursor)
-            #will import these to new stack using renderapi
-            #for j in np.arange(len(shared_tforms)):
-            #    shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
-
-        #only pass on the shared transforms that are in the tiles
 
         #make lists of IDs and transforms
         for k in np.arange(len(tspecs)):
@@ -99,7 +93,6 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
     file_zlist=[]
 
     for i in np.arange(len(zvals)):
-    #for i in np.arange(1):
         print ' upward-looking for z %d'%zvals[i]
         jmax = np.min([i+matrix_assembly['depth']+1,len(zvals)])
         for j in np.arange(i,jmax): #depth, upward looking
@@ -116,8 +109,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 matches = np.array(list(cursor))
                 if i!=j:
                     #in principle, this does nothing if zvals[i] < zvals[j], but, just in case
-                    #cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))})
-                    cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))}).sort({"item.layout.imgaeRow":1})
+                    cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))})
                     matches = np.append(matches,list(cursor))
 
             if len(matches)==0:
@@ -230,6 +222,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             indptr = indptr[0:nrows+1]
             weights = weights[0:nrows]
 
+            #can check CSR form here, but seems to be working
             #c = csr_matrix((data,indices,indptr))
             #print '  created submatrix in %0.1f sec.'%(time.time()-t0),'canonical format: ',c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
             #del c
@@ -305,7 +298,6 @@ def create_regularization(regularization,tile_tforms,output_options):
 
     outr = sparse.eye(reg.size,format='csr')
     outr.data = reg
-
     return outr
 
 if __name__=='__main__':
@@ -343,13 +335,16 @@ if __name__=='__main__':
             Lm = mont_reg.dot(mont_tforms)
 
             del weights,mont_tforms,mont_reg
-     
+  
             #solve
             mont_x = spsolve(K,Lm)
-            message = ''
+            err = A.dot(mont_x)
+
+            message = '***-------------***\n'
             message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)
             message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
-            message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(A.dot(mont_x)))
+            message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
+            message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
             print message
             del A,K,ATW,Lm
 

@@ -17,7 +17,7 @@ ingest
 ```
 `python not_ready_yet.py --input_json not_ready_yet.json`
 ## large 3D
-intended to assemble A locally into multiple files for input for a distributed solver
+intended to assemble A locally into multiple files for input to a distributed solver
 ```
 for z in zlist:
     add to assembly from montage_matches(z), cross_matches(z,z+1),...,cross_matches(z,z+depth)

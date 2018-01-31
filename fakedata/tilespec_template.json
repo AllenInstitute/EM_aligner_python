@@ -1,0 +1,33 @@
+{
+    "width": 3840.0,
+    "height": 3840.0,
+    "z": 1000.0,
+    "layout": {
+        "camera": "fake_camera",
+        "imageCol": 0,
+        "imageRow": 0,
+        "sectionId": "1000.0",
+        "stageX": 0.0,
+        "stageY": 0.0,
+        "temca": "-1"
+    },
+    "maxIntensity": 255.0,
+    "maxX": 222535.0,
+    "maxY": 294360.0,
+    "meshCellSize": 64.0,
+    "minIntensity": 0.0,
+    "minX": 218686.0,
+    "minY": 290484.0,
+    "mipmapLevels": {
+        "0": {"imageUrl": "file:/allen/programs/celltypes/workgroups/em-connectomics/test_pattern.tif"
+        }
+    },
+    "tileId": "faketile_0_0.1000.0",
+    "transforms": {
+        "specList": [{
+            "className": "mpicbg.trakem2.transform.AffineModel2D",
+            "dataString": "1.0 0.0 0.0 1.0 0.0 0.0",
+            "type": "leaf"
+            }],
+        "type": "list"}
+}

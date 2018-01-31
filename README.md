@@ -6,7 +6,7 @@ for z in zlist:
     solve with scipy.sparse
 ingest
 ```
-`python assemble_matrix.py --input_json montage_test.json'`
+`python assemble_matrix.py --input_json montage_test.json`
 ## small 3D:
 intended to run locally, will be RAM limited
 ```

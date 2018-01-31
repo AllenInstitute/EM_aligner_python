@@ -1,4 +1,5 @@
 # creating a fake dataset
+this isn't working well right now, please ignore
 ## 1. create a fake image
 optional, but helpful for checking results in ndviz
 ## 2. create a perfect "pre-raw" stack

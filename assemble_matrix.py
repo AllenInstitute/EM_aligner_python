@@ -8,8 +8,7 @@ import copy
 import time
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
-from scipy.sparse.linalg import spsolve,bicg
-from scipy.sparse import linalg as sla
+from scipy.sparse.linalg import spsolve
 import h5py
 import os
 

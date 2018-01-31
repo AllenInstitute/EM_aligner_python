@@ -68,7 +68,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
     dbconnection = make_dbconnection(collection)
 
     file_number=0
-    nmax=5000
+    nmax=500
 
     sorter = np.argsort(tile_ids)
     file_chunks = 0
@@ -205,16 +205,17 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 weights[(nrows):(nrows+2*npts)] = matchweight*halfp_ones[0:2*npts]  #xrows, then duplicate for y rows
 
                 nrows += 2*npts
-            
+           
+            del matches 
             #truncate, because we allocated conservatively
             data = data[0:nrows*6]
             indices = indices[0:nrows*6]
             indptr = indptr[0:nrows+1]
             weights = weights[0:nrows]
 
-            c = csr_matrix((data,indices,indptr))
-            print '  created submatrix in %0.1f sec.'%(time.time()-t0),'canonical format: ',c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
-            del c
+            #c = csr_matrix((data,indices,indptr))
+            #print '  created submatrix in %0.1f sec.'%(time.time()-t0),'canonical format: ',c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
+            #del c
         
             if file_chunks==0:
                 file_data = copy.deepcopy(data)
@@ -229,11 +230,13 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 file_indptr = np.append(file_indptr,indptr[1:]+lastptr)
             file_chunks += 1
             file_zlist.append(zvals[i])
+            del data,indices,indptr,weights
 
         if (np.mod(i+1,nmod)==0)|(i==len(zvals)-1):
             fname = '%d_%d.h5'%(file_zlist[0],file_zlist[-1])
             fullname = output_options['output_dir']+'/'+fname
             c = csr_matrix((file_data,file_indices,file_indptr))
+            del file_data,file_indices,file_indptr
             print ' from %d chunks, canonical format: '%output_options['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
             cnnz = np.argwhere(c.getnnz(0)==0).flatten().size
             print ' matrix contains %d all-zero columns (%d tiles in stack were not matched)'%(cnnz,cnnz/6)
@@ -262,6 +265,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
  
     outw = sparse.eye(file_weights.size,format='csr')
     outw.data = file_weights
+    del file_weights 
     return c,outw,np.unique(np.array(tiles_used))
 
 def create_regularization(regularization,tile_tforms,output_options):
@@ -306,9 +310,10 @@ if __name__=='__main__':
             #create A matrix in compressed sparse row (CSR) format
             A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,[z],mod.args['output_options'])
             tile_ind = np.in1d(tile_ids,tiles_used)
-            mont_ids = tile_ids[tile_ind]
             mont_tspecs = tile_tspecs[tile_ind]
             mont_tforms = tile_tforms[np.repeat(tile_ind,6)]
+           
+            del tile_ids,tiles_used,tile_tspecs,tile_tforms,tile_ind
             
             #create the regularization vectors
             mont_reg = create_regularization(mod.args['regularization'],mont_tforms,mod.args['output_options'])
@@ -318,12 +323,15 @@ if __name__=='__main__':
             K = ATW.dot(A) + mont_reg
             print ' created K: %d x %d'%K.shape
             Lm = mont_reg.dot(mont_tforms)
+
+            del weights,mont_tforms,mont_reg
      
             #solve
             mont_x = spsolve(K,Lm)
             print ' assembled and solved in %0.1f sec'%(time.time()-t0)
             print ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
             print ' error     [norm(Ax-b)] = %0.3f'%(np.linalg.norm(A.dot(mont_x)))
+            del A,K,ATW,Lm
 
             tspout = []
             for m in np.arange(len(mont_tspecs)):
@@ -343,6 +351,7 @@ if __name__=='__main__':
 
             #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
             renderapi.client.import_tilespecs_parallel(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
+            del tspout,shared_tforms,mont_x,mont_tspecs
 
         renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)
 
@@ -353,8 +362,8 @@ if __name__=='__main__':
         #create A matrix in compressed sparse row (CSR) format
         c,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
 
-    #create the regularization vectors
-    create_regularization(mod.args['regularization'],tile_tforms,mod.args['output_options'])
+        #create the regularization vectors
+        create_regularization(mod.args['regularization'],tile_tforms,mod.args['output_options'])
 
     print 'total time: %0.1f'%(time.time()-t0)
 

@@ -1,5 +1,5 @@
 # EM_aligner_python
-## montage: 
+## montage
 ```
 for z in zlist:
     assemble from montage_matches(z)
@@ -7,7 +7,7 @@ for z in zlist:
 ingest
 ```
 `python assemble_matrix.py --input_json montage_test.json`
-## small 3D:
+## small 3D
 intended to run locally, will be RAM limited
 ```
 for z in zlist:
@@ -16,7 +16,7 @@ solve with scipy.sparse
 ingest
 ```
 `python not_ready_yet.py --input_json not_ready_yet.json`
-## large 3D:
+## large 3D
 intended to assemble A locally into multiple files for input for a distributed solver
 ```
 for z in zlist:

@@ -8,16 +8,17 @@ import copy
 import time
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import spsolve,bicg
+from scipy.sparse import linalg as sla
 import h5py
 import os
 
-def make_dbconnection(collection):
+def make_dbconnection(collection,which='tile'):
     #connect to the database
     if collection['db_interface']=='mongo':
         client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'])
         if collection['collection_type']=='stack':
-            mongo_collection_name = collection['owner']+'__'+collection['project']+'__'+collection['name']+'__tile'
+            mongo_collection_name = collection['owner']+'__'+collection['project']+'__'+collection['name']+'__'+which
             dbconnection = client.render[mongo_collection_name]
         elif collection['collection_type']=='pointmatch':
             mongo_collection_name = collection['owner']+'__'+collection['name']
@@ -40,28 +41,34 @@ def get_tileids_and_tforms(stack,zvals):
     for z in zvals:
         #load tile specs from the database
         if stack['db_interface']=='render':
-            tspecs = renderapi.tilespec.get_tile_specs_from_z(stack['name'],float(z),render=dbconnection,owner=stack['owner'],project=stack['project'])
+            tmp = renderapi.tilespec.get_resolved_tiles_from_z(stack['name'],float(z),render=dbconnection,owner=stack['owner'],project=stack['project'])
+            tspecs = tmp.tilespecs
+            shared_tforms = tmp.transforms
         if stack['db_interface']=='mongo':
-            cursor = dbconnection.find({'z':float(z)})
+            #cursor = dbconnection.find({'z':float(z)}) #no order
+            cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)])
             tspecs = list(cursor)
+            dbconnection2 = make_dbconnection(stack,which='transform')
+            cursor = dbconnection2.find({})
+            shared_tforms = list(cursor)
 
         for ts in tspecs:
             if stack['db_interface']=='render':
                 tile_ids.append(ts.tileId)
-                tile_tforms.append([ts.tforms[1].M[0,0],ts.tforms[1].M[0,1],ts.tforms[1].M[0,2],ts.tforms[1].M[1,0],ts.tforms[1].M[1,1],ts.tforms[1].M[1,2]])
+                tile_tforms.append([ts.tforms[-1].M[0,0],ts.tforms[-1].M[0,1],ts.tforms[-1].M[0,2],ts.tforms[-1].M[1,0],ts.tforms[-1].M[1,1],ts.tforms[-1].M[1,2]])
             if stack['db_interface']=='mongo':
                 tile_ids.append(ts['tileId'])
-                tile_tforms.append(np.array(ts['transforms']['specList'][1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
+                tile_tforms.append(np.array(ts['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
 
     print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
-    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tspecs)
+    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tspecs),shared_tforms
 
 def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
     #connect to the database
     dbconnection = make_dbconnection(collection)
 
     file_number=0
-    nmax=50
+    nmax=5000
 
     sorter = np.argsort(tile_ids)
     file_chunks = 0
@@ -92,7 +99,8 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 matches = np.array(list(cursor))
                 if i!=j:
                     #in principle, this does nothing if zvals[i] < zvals[j], but, just in case
-                    cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))})
+                    #cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))})
+                    cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))}).sort({"item.layout.imgaeRow":1})
                     matches = np.append(matches,list(cursor))
 
             if len(matches)==0:
@@ -150,8 +158,8 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             data = np.zeros(6*nmax*nmatches*2).astype('float64')
             indices = np.zeros(6*nmax*nmatches*2).astype('int64')
             indptr = np.zeros(2*nmax*nmatches+1).astype('int64')
-            weights = np.zeros(2*nmax*nmatches).astype('float16')
-            halfp_ones = np.ones(2*nmax).astype('float16')
+            weights = np.zeros(2*nmax*nmatches).astype('float64')
+            halfp_ones = np.ones(2*nmax).astype('float64')
 
             indptr[0] = 0
             nrows = 0
@@ -238,7 +246,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 dset[:] = c.indices
                 dset = f.create_dataset("data",(c.data.size,),dtype='float64')
                 dset[:] = c.data
-                dset = f.create_dataset("weights",(file_weights.size,),dtype='float16')
+                dset = f.create_dataset("weights",(file_weights.size,),dtype='float64')
                 dset[:] = file_weights
                 f.close()
                 print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fullname)/(2.**30))
@@ -258,7 +266,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
 
 def create_regularization(regularization,tile_tforms,output_options):
     #create a regularization vector
-    reg = np.ones_like(tile_tforms).astype('float32')*regularization['default_lambda']
+    reg = np.ones_like(tile_tforms).astype('float64')*regularization['default_lambda']
     reg[2::3] = regularization['translation_lambda']
 
     if output_options['output_mode']=='hdf5':
@@ -269,7 +277,7 @@ def create_regularization(regularization,tile_tforms,output_options):
         dset[:] = tile_tforms
 
         #create a regularization vector
-        dset = f.create_dataset("lambda",(reg.size,),dtype='float32')
+        dset = f.create_dataset("lambda",(reg.size,),dtype='float64')
         dset[:] = reg
         f.close()
         print 'wrote %s'%fname
@@ -288,9 +296,12 @@ if __name__=='__main__':
 
 
     if mod.args['solve_type']=='montage':
+        output = mod.args['output_stack'] 
+        ingestconn = make_dbconnection(output)
+        renderapi.stack.create_stack(output['name'],render=ingestconn)
         for z in zvals:
             #get the tile IDs and transforms
-            tile_ids,tile_tforms,tile_tspecs = get_tileids_and_tforms(mod.args['input_stack'],[z])
+            tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],[z])
 
             #create A matrix in compressed sparse row (CSR) format
             A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,[z],mod.args['output_options'])
@@ -310,9 +321,30 @@ if __name__=='__main__':
      
             #solve
             mont_x = spsolve(K,Lm)
-            print ' solved'
+            print ' assembled and solved in %0.1f sec'%(time.time()-t0)
             print ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
-            print ' error     [norm(Ax-b)] = %0.1e'%(np.linalg.norm(A.dot(mont_x)))
+            print ' error     [norm(Ax-b)] = %0.3f'%(np.linalg.norm(A.dot(mont_x)))
+
+            tspout = []
+            for m in np.arange(len(mont_tspecs)):
+                #del(mont_tspecs[m]['_id'])
+                m00 = mont_x[m*6+0]
+                m01 = mont_x[m*6+1]
+                newx = mont_x[m*6+2]
+                m10 = mont_x[m*6+3]
+                m11 = mont_x[m*6+4]
+                newy = mont_x[m*6+5]
+                mont_tspecs[m]['transforms']['specList'][-1]['dataString'] = "%0.6f %0.6f %0.6f %0.6f %0.3f %0.3f"%(m00,m10,m01,m11,newx,newy)
+                tspout.append(renderapi.tilespec.TileSpec(json=mont_tspecs[m]))
+
+            for j in np.arange(len(shared_tforms)):
+                if(type(shared_tforms[j])==dict):
+                    shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
+
+            #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
+            renderapi.client.import_tilespecs_parallel(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
+
+        renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)
 
     else:
         #get the tile IDs and transforms

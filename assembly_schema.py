@@ -37,6 +37,7 @@ class MySchema(argschema.ArgSchema):
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
     solve_type = argschema.fields.String(default='')
     input_stack = argschema.fields.Nested(stack)
+    output_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)
     output_options = argschema.fields.Nested(output_options)
     matrix_assembly = argschema.fields.Nested(matrix_assembly)

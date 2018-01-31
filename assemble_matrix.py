@@ -34,14 +34,14 @@ def get_tileids_and_tforms(stack,zvals):
     #connect to the database
     dbconnection = make_dbconnection(stack)
 
-    #loop over z values
     tile_ids = []
     tile_tforms = []
     t0 = time.time()
+
     for z in zvals:
         #load tile specs from the database
         if stack['db_interface']=='render':
-            tmp = renderapi.tilespec.get_resolved_tiles_from_z(stack['name'],float(z),render=dbconnection,owner=stack['owner'],project=stack['project'])
+            tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(stack['name'],float(z),render=dbconnection,owner=stack['owner'],project=stack['project'])
             tspecs = tmp.tilespecs
             shared_tforms = tmp.transforms
         if stack['db_interface']=='mongo':
@@ -55,6 +55,7 @@ def get_tileids_and_tforms(stack,zvals):
             for j in np.arange(len(shared_tforms)):
                 shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
 
+        #make lists of IDs and transforms
         for k in np.arange(len(tspecs)):
             if stack['db_interface']=='render':
                 tile_ids.append(tspecs[k].tileId)

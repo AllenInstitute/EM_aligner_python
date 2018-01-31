@@ -15,7 +15,7 @@ for z in zlist:
 solve with scipy.sparse
 ingest
 ```
-`python not_ready_yet.py --input_json not_ready_yet.json`
+`python not_ready_yet.py --input_json small3D_test.json`
 ## large 3D
 intended to assemble A locally into multiple files for input to a distributed solver
 ```

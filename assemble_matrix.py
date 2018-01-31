@@ -307,6 +307,7 @@ if __name__=='__main__':
         output = mod.args['output_stack'] 
         ingestconn = make_dbconnection(output)
         renderapi.stack.create_stack(output['name'],render=ingestconn)
+
         for z in zvals:
             #get the tile IDs and transforms
             tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],[z])
@@ -347,10 +348,11 @@ if __name__=='__main__':
                 mont_tspecs[m].tforms[-1].M[1,2] = mont_x[m*6+5]
 
             #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
-            renderapi.client.import_tilespecs_parallel(output['name'],mont_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn)
+            renderapi.client.import_tilespecs_parallel(output['name'],mont_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
             del shared_tforms,mont_x,mont_tspecs
 
-        renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)
+        if mod.args['close_stack']:
+            renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)
 
     else:
         #get the tile IDs and transforms

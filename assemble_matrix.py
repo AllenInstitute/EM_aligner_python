@@ -17,6 +17,7 @@ def make_dbconnection(collection,which='tile'):
     if collection['db_interface']=='mongo':
         client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'])
         if collection['collection_type']=='stack':
+            #for getting shared transforms, which='transform'
             mongo_collection_name = collection['owner']+'__'+collection['project']+'__'+collection['name']+'__'+which
             dbconnection = client.render[mongo_collection_name]
         elif collection['collection_type']=='pointmatch':
@@ -50,14 +51,18 @@ def get_tileids_and_tforms(stack,zvals):
             dbconnection2 = make_dbconnection(stack,which='transform')
             cursor = dbconnection2.find({})
             shared_tforms = list(cursor)
+            #will import these to new stack using renderapi
+            for j in np.arange(len(shared_tforms)):
+                shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
 
-        for ts in tspecs:
+        for k in np.arange(len(tspecs)):
             if stack['db_interface']=='render':
-                tile_ids.append(ts.tileId)
-                tile_tforms.append([ts.tforms[-1].M[0,0],ts.tforms[-1].M[0,1],ts.tforms[-1].M[0,2],ts.tforms[-1].M[1,0],ts.tforms[-1].M[1,1],ts.tforms[-1].M[1,2]])
+                tile_ids.append(tspecs[k].tileId)
+                tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
             if stack['db_interface']=='mongo':
-                tile_ids.append(ts['tileId'])
-                tile_tforms.append(np.array(ts['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
+                tile_ids.append(tspecs[k]['tileId'])
+                tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
+                tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
 
     print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
     return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tspecs),shared_tforms
@@ -297,7 +302,6 @@ if __name__=='__main__':
     #specify the z values
     zvals = np.arange(mod.args['first_section'],mod.args['last_section']+1)
 
-
     if mod.args['solve_type']=='montage':
         output = mod.args['output_stack'] 
         ingestconn = make_dbconnection(output)
@@ -312,7 +316,7 @@ if __name__=='__main__':
             mont_tspecs = tile_tspecs[tile_ind]
             mont_tforms = tile_tforms[np.repeat(tile_ind,6)]
            
-            del tile_ids,tiles_used,tile_tspecs,tile_tforms,tile_ind
+            del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
             
             #create the regularization vectors
             mont_reg = create_regularization(mod.args['regularization'],mont_tforms,mod.args['output_options'])
@@ -332,25 +336,18 @@ if __name__=='__main__':
             print ' error     [norm(Ax-b)] = %0.3f'%(np.linalg.norm(A.dot(mont_x)))
             del A,K,ATW,Lm
 
-            tspout = []
+            #replace the last transform in the tilespec with the new one
             for m in np.arange(len(mont_tspecs)):
-                #del(mont_tspecs[m]['_id'])
-                m00 = mont_x[m*6+0]
-                m01 = mont_x[m*6+1]
-                newx = mont_x[m*6+2]
-                m10 = mont_x[m*6+3]
-                m11 = mont_x[m*6+4]
-                newy = mont_x[m*6+5]
-                mont_tspecs[m]['transforms']['specList'][-1]['dataString'] = "%0.6f %0.6f %0.6f %0.6f %0.3f %0.3f"%(m00,m10,m01,m11,newx,newy)
-                tspout.append(renderapi.tilespec.TileSpec(json=mont_tspecs[m]))
-
-            for j in np.arange(len(shared_tforms)):
-                if(type(shared_tforms[j])==dict):
-                    shared_tforms[j] = renderapi.transform.load_transform_json(shared_tforms[j])
+                mont_tspecs[m].tforms[-1].M[0,0] = mont_x[m*6+0]
+                mont_tspecs[m].tforms[-1].M[0,1] = mont_x[m*6+1]
+                mont_tspecs[m].tforms[-1].M[0,2] = mont_x[m*6+2]
+                mont_tspecs[m].tforms[-1].M[1,0] = mont_x[m*6+3]
+                mont_tspecs[m].tforms[-1].M[1,1] = mont_x[m*6+4]
+                mont_tspecs[m].tforms[-1].M[1,2] = mont_x[m*6+5]
 
             #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
-            renderapi.client.import_tilespecs_parallel(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
-            del tspout,shared_tforms,mont_x,mont_tspecs
+            renderapi.client.import_tilespecs_parallel(output['name'],mont_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn)
+            del shared_tforms,mont_x,mont_tspecs
 
         renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)
 

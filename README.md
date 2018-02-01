@@ -8,14 +8,14 @@ ingest
 ```
 `python assemble_matrix.py --input_json montage_test.json`
 ## small 3D
-intended to run locally, will be RAM limited
+run 3D solve locally, will be RAM limited
 ```
 for z in zlist:
     add to assembly from montage_matches(z), cross_matches(z,z+1),...,cross_matches(z,z+depth)
 solve with scipy.sparse
 ingest
 ```
-`python not_ready_yet.py --input_json small3D_test.json`
+`python assemble_matrix.py --input_json small3D_test.json`
 ## large 3D
 intended to assemble A locally into multiple files for input to a distributed solver
 ```

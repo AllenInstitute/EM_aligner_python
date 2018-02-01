@@ -7,6 +7,8 @@ for z in zlist:
 ingest
 ```
 `python assemble_matrix.py --input_json montage_test.json`
+## rough alignment
+need to incorporate rigid transformation
 ## small 3D
 run 3D solve locally, will be RAM limited
 ```

@@ -36,6 +36,8 @@ def get_tileids_and_tforms(stack,zvals):
 
     tile_ids = []
     tile_tforms = []
+    tile_tspecs = []
+    shared_tforms = []
     t0 = time.time()
 
     for z in zvals:
@@ -43,7 +45,8 @@ def get_tileids_and_tforms(stack,zvals):
         if stack['db_interface']=='render':
             tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(stack['name'],float(z),render=dbconnection,owner=stack['owner'],project=stack['project'])
             tspecs = tmp.tilespecs
-            shared_tforms = tmp.transforms
+            for st in tmp.transforms:
+                shared_tforms.append(st)
         if stack['db_interface']=='mongo':
             #cursor = dbconnection.find({'z':float(z)}) #no order
             cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)]) #like renderapi order?
@@ -56,7 +59,6 @@ def get_tileids_and_tforms(stack,zvals):
             refids = np.unique(np.array(refids))
 
             #be selective of which transforms to pass on to the new stack
-            shared_tforms=[]
             dbconnection2 = make_dbconnection(stack,which='transform')
             for refid in refids:
                 shared_tforms.append(renderapi.transform.load_transform_json(list(dbconnection2.find({"id":refid}))[0]))
@@ -70,16 +72,16 @@ def get_tileids_and_tforms(stack,zvals):
                 tile_ids.append(tspecs[k]['tileId'])
                 tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
                 tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
+            tile_tspecs.append(tspecs[k])
 
     print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
-    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tspecs),shared_tforms
+    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms
 
 def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
     #connect to the database
     dbconnection = make_dbconnection(collection)
 
     file_number=0
-    nmax=500
 
     sorter = np.argsort(tile_ids)
     file_chunks = 0
@@ -142,43 +144,32 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
             #for the given point matches, these are the indices in tile_ids that are being called
             pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
             qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
-
-            #let's keep p<q
-            backwards = qinds<pinds
-            ptmp = pinds[backwards]
-            qtmp = qinds[backwards]
-            pinds[backwards] = qtmp
-            qinds[backwards] = ptmp
-            del qtmp,ptmp
+            #where do the p and q columns start for each point match
             p0col = pinds*6
             q0col = qinds*6
-            
-            drow = np.zeros(6).astype('float64')
-            dblock = np.zeros(6*nmax).astype('float64')
-
-            #ordering for backwards
-            dback=np.array([3,4,5,0,1,2])
-            dforw=np.array([0,1,2,3,4,5])
+            #will be combined with colx and coly
             colx = np.arange(3)
             coly = colx+3
+            
+            drow = np.zeros(6).astype('float64')
+            dblock = np.zeros(6*matrix_assembly['npts_max']).astype('float64')
 
             #conservative pre-allocation
             nmatches = len(matches)
-            data = np.zeros(6*nmax*nmatches*2).astype('float64')
-            indices = np.zeros(6*nmax*nmatches*2).astype('int64')
-            indptr = np.zeros(2*nmax*nmatches+1).astype('int64')
-            weights = np.zeros(2*nmax*nmatches).astype('float64')
-            halfp_ones = np.ones(2*nmax).astype('float64')
+            data = np.zeros(6*matrix_assembly['npts_max']*nmatches*2).astype('float64')
+            indices = np.zeros(6*matrix_assembly['npts_max']*nmatches*2).astype('int64')
+            indptr = np.zeros(2*matrix_assembly['npts_max']*nmatches+1).astype('int64')
+            weights = np.zeros(2*matrix_assembly['npts_max']*nmatches).astype('float64')
+            halfp_ones = np.ones(2*matrix_assembly['npts_max']).astype('float64')
 
             indptr[0] = 0
             nrows = 0
 
             for k in np.arange(nmatches):
                 npts = len(matches[k]['matches']['q'][0])
-                if npts > nmax: #really dumb filter for limiting size
-                    npts=nmax
-                if npts==0:
-                    print 'zero length point match entry?'
+                if npts > matrix_assembly['npts_max']: #really dumb filter for limiting size
+                    npts=matrix_assembly['npts_max']
+                if npts<matrix_assembly['npts_min']:
                     continue
 
                 #add both tile ids to the list
@@ -189,24 +180,21 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
                 xindices = np.hstack((colx+p0col[k],colx+q0col[k])).astype('int64')
                 yindices = xindices+3
 
-                if backwards[k]:
-                    dorder = dback
-                else:
-                    dorder = dforw
-
                 if i==j:
                     matchweight = matrix_assembly['montage_pt_weight']
                 else:
                     matchweight = matrix_assembly['cross_pt_weight']
+                    if matrix_assembly['inverse_dz']:
+                        matchweight = matchweight/np.abs(j-i+1)
 
                 m = np.arange(npts)
                 m6 = m*6
-                dblock[dorder[0]+m6] = np.array(matches[k]['matches']['p'][0])[m]
-                dblock[dorder[1]+m6] = np.array(matches[k]['matches']['p'][1])[m]
-                dblock[dorder[2]+m6] = 1.0
-                dblock[dorder[3]+m6] = -1.0*np.array(matches[k]['matches']['q'][0])[m]
-                dblock[dorder[4]+m6] = -1.0*np.array(matches[k]['matches']['q'][1])[m]
-                dblock[dorder[5]+m6] = -1.0
+                dblock[0+m6] = np.array(matches[k]['matches']['p'][0])[m]
+                dblock[1+m6] = np.array(matches[k]['matches']['p'][1])[m]
+                dblock[2+m6] = 1.0
+                dblock[3+m6] = -1.0*np.array(matches[k]['matches']['q'][0])[m]
+                dblock[4+m6] = -1.0*np.array(matches[k]['matches']['q'][1])[m]
+                dblock[5+m6] = -1.0
                 data[(nrows*6):(nrows*6+6*npts*2)] = np.tile(dblock[0:npts*6],2)  #xrows, then duplicate for y rows
                 indices[(nrows*6):(nrows*6+6*npts)] = np.tile(xindices,npts) #xrow column indices
                 indices[(nrows*6+6*npts):(nrows*6+6*npts*2)] = np.tile(yindices,npts) #yrow column indices
@@ -281,7 +269,7 @@ def create_CSR_A(collection,matrix_assembly,tile_ids,zvals,output_options):
 def create_regularization(regularization,tile_tforms,output_options):
     #create a regularization vector
     reg = np.ones_like(tile_tforms).astype('float64')*regularization['default_lambda']
-    reg[2::3] = regularization['translation_lambda']
+    reg[2::3] = reg[2::3]*regularization['translation_factor']
 
     if output_options['output_mode']=='hdf5':
         #write the input transforms to disk
@@ -300,6 +288,55 @@ def create_regularization(regularization,tile_tforms,output_options):
     outr.data = reg
     return outr
 
+def assemble_and_solve(mod,zvals,ingestconn):
+       #get the tile IDs and transforms
+       tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],zvals)
+
+       #create A matrix in compressed sparse row (CSR) format
+       A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
+       tile_ind = np.in1d(tile_ids,tiles_used)
+       filt_tspecs = tile_tspecs[tile_ind]
+       filt_tforms = tile_tforms[np.repeat(tile_ind,6)]
+      
+       del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
+       
+       #create the regularization vectors
+       mont_reg = create_regularization(mod.args['regularization'],filt_tforms,mod.args['output_options'])
+
+       #regularized least squares
+       ATW = A.transpose().dot(weights)
+       K = ATW.dot(A) + mont_reg
+       print ' created K: %d x %d'%K.shape
+       Lm = mont_reg.dot(filt_tforms)
+
+       del weights,filt_tforms,mont_reg
+
+       #solve
+       x = spsolve(K,Lm)
+       err = A.dot(x)
+
+       message = '***-------------***\n'
+       message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)
+       message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%(np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm))
+       message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
+       message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
+       print message
+       del A,K,ATW,Lm
+
+       #replace the last transform in the tilespec with the new one
+       for m in np.arange(len(filt_tspecs)):
+           filt_tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
+           filt_tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
+           filt_tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
+           filt_tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
+           filt_tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
+           filt_tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
+
+       #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
+       renderapi.client.import_tilespecs_parallel(mod.args['output_stack']['name'],filt_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+       del shared_tforms,x,filt_tspecs
+       print message
+    
 if __name__=='__main__':
     t0 = time.time()
     mod = argschema.ArgSchemaParser(schema_type=MySchema)
@@ -307,74 +344,18 @@ if __name__=='__main__':
     #specify the z values
     zvals = np.arange(mod.args['first_section'],mod.args['last_section']+1)
 
+    #make a connection to the new stack
+    ingestconn = make_dbconnection(mod.args['output_stack'])
+    renderapi.stack.create_stack(mod.args['output_stack']['name'],render=ingestconn)
+
     if mod.args['solve_type']=='montage':
-        output = mod.args['output_stack'] 
-        ingestconn = make_dbconnection(output)
-        renderapi.stack.create_stack(output['name'],render=ingestconn)
-
         for z in zvals:
-            #get the tile IDs and transforms
-            tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],[z])
-            #raw_input('abc')
-
-            #create A matrix in compressed sparse row (CSR) format
-            A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,[z],mod.args['output_options'])
-            tile_ind = np.in1d(tile_ids,tiles_used)
-            mont_tspecs = tile_tspecs[tile_ind]
-            mont_tforms = tile_tforms[np.repeat(tile_ind,6)]
-           
-            del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
-            
-            #create the regularization vectors
-            mont_reg = create_regularization(mod.args['regularization'],mont_tforms,mod.args['output_options'])
-
-            #regularized least squares
-            ATW = A.transpose().dot(weights)
-            K = ATW.dot(A) + mont_reg
-            print ' created K: %d x %d'%K.shape
-            Lm = mont_reg.dot(mont_tforms)
-
-            del weights,mont_tforms,mont_reg
-  
-            #solve
-            mont_x = spsolve(K,Lm)
-            err = A.dot(mont_x)
-
-            message = '***-------------***\n'
-            message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)
-            message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%(np.linalg.norm(K.dot(mont_x)-Lm)/np.linalg.norm(Lm))
-            message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
-            message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
-            print message
-            del A,K,ATW,Lm
-
-            #replace the last transform in the tilespec with the new one
-            for m in np.arange(len(mont_tspecs)):
-                mont_tspecs[m].tforms[-1].M[0,0] = mont_x[m*6+0]
-                mont_tspecs[m].tforms[-1].M[0,1] = mont_x[m*6+1]
-                mont_tspecs[m].tforms[-1].M[0,2] = mont_x[m*6+2]
-                mont_tspecs[m].tforms[-1].M[1,0] = mont_x[m*6+3]
-                mont_tspecs[m].tforms[-1].M[1,1] = mont_x[m*6+4]
-                mont_tspecs[m].tforms[-1].M[1,2] = mont_x[m*6+5]
-
-            #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
-            renderapi.client.import_tilespecs_parallel(output['name'],mont_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
-            del shared_tforms,mont_x,mont_tspecs
-
-            print message
-
-        if mod.args['close_stack']:
-            renderapi.stack.set_stack_state(output['name'],state='COMPLETE',render=ingestconn)
-
-    else:
-        #get the tile IDs and transforms
-        tile_ids,tile_tforms,tile_tspecs = get_tileids_and_tforms(mod.args['input_stack'],zvals)
-
-        #create A matrix in compressed sparse row (CSR) format
-        c,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tile_ids,zvals,mod.args['output_options'])
-
-        #create the regularization vectors
-        create_regularization(mod.args['regularization'],tile_tforms,mod.args['output_options'])
+            assemble_and_solve(mod,[z],ingestconn)
+    elif mod.args['solve_type']=='3D':
+        assemble_and_solve(mod,zvals,ingestconn)
+     
+    if mod.args['close_stack']:
+            renderapi.stack.set_stack_state(mod.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
 
     print 'total time: %0.1f'%(time.time()-t0)
 

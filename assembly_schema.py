@@ -22,10 +22,13 @@ class matrix_assembly(argschema.ArgSchema):
     depth = argschema.fields.Int(default=2,description='depth in z for matrix assembly point matches')
     cross_pt_weight = argschema.fields.Float(default=1.0,description='weight of cross section point matches')
     montage_pt_weight = argschema.fields.Float(default=1.0,description='weight of montage point matches')
+    npts_min = argschema.fields.Int(default=5,description='disregard any tile pairs with fewer points than this')
+    npts_max = argschema.fields.Int(default=500,description='truncate any tile pairs to this size')
+    inverse_dz = argschema.fields.Boolean(default=True,description='cross section point match weighting fades with z')
 
 class regularization(argschema.ArgSchema):
     default_lambda = argschema.fields.Float(0.005,description='regularization factor')
-    translation_lambda = argschema.fields.Float(0.005,description='regularization factor')
+    translation_factor = argschema.fields.Float(0.005,description='regularization factor')
 
 class pointmatch(db_params):
     collection_type = argschema.fields.String(default='pointmatch',description="'stack' or 'pointmatch'")

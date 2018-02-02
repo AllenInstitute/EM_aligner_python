@@ -1,4 +1,8 @@
 # EM_aligner_python
+
+## Level of support
+We are planning on occasional updating this tool with no fixed schedule. Community involvement is encouraged through both issues and pull requests.
+
 ## montage
 ```
 for z in zlist:

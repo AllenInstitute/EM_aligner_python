@@ -1,0 +1,6 @@
+render-python>=1.6.2
+argschema>=1.15.17
+numpy
+scipy
+pymongo
+h5py

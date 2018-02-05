@@ -2,6 +2,12 @@
 
 ## Level of support
 We are planning on occasional updating this tool with no fixed schedule. Community involvement is encouraged through both issues and pull requests.
+## setup
+1. clone and cd into the repo directory
+2. modify sourceme.sh to point RENDER_JAVA_HOME to a directory where bin/java can be found
+3. `source sourceme.sh`
+
+alternately, ignore sourceme.sh and change the client_scripts in the input jsons to point to your own version of the render scripts
 
 ## montage
 ```

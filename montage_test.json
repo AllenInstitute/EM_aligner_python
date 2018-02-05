@@ -3,6 +3,7 @@
     "last_section": 1021,
     "solve_type": "montage",
     "close_stack": "True",
+    "transformation": "affine",
     "input_stack": {
         "owner": "gayathri",
         "project": "MM2",

@@ -1,13 +1,13 @@
 {
     "first_section": 1020, 
-    "last_section": 1020,
-    "solve_type": "montage",
+    "last_section": 1030,
+    "solve_type": "3D",
     "close_stack": "True",
-    "transformation": "affine",
+    "transformation": "rigid",
     "input_stack": {
         "owner": "gayathri",
         "project": "MM2",
-        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_rev1039",
+        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_DSM_rev1039",
         "host": "em-131fs",
         "port": 8080,
         "mongo_host": "em-131fs",
@@ -18,7 +18,7 @@
     }, 
     "pointmatch": {
         "owner": "gayathri_MM2", 
-        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_Fine_rev1039",
+        "name": "mm2_acquire_8bit_reimage_postVOXA_TEMCA2_Rough_rev1039",
         "host": "em-131fs", 
         "port": 8080, 
         "mongo_host": "em-131fs", 
@@ -30,7 +30,7 @@
     "output_stack": {
         "owner": "danielk",
         "project": "Tests",
-        "name": "python_montage_results",
+        "name": "python_rough_results",
         "host": "em-131fs",
         "port": 8080,
         "mongo_host": "em-131fs",

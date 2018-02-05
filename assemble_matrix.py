@@ -30,7 +30,7 @@ def make_dbconnection(collection,which='tile'):
         return
     return dbconnection
 
-def get_tileids_and_tforms(stack,zvals):
+def get_tileids_and_tforms(stack,tform_obj,zvals):
     #connect to the database
     dbconnection = make_dbconnection(stack)
 
@@ -67,10 +67,16 @@ def get_tileids_and_tforms(stack,zvals):
         for k in np.arange(len(tspecs)):
             if stack['db_interface']=='render':
                 tile_ids.append(tspecs[k].tileId)
-                tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
+                if tform_obj.name=='affine':
+                    tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
+                elif tform_obj.name=='rigid':
+                    tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tforms[-1].M[1,2]])
             if stack['db_interface']=='mongo':
                 tile_ids.append(tspecs[k]['tileId'])
-                tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
+                if tform_obj.name=='affine':
+                    tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
+                elif tform_obj.name=='rigid':
+                    tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,5]])
                 tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
             tile_tspecs.append(tspecs[k])
 
@@ -85,14 +91,16 @@ class transform_csr:
         self.name=name
         if self.name=='affine':
             self.DOF_per_tile=6
+            self.nnz_per_row=6
             self.rows_per_ptmatch=2
         if self.name=='rigid':
             self.DOF_per_tile=4
+            self.nnz_per_row=6
             self.rows_per_ptmatch=4
 
         #allocate some space
-        self.data = np.zeros(nmax*self.DOF_per_tile*self.rows_per_ptmatch).astype('float64')
-        self.indices = np.zeros(nmax*self.DOF_per_tile*self.rows_per_ptmatch).astype('int64')
+        self.data = np.zeros(nmax*self.nnz_per_row*self.rows_per_ptmatch).astype('float64')
+        self.indices = np.zeros(nmax*self.nnz_per_row*self.rows_per_ptmatch).astype('int64')
         self.indptr = np.zeros(nmax*self.rows_per_ptmatch).astype('int64')
         self.weights = np.zeros(nmax*self.rows_per_ptmatch).astype('float64')
 
@@ -105,7 +113,7 @@ class transform_csr:
        self.npts=npts
 
        m = np.arange(npts)
-       mstep = m*self.DOF_per_tile
+       mstep = m*self.nnz_per_row
        if self.name=='affine':
            #u=ax+by+c
            self.data[0+mstep] = np.array(match['matches']['p'][0])[m]
@@ -115,14 +123,57 @@ class transform_csr:
            self.data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
            self.data[5+mstep] = -1.0
            uindices = np.hstack((tile_ind1*self.DOF_per_tile+np.array([0,1,2]),tile_ind2*self.DOF_per_tile+np.array([0,1,2])))
-           self.indices[0:npts*self.DOF_per_tile] = np.tile(uindices,npts) 
+           self.indices[0:npts*self.nnz_per_row] = np.tile(uindices,npts) 
            #v=dx+ey+f
-           self.data[(npts*self.DOF_per_tile):(2*npts*self.DOF_per_tile)] = self.data[0:npts*self.DOF_per_tile]
-           self.indices[npts*self.DOF_per_tile:2*npts*self.DOF_per_tile] = np.tile(uindices+3,npts) 
-           self.indptr[0:2*npts] = np.arange(1,2*npts+1)*self.DOF_per_tile
+           self.data[(npts*self.nnz_per_row):(2*npts*self.nnz_per_row)] = self.data[0:npts*self.nnz_per_row]
+           self.indices[npts*self.nnz_per_row:2*npts*self.nnz_per_row] = np.tile(uindices+3,npts) 
+           self.indptr[0:2*npts] = np.arange(1,2*npts+1)*self.nnz_per_row
            self.weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
 
-       return self.data[0:npts*self.rows_per_ptmatch*self.DOF_per_tile],self.indices[0:npts*self.rows_per_ptmatch*self.DOF_per_tile],self.indptr[0:npts*self.rows_per_ptmatch],self.weights[0:npts*self.rows_per_ptmatch]
+       if self.name=='rigid':
+           px = np.array(match['matches']['p'][0])[m]
+           py = np.array(match['matches']['p'][1])[m]
+           qx = np.array(match['matches']['q'][0])[m]
+           qy = np.array(match['matches']['q'][1])[m]
+           #u=ax+by+c
+           self.data[0+mstep] = px
+           self.data[1+mstep] = py
+           self.data[2+mstep] = 1.0
+           self.data[3+mstep] = -1.0*qx
+           self.data[4+mstep] = -1.0*qy
+           self.data[5+mstep] = -1.0
+           uindices = np.hstack((tile_ind1*self.DOF_per_tile+np.array([0,1,2]),tile_ind2*self.DOF_per_tile+np.array([0,1,2])))
+           self.indices[0:npts*self.nnz_per_row] = np.tile(uindices,npts) 
+           #v=-bx+ay+d
+           self.data[0+mstep+npts*self.nnz_per_row] = -1.0*px
+           self.data[1+mstep+npts*self.nnz_per_row] = py
+           self.data[2+mstep+npts*self.nnz_per_row] = 1.0
+           self.data[3+mstep+npts*self.nnz_per_row] = 1.0*qx
+           self.data[4+mstep+npts*self.nnz_per_row] = -1.0*qy
+           self.data[5+mstep+npts*self.nnz_per_row] = -1.0
+           vindices = np.hstack((tile_ind1*self.DOF_per_tile+np.array([1,0,3]),tile_ind2*self.DOF_per_tile+np.array([1,0,3])))
+           self.indices[npts*self.nnz_per_row:2*npts*self.nnz_per_row] = np.tile(vindices,npts) 
+           #du
+           self.data[0+mstep+2*npts*self.nnz_per_row] = px-px.mean()
+           self.data[1+mstep+2*npts*self.nnz_per_row] = py-py.mean()
+           self.data[2+mstep+2*npts*self.nnz_per_row] = 0.0
+           self.data[3+mstep+2*npts*self.nnz_per_row] = -1.0*(qx-qx.mean())
+           self.data[4+mstep+2*npts*self.nnz_per_row] = -1.0*(qy-qy.mean())
+           self.data[5+mstep+2*npts*self.nnz_per_row] = -0.0
+           self.indices[2*npts*self.nnz_per_row:3*npts*self.nnz_per_row] = np.tile(uindices,npts) 
+           #dv
+           self.data[0+mstep+3*npts*self.nnz_per_row] = -1.0*(px-px.mean())
+           self.data[1+mstep+3*npts*self.nnz_per_row] = py-py.mean()
+           self.data[2+mstep+3*npts*self.nnz_per_row] = 0.0
+           self.data[3+mstep+3*npts*self.nnz_per_row] = 1.0*(qx-qx.mean())
+           self.data[4+mstep+3*npts*self.nnz_per_row] = -1.0*(qy-qy.mean())
+           self.data[5+mstep+3*npts*self.nnz_per_row] = -0.0
+           self.indices[3*npts*self.nnz_per_row:4*npts*self.nnz_per_row] = np.tile(uindices,npts) 
+  
+           self.indptr[0:self.rows_per_ptmatch*npts] = np.arange(1,self.rows_per_ptmatch*npts+1)*self.nnz_per_row
+           self.weights[0:self.rows_per_ptmatch*npts] = np.tile(np.array(match['matches']['w'])[m],self.rows_per_ptmatch)
+
+       return self.data[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indices[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indptr[0:npts*self.rows_per_ptmatch],self.weights[0:npts*self.rows_per_ptmatch]
 
 
 def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_options):
@@ -195,11 +246,10 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
 
             #conservative pre-allocation
             nmatches = len(matches)
-            data = np.zeros(6*matrix_assembly['npts_max']*nmatches*2).astype('float64')
-            indices = np.zeros(6*matrix_assembly['npts_max']*nmatches*2).astype('int64')
-            indptr = np.zeros(2*matrix_assembly['npts_max']*nmatches+1).astype('int64')
-            weights = np.zeros(2*matrix_assembly['npts_max']*nmatches).astype('float64')
-            halfp_ones = np.ones(2*matrix_assembly['npts_max']).astype('float64')
+            data = np.zeros(tform_obj.nnz_per_row*tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches).astype('float64')
+            indices = np.zeros(tform_obj.nnz_per_row*tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches).astype('int64')
+            indptr = np.zeros(tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches+1).astype('int64')
+            weights = np.zeros(tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches).astype('float64')
 
             indptr[0] = 0
             nrows = 0
@@ -224,7 +274,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
                 tiles_used.append(matches[k]['qId'])
 
                 #add sub-matrix to global matrix
-                global_dind = np.arange(npts*tform_obj.rows_per_ptmatch*tform_obj.DOF_per_tile)+nrows*tform_obj.DOF_per_tile
+                global_dind = np.arange(npts*tform_obj.rows_per_ptmatch*tform_obj.nnz_per_row)+nrows*tform_obj.nnz_per_row
                 data[global_dind] = d
                 indices[global_dind] = ind
 
@@ -236,8 +286,8 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
            
             del matches 
             #truncate, because we allocated conservatively
-            data = data[0:nrows*tform_obj.DOF_per_tile]
-            indices = indices[0:nrows*tform_obj.DOF_per_tile]
+            data = data[0:nrows*tform_obj.nnz_per_row]
+            indices = indices[0:nrows*tform_obj.nnz_per_row]
             indptr = indptr[0:nrows+1]
             weights = weights[0:nrows]
 
@@ -302,6 +352,10 @@ def create_regularization(regularization,tform_obj,tile_tforms,output_options):
     reg = np.ones_like(tile_tforms).astype('float64')*regularization['default_lambda']
     if tform_obj.name=='affine':
         reg[2::3] = reg[2::3]*regularization['translation_factor']
+    elif tform_obj.name=='rigid':
+        reg[0:4] = 1e15
+        reg[2::4] = reg[2::4]*regularization['translation_factor']
+        reg[3::4] = reg[3::4]*regularization['translation_factor']
 
     if output_options['output_mode']=='hdf5':
         #write the input transforms to disk
@@ -326,13 +380,13 @@ def assemble_and_solve(mod,zvals,ingestconn):
     tform_obj = transform_csr(mod.args['transformation'],mod.args['matrix_assembly']['npts_min'],mod.args['matrix_assembly']['npts_max'])
 
     #get the tile IDs and transforms
-    tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],zvals)
+    tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],tform_obj,zvals)
 
     #create A matrix in compressed sparse row (CSR) format
     A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tform_obj,tile_ids,zvals,mod.args['output_options'])
     tile_ind = np.in1d(tile_ids,tiles_used)
     filt_tspecs = tile_tspecs[tile_ind]
-    filt_tforms = tile_tforms[np.repeat(tile_ind,6)]
+    filt_tforms = tile_tforms[np.repeat(tile_ind,tform_obj.DOF_per_tile)]
   
     del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
     
@@ -361,12 +415,20 @@ def assemble_and_solve(mod,zvals,ingestconn):
 
     #replace the last transform in the tilespec with the new one
     for m in np.arange(len(filt_tspecs)):
-        filt_tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
-        filt_tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
-        filt_tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
-        filt_tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
-        filt_tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
-        filt_tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
+        if mod.args['transformation']=='affine':
+            filt_tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
+            filt_tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
+            filt_tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
+            filt_tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
+            filt_tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
+            filt_tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
+        elif mod.args['transformation']=='rigid':
+            filt_tspecs[m].tforms[-1].M[0,0] = x[m*4+0]
+            filt_tspecs[m].tforms[-1].M[0,1] = x[m*4+1]
+            filt_tspecs[m].tforms[-1].M[0,2] = x[m*4+2]
+            filt_tspecs[m].tforms[-1].M[1,0] = -x[m*4+1]
+            filt_tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
+            filt_tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
 
     #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
     if ingestconn!=None:

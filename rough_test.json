@@ -12,7 +12,7 @@
         "port": 8080,
         "mongo_host": "em-131fs",
         "mongo_port": 27017,
-        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "client_scripts": "/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts",
         "collection_type": "stack",
         "db_interface": "mongo"
     }, 
@@ -23,7 +23,7 @@
         "port": 8080, 
         "mongo_host": "em-131fs", 
         "mongo_port": 27017,
-        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "client_scripts": "/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts",
         "collection_type": "pointmatch",
         "db_interface": "mongo"
     },
@@ -35,7 +35,7 @@
         "port": 8080,
         "mongo_host": "em-131fs",
         "mongo_port": 27017,
-        "client_scripts": "/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts",
+        "client_scripts": "/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts",
         "collection_type": "stack",
         "db_interface": "render"
     }, 

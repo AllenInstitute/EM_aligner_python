@@ -1,5 +1,5 @@
 # EM_aligner_python
-
+Alignment of EM datasets. Builds sparse matrices from tilespecs and pointmatch collections and solves for new transforms using constrained linear least squares.
 ## Level of support
 We are planning on occasional updating this tool with no fixed schedule. Community involvement is encouraged through both issues and pull requests.
 ## setup
@@ -10,6 +10,7 @@ We are planning on occasional updating this tool with no fixed schedule. Communi
 alternately, ignore sourceme.sh and change the client_scripts in the input jsons to point to your own version of the render scripts
 
 ## montage
+align the images of each tissue section to each other. sections are treated independently.
 ```
 for z in zlist:
     assemble from montage_matches(z)
@@ -18,9 +19,11 @@ for z in zlist:
 ```
 `python assemble_and_solve.py --input_json montage_test.json`
 ## rough alignment
-same as 3D alignment, with rigid transformation
+apply a 3D alignment to downsampled montage results. Each montaged section is treated as 1 tile. The tiles are aligned with a rigid transformation. The first tile is fixed to prevent drastic scaling.
 
 `python assemble_and_solve.py --input_json rough_test.json`
+# 3D alignment
+all tiles are treated separately,with affine transformations.
 ## small 3D
 run 3D solve locally, will be RAM limited
 ```

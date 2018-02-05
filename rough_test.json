@@ -55,5 +55,6 @@
     "regularization": {
         "default_lambda": 1.0e3,
         "translation_factor": 1.0e-5 
+        "freeze_first_tile": True
     }
 }

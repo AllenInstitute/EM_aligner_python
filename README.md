@@ -13,6 +13,7 @@ ingest
 `python assemble_matrix.py --input_json montage_test.json`
 ## rough alignment
 same as 3D alignment, with rigid transformation
+
 `python assemble_matrix.py --input_json rough_test.json`
 ## small 3D
 run 3D solve locally, will be RAM limited

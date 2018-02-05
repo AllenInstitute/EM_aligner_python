@@ -3,7 +3,7 @@
 from pymongo import MongoClient
 import numpy as np
 import renderapi
-from assembly_schema import *
+from EM_aligner_python_schema import *
 import copy
 import time
 import scipy.sparse as sparse
@@ -439,7 +439,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
     
 if __name__=='__main__':
     t0 = time.time()
-    mod = argschema.ArgSchemaParser(schema_type=MySchema)
+    mod = argschema.ArgSchemaParser(schema_type=EMA_Schema)
 
     #specify the z values
     zvals = np.arange(mod.args['first_section'],mod.args['last_section']+1)

@@ -36,7 +36,7 @@ class pointmatch(db_params):
 class stack(db_params):
     collection_type = argschema.fields.String(default='stack',description="'stack' or 'pointmatch'")
 
-class MySchema(argschema.ArgSchema):
+class EMA_Schema(argschema.ArgSchema):
     first_section = argschema.fields.Int(default=1000, description = 'first section for matrix assembly')
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
     solve_type = argschema.fields.String(default='')

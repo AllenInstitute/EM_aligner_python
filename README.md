@@ -10,11 +10,11 @@ for z in zlist:
     solve with scipy.sparse
     ingest
 ```
-`python assemble_matrix.py --input_json montage_test.json`
+`python assemble_and_solve.py --input_json montage_test.json`
 ## rough alignment
 same as 3D alignment, with rigid transformation
 
-`python assemble_matrix.py --input_json rough_test.json`
+`python assemble_and_solve.py --input_json rough_test.json`
 ## small 3D
 run 3D solve locally, will be RAM limited
 ```
@@ -23,7 +23,7 @@ for z in zlist:
 solve with scipy.sparse
 ingest
 ```
-`python assemble_matrix.py --input_json small3D_test.json`
+`python assemble_and_solve.py --input_json small3D_test.json`
 ## large 3D
 intended to assemble A locally into multiple files for input to a distributed solver
 ```

@@ -8,7 +8,7 @@ We are planning on occasional updating this tool with no fixed schedule. Communi
 for z in zlist:
     assemble from montage_matches(z)
     solve with scipy.sparse
-ingest
+    ingest
 ```
 `python assemble_matrix.py --input_json montage_test.json`
 ## rough alignment

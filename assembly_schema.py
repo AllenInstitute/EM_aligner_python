@@ -29,6 +29,7 @@ class matrix_assembly(argschema.ArgSchema):
 class regularization(argschema.ArgSchema):
     default_lambda = argschema.fields.Float(0.005,description='regularization factor')
     translation_factor = argschema.fields.Float(0.005,description='regularization factor')
+    freeze_first_tile = argschema.fields.Boolean(default=False)
 
 class pointmatch(db_params):
     collection_type = argschema.fields.String(default='pointmatch',description="'stack' or 'pointmatch'")

@@ -353,9 +353,10 @@ def create_regularization(regularization,tform_obj,tile_tforms,output_options):
     if tform_obj.name=='affine':
         reg[2::3] = reg[2::3]*regularization['translation_factor']
     elif tform_obj.name=='rigid':
-        reg[0:4] = 1e15
         reg[2::4] = reg[2::4]*regularization['translation_factor']
         reg[3::4] = reg[3::4]*regularization['translation_factor']
+    if regularization['freeze_first_tile']:
+        reg[0:tform_obj.DOF_per_tile] = 1e15
 
     if output_options['output_mode']=='hdf5':
         #write the input transforms to disk

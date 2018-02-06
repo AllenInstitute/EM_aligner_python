@@ -41,7 +41,7 @@ class EMA_Schema(argschema.ArgSchema):
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
     solve_type = argschema.fields.String(default='')
     close_stack = argschema.fields.Boolean(default=True)
-    transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid'])
+    transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
     input_stack = argschema.fields.Nested(stack)
     output_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)

@@ -8,7 +8,7 @@ import copy
 import time
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import spsolve, factorized
 import h5py
 import os
 
@@ -67,13 +67,13 @@ def get_tileids_and_tforms(stack,tform_obj,zvals):
         for k in np.arange(len(tspecs)):
             if stack['db_interface']=='render':
                 tile_ids.append(tspecs[k].tileId)
-                if tform_obj.name=='affine':
+                if 'affine' in tform_obj.name:
                     tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
                 elif tform_obj.name=='rigid':
                     tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tforms[-1].M[1,2]])
             if stack['db_interface']=='mongo':
                 tile_ids.append(tspecs[k]['tileId'])
-                if tform_obj.name=='affine':
+                if 'affine' in tform_obj.name:
                     tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
                 elif tform_obj.name=='rigid':
                     tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,5]])
@@ -90,6 +90,10 @@ class transform_csr:
         self.nmax = nmax
         self.name=name
         if self.name=='affine':
+            self.DOF_per_tile=6
+            self.nnz_per_row=6
+            self.rows_per_ptmatch=1
+        if self.name=='affine_fullsize':
             self.DOF_per_tile=6
             self.nnz_per_row=6
             self.rows_per_ptmatch=2
@@ -114,7 +118,7 @@ class transform_csr:
 
        m = np.arange(npts)
        mstep = m*self.nnz_per_row
-       if self.name=='affine':
+       if self.name=='affine_fullsize':
            #u=ax+by+c
            self.data[0+mstep] = np.array(match['matches']['p'][0])[m]
            self.data[1+mstep] = np.array(match['matches']['p'][1])[m]
@@ -129,6 +133,19 @@ class transform_csr:
            self.indices[npts*self.nnz_per_row:2*npts*self.nnz_per_row] = np.tile(uindices+3,npts) 
            self.indptr[0:2*npts] = np.arange(1,2*npts+1)*self.nnz_per_row
            self.weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
+       if self.name=='affine':
+           #u=ax+by+c
+           self.data[0+mstep] = np.array(match['matches']['p'][0])[m]
+           self.data[1+mstep] = np.array(match['matches']['p'][1])[m]
+           self.data[2+mstep] = 1.0
+           self.data[3+mstep] = -1.0*np.array(match['matches']['q'][0])[m]
+           self.data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
+           self.data[5+mstep] = -1.0
+           uindices = np.hstack((tile_ind1*self.DOF_per_tile/2+np.array([0,1,2]),tile_ind2*self.DOF_per_tile/2+np.array([0,1,2])))
+           self.indices[0:npts*self.nnz_per_row] = np.tile(uindices,npts) 
+           self.indptr[0:npts] = np.arange(1,npts+1)*self.nnz_per_row
+           self.weights[0:npts] = np.array(match['matches']['w'])[m]
+           #don't do anything for v
 
        if self.name=='rigid':
            px = np.array(match['matches']['p'][0])[m]
@@ -350,7 +367,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
 def create_regularization(regularization,tform_obj,tile_tforms,output_options):
     #create a regularization vector
     reg = np.ones_like(tile_tforms).astype('float64')*regularization['default_lambda']
-    if tform_obj.name=='affine':
+    if 'affine' in tform_obj.name:
         reg[2::3] = reg[2::3]*regularization['translation_factor']
     elif tform_obj.name=='rigid':
         reg[2::4] = reg[2::4]*regularization['translation_factor']
@@ -382,12 +399,22 @@ def assemble_and_solve(mod,zvals,ingestconn):
 
     #get the tile IDs and transforms
     tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],tform_obj,zvals)
+    if mod.args['transformation']=='affine':
+        #split the tforms in half
+        utforms = np.hstack(np.hsplit(tile_tforms,len(tile_tforms)/3)[::2])
+        vtforms = np.hstack(np.hsplit(tile_tforms,len(tile_tforms)/3)[1::2])
 
     #create A matrix in compressed sparse row (CSR) format
     A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tform_obj,tile_ids,zvals,mod.args['output_options'])
     tile_ind = np.in1d(tile_ids,tiles_used)
     filt_tspecs = tile_tspecs[tile_ind]
     filt_tforms = tile_tforms[np.repeat(tile_ind,tform_obj.DOF_per_tile)]
+    if mod.args['transformation']=='affine':
+        #split the tforms in half
+        filt_utforms = utforms[np.repeat(tile_ind,tform_obj.DOF_per_tile/2)]
+        filt_vtforms = vtforms[np.repeat(tile_ind,tform_obj.DOF_per_tile/2)]
+        filt_tforms = filt_utforms
+        del utforms,vtforms
   
     del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
     
@@ -398,17 +425,44 @@ def assemble_and_solve(mod,zvals,ingestconn):
     ATW = A.transpose().dot(weights)
     K = ATW.dot(A) + mont_reg
     print ' created K: %d x %d'%K.shape
-    Lm = mont_reg.dot(filt_tforms)
 
-    del weights,filt_tforms,mont_reg
+    del weights
 
-    #solve
-    x = spsolve(K,Lm)
-    err = A.dot(x)
+    #solve in one step
+    #x = spsolve(K,Lm)
+
+    #factorize, then solve, efficient for large affine
+    solve = factorized(K)
+    if mod.args['transformation']=='affine':
+        Lm = mont_reg.dot(filt_utforms)
+        xu = solve(Lm)
+        erru = A.dot(xu)
+        precisionu = np.linalg.norm(K.dot(xu)-Lm)/np.linalg.norm(Lm)
+
+        Lm = mont_reg.dot(filt_vtforms)
+        xv = solve(Lm)
+        errv = A.dot(xv)
+        precisionv = np.linalg.norm(K.dot(xv)-Lm)/np.linalg.norm(Lm)
+        precision = np.sqrt(precisionu**2+precisionv**2)
+        del filt_utforms,filt_vtforms
+        x = np.zeros(xu.size*2).astype('float64')
+        err = np.hstack((erru,errv))
+        for i in np.arange(3):
+            x[i::6]=xu[i::3]
+            x[i+3::6]=xv[i::3]
+
+    else:
+        Lm = mont_reg.dot(filt_tforms)
+        x = solve(Lm)
+        err = A.dot(x)
+        precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
+
+    del filt_tforms,mont_reg
+
 
     message = '***-------------***\n'
     message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)
-    message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%(np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm))
+    message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
     message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
     message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
     print message

@@ -1,9 +1,10 @@
 {
     "first_section": 1020, 
-    "last_section": 1020,
+    "last_section": 1021,
     "solve_type": "montage",
     "close_stack": "True",
     "transformation": "affine",
+    "start_from_file": "",
     "input_stack": {
         "owner": "gayathri",
         "project": "MM2",

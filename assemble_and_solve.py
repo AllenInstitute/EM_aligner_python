@@ -192,6 +192,29 @@ class transform_csr:
 
        return self.data[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indices[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indptr[0:npts*self.rows_per_ptmatch],self.weights[0:npts*self.rows_per_ptmatch]
 
+def write_chunk_to_file(fname,file_number,c,file_weights):
+    print ' writing to file: %s'%fname
+    f = h5py.File(fname,"w")
+    dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int64')
+    dset[:] = c.indptr
+    dset = f.create_dataset("indices",(c.indices.size,),dtype='int64')
+    dset[:] = c.indices
+    dset = f.create_dataset("data",(c.data.size,),dtype='float64')
+    dset[:] = c.data
+    dset = f.create_dataset("weights",(file_weights.size,),dtype='float64')
+    dset[:] = file_weights
+    f.close()
+    print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
+    fmode='a'
+    if file_number==0:
+        fmode='w'
+    tmp = fname.split('/')
+    fdir = ''
+    for t in tmp[:-1]:
+        fdir=fdir+'/'+t
+    f=open(fdir+'/index.txt',fmode)
+    f.write('file %s contains %ld rows\n'%(tmp[-1],c.shape[0]))
+    f.close()
 
 def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_options):
     #connect to the database
@@ -329,35 +352,14 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
             del data,indices,indptr,weights
 
         if (np.mod(i+1,nmod)==0)|(i==len(zvals)-1):
-            fname = '%d_%d.h5'%(file_zlist[0],file_zlist[-1])
-            fullname = output_options['output_dir']+'/'+fname
             c = csr_matrix((file_data,file_indices,file_indptr))
-            del file_data,file_indices,file_indptr
-            print ' from %d chunks, canonical format: '%output_options['chunks_per_file'],c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
-            cnnz = np.argwhere(c.getnnz(0)==0).flatten().size
-            print ' matrix contains %d all-zero columns (%d tiles in stack were not matched)'%(cnnz,cnnz/6)
             if output_options['output_mode']=='hdf5':
-                print ' writing to file: %s'%fullname
-                f = h5py.File(fullname,"w")
-                dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int32')
-                dset[:] = c.indptr
-                dset = f.create_dataset("indices",(c.indices.size,),dtype='int32')
-                dset[:] = c.indices
-                dset = f.create_dataset("data",(c.data.size,),dtype='float64')
-                dset[:] = c.data
-                dset = f.create_dataset("weights",(file_weights.size,),dtype='float64')
-                dset[:] = file_weights
-                f.close()
-                print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fullname)/(2.**30))
-                fmode='a'
-                if file_number==0:
-                    fmode='w'
-                f=open(output_options['output_dir']+'/index.txt',fmode)
-                f.write('file %s contains %ld rows\n'%(fname,c.shape[0]))
-                f.close()
-            file_chunks = 0
-            file_number += 1
-            file_zlist = []
+                fname = output_options['output_dir']+'/%d_%d.h5'%(file_zlist[0],file_zlist[-1])
+                write_chunk_to_file(fname,file_number,c,file_weights)
+                del file_data,file_indices,file_indptr
+                file_chunks = 0
+                file_number += 1
+                file_zlist = []
  
     outw = sparse.eye(file_weights.size,format='csr')
     outw.data = file_weights
@@ -365,6 +367,9 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
     return c,outw,np.unique(np.array(tiles_used))
 
 def create_regularization(regularization,tform_obj,tile_tforms,output_options):
+    #affine (half-size) or any other transform, we only need the first one:
+    tile_tforms = tile_tforms[0]
+
     #create a regularization vector
     reg = np.ones_like(tile_tforms).astype('float64')*regularization['default_lambda']
     if 'affine' in tform_obj.name:
@@ -375,76 +380,149 @@ def create_regularization(regularization,tform_obj,tile_tforms,output_options):
     if regularization['freeze_first_tile']:
         reg[0:tform_obj.DOF_per_tile] = 1e15
 
-    if output_options['output_mode']=='hdf5':
-        #write the input transforms to disk
-        fname = output_options['output_dir']+'/regularization.h5'
-        f = h5py.File(fname,"w")
-        dset = f.create_dataset("transforms",(tile_tforms.size,),dtype='float64')
-        dset[:] = tile_tforms
-
-        #create a regularization vector
-        dset = f.create_dataset("lambda",(reg.size,),dtype='float64')
-        dset[:] = reg
-        f.close()
-        print 'wrote %s'%fname
-
     outr = sparse.eye(reg.size,format='csr')
     outr.data = reg
     return outr
 
-def assemble_and_solve(mod,zvals,ingestconn):
-    t0 = time.time()
+def write_reg_and_tforms(output_options,filt_tforms,reg,filt_tids):
+    if output_options['output_mode']=='hdf5':
+        #write the input transforms to disk
+        fname = output_options['output_dir']+'/regularization.h5'
+        f = h5py.File(fname,"w")
+        for j in np.arange(len(filt_tforms)):
+            dsetname = 'transforms_%d'%j
+            dset = f.create_dataset(dsetname,(filt_tforms[j].size,),dtype='float64')
+            dset[:] = filt_tforms[j]
+        #create a regularization vector
+        vec = reg.diagonal()
+        dset = f.create_dataset("lambda",(vec.size,),dtype='float64')
+        dset[:] = vec
+        #keep track here what tile_ids were used
+        dt = h5py.special_dtype(vlen=str)
+        dset = f.create_dataset("tile_ids",(filt_tids.size,),dtype=dt)
+        dset[:] = filt_tids
+        f.close()
+        print 'wrote %s'%fname
+
+def assemble(mod):
     #make a transform object
     tform_obj = transform_csr(mod.args['transformation'],mod.args['matrix_assembly']['npts_min'],mod.args['matrix_assembly']['npts_max'])
-
     #get the tile IDs and transforms
     tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],tform_obj,zvals)
     if mod.args['transformation']=='affine':
-        #split the tforms in half
+        #split the tforms in half by u and v
         utforms = np.hstack(np.hsplit(tile_tforms,len(tile_tforms)/3)[::2])
         vtforms = np.hstack(np.hsplit(tile_tforms,len(tile_tforms)/3)[1::2])
-
+        tile_tforms = [utforms,vtforms]
+        del utforms,vtforms
+    else:
+        tile_tforms = [tile_tforms]
     #create A matrix in compressed sparse row (CSR) format
     A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tform_obj,tile_ids,zvals,mod.args['output_options'])
+    #some book-keeping if there were some unused tiles
     tile_ind = np.in1d(tile_ids,tiles_used)
     filt_tspecs = tile_tspecs[tile_ind]
-    filt_tforms = tile_tforms[np.repeat(tile_ind,tform_obj.DOF_per_tile)]
-    if mod.args['transformation']=='affine':
-        #split the tforms in half
-        filt_utforms = utforms[np.repeat(tile_ind,tform_obj.DOF_per_tile/2)]
-        filt_vtforms = vtforms[np.repeat(tile_ind,tform_obj.DOF_per_tile/2)]
-        filt_tforms = filt_utforms
-        del utforms,vtforms
-  
+    filt_tids = tile_ids[tile_ind]
+    filt_tforms = []
+    for j in np.arange(len(tile_tforms)):
+        filt_tforms.append(tile_tforms[j][np.repeat(tile_ind,tform_obj.DOF_per_tile/len(tile_tforms))])
     del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
     
     #create the regularization vectors
-    mont_reg = create_regularization(mod.args['regularization'],tform_obj,filt_tforms,mod.args['output_options'])
+    reg = create_regularization(mod.args['regularization'],tform_obj,filt_tforms,mod.args['output_options'])
+
+    #output the regularization vectors to hdf5 file
+    write_reg_and_tforms(mod.args['output_options'],filt_tforms,reg,filt_tids)
+
+    return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
+
+def start_from_file(mod):
+    #make a transform object
+    tform_obj = transform_csr(mod.args['transformation'],mod.args['matrix_assembly']['npts_min'],mod.args['matrix_assembly']['npts_max'])
+    #get the tile IDs and transforms
+    tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],tform_obj,zvals)
+    
+    tmp = mod.args['start_from_file'].split('/')
+    fdir = ''
+    for t in tmp[:-1]:
+        fdir=fdir+'/'+t
+    
+    #get from the regularization file
+    f = h5py.File(fdir+'/regularization.h5','r')
+    reg = f.get('lambda')[()]
+    filt_tids = f.get('tile_ids')[()]
+    k=0
+    filt_tforms=[]
+    while True:
+        name = 'transforms_%d'%k 
+        if name in f.keys():
+            filt_tforms.append(f.get(name)[()])
+            k+=1
+        else:
+           break
+    tile_ind = np.in1d(tile_ids,filt_tids)
+    filt_tspecs = tile_tspecs[tile_ind]
+    f.close()
+
+    outr = sparse.eye(reg.size,format='csr')
+    outr.data = reg
+    reg = outr
+
+    #get from the matrix files
+    f = open(fdir+'/index.txt','r')
+    lines = f.readlines()
+    f.close()
+    data = np.array([]).astype('float64')
+    weights = np.array([]).astype('float64')
+    indices = np.array([]).astype('int64')
+    indptr = np.array([]).astype('int64')
+    for line in lines:
+        fname = fdir+'/'+line.split(' ')[1]
+        f = h5py.File(fname,'r')
+        data = np.append(data,f.get('data')[()])
+        indices = np.append(indices,f.get('indices')[()])
+        indptr = np.append(indptr,f.get('indptr')[()])
+        weights = np.append(weights,f.get('weights')[()])
+        f.close()
+    A=csr_matrix((data,indices,indptr))
+
+    outw = sparse.eye(weights.size,format='csr')
+    outw.data = weights
+    weights = outw
+
+    print 'read inputs from files'
+
+    return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
+
+def assemble_and_solve(mod,zvals,ingestconn):
+    t0 = time.time()
+    
+    #assembly
+    if mod.args['start_from_file']!='':
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod)
+    else:
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod)
 
     #regularized least squares
     ATW = A.transpose().dot(weights)
-    K = ATW.dot(A) + mont_reg
+    K = ATW.dot(A) + reg
     print ' created K: %d x %d'%K.shape
-
     del weights
-
-    #solve in one step
-    #x = spsolve(K,Lm)
 
     #factorize, then solve, efficient for large affine
     solve = factorized(K)
     if mod.args['transformation']=='affine':
-        Lm = mont_reg.dot(filt_utforms)
+        Lm = reg.dot(filt_tforms[0])
         xu = solve(Lm)
         erru = A.dot(xu)
         precisionu = np.linalg.norm(K.dot(xu)-Lm)/np.linalg.norm(Lm)
 
-        Lm = mont_reg.dot(filt_vtforms)
+        Lm = reg.dot(filt_tforms[1])
         xv = solve(Lm)
         errv = A.dot(xv)
         precisionv = np.linalg.norm(K.dot(xv)-Lm)/np.linalg.norm(Lm)
         precision = np.sqrt(precisionu**2+precisionv**2)
-        del filt_utforms,filt_vtforms
+
         x = np.zeros(xu.size*2).astype('float64')
         err = np.hstack((erru,errv))
         for i in np.arange(3):
@@ -452,13 +530,12 @@ def assemble_and_solve(mod,zvals,ingestconn):
             x[i+3::6]=xv[i::3]
 
     else:
-        Lm = mont_reg.dot(filt_tforms)
+        Lm = reg.dot(filt_tforms[0])
         x = solve(Lm)
         err = A.dot(x)
         precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
 
-    del filt_tforms,mont_reg
-
+    del filt_tforms,reg
 
     message = '***-------------***\n'
     message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)

@@ -42,6 +42,7 @@ class EMA_Schema(argschema.ArgSchema):
     solve_type = argschema.fields.String(default='')
     close_stack = argschema.fields.Boolean(default=True)
     transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
+    start_from_file = argschema.fields.String(default='',description = 'fullpath to index.txt')
     input_stack = argschema.fields.Nested(stack)
     output_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)

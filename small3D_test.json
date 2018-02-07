@@ -1,8 +1,10 @@
 {
     "first_section": 1020, 
-    "last_section": 1023,
+    "last_section": 1026,
     "solve_type": "3D",
     "close_stack": "True",
+    "transformation": "affine",
+    "start_from_file": "",
     "input_stack": {
         "owner": "gayathri",
         "project": "MM2",
@@ -41,7 +43,7 @@
     "output_options": {
         "output_mode": "stack",
         "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/",
-        "chunks_per_file": -1
+        "chunks_per_file": 1
     },
     "matrix_assembly": {
         "depth": 2, 

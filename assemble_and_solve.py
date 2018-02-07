@@ -11,6 +11,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import spsolve, factorized
 import h5py
 import os
+import sys
 
 def make_dbconnection(collection,which='tile'):
     #connect to the database
@@ -192,11 +193,16 @@ class transform_csr:
 
        return self.data[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indices[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indptr[0:npts*self.rows_per_ptmatch],self.weights[0:npts*self.rows_per_ptmatch]
 
-def write_chunk_to_file(fname,file_number,c,file_weights):
+def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights):
     print ' writing to file: %s'%fname
     f = h5py.File(fname,"w")
-    dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int64')
-    dset[:] = c.indptr
+    if file_number==0:
+        dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int64')
+        dset[:] = c.indptr+indptr_offset
+    else:
+        #because all the files concatenated will be a single valid csr matrix
+        dset = f.create_dataset("indptr",(c.indptr[1:].size,),dtype='int64')
+        dset[:] = c.indptr[1:]+indptr_offset
     dset = f.create_dataset("indices",(c.indices.size,),dtype='int64')
     dset[:] = c.indices
     dset = f.create_dataset("data",(c.data.size,),dtype='float64')
@@ -204,7 +210,7 @@ def write_chunk_to_file(fname,file_number,c,file_weights):
     dset = f.create_dataset("weights",(file_weights.size,),dtype='float64')
     dset[:] = file_weights
     f.close()
-    print 'wrote %s\n%0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
+    print ' wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
     fmode='a'
     if file_number==0:
         fmode='w'
@@ -354,8 +360,11 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
         if (np.mod(i+1,nmod)==0)|(i==len(zvals)-1):
             c = csr_matrix((file_data,file_indices,file_indptr))
             if output_options['output_mode']=='hdf5':
+                if file_number==0:
+                    indptr_offset=0
                 fname = output_options['output_dir']+'/%d_%d.h5'%(file_zlist[0],file_zlist[-1])
-                write_chunk_to_file(fname,file_number,c,file_weights)
+                write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights)
+                indptr_offset += file_indptr[-1]
                 del file_data,file_indices,file_indptr
                 file_chunks = 0
                 file_number += 1
@@ -484,6 +493,7 @@ def start_from_file(mod):
         indptr = np.append(indptr,f.get('indptr')[()])
         weights = np.append(weights,f.get('weights')[()])
         f.close()
+
     A=csr_matrix((data,indices,indptr))
 
     outw = sparse.eye(weights.size,format='csr')
@@ -494,79 +504,109 @@ def start_from_file(mod):
 
     return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
 
+def mat_stats(m,name):
+    print ' matrix %s: '%name+' format: ',m.getformat(),', shape: ',m.shape,' nnz: ',m.nnz
+    if m.shape[0]==m.shape[1]:
+        asymm = np.any(m.transpose().data != m.data)
+        print ' symm: ',not asymm
+
 def assemble_and_solve(mod,zvals,ingestconn):
     t0 = time.time()
-    
+    t00 = t0
     #assembly
     if mod.args['start_from_file']!='':
         A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod)
     else:
         A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod)
+    mat_stats(A,'A')
+    print ' A created in %0.1f seconds'%(time.time()-t0)
+    t0=time.time()
 
-    #regularized least squares
-    ATW = A.transpose().dot(weights)
-    K = ATW.dot(A) + reg
-    print ' created K: %d x %d'%K.shape
-    del weights
-
-    #factorize, then solve, efficient for large affine
-    solve = factorized(K)
-    if mod.args['transformation']=='affine':
-        Lm = reg.dot(filt_tforms[0])
-        xu = solve(Lm)
-        erru = A.dot(xu)
-        precisionu = np.linalg.norm(K.dot(xu)-Lm)/np.linalg.norm(Lm)
-
-        Lm = reg.dot(filt_tforms[1])
-        xv = solve(Lm)
-        errv = A.dot(xv)
-        precisionv = np.linalg.norm(K.dot(xv)-Lm)/np.linalg.norm(Lm)
-        precision = np.sqrt(precisionu**2+precisionv**2)
-
-        x = np.zeros(xu.size*2).astype('float64')
-        err = np.hstack((erru,errv))
-        for i in np.arange(3):
-            x[i::6]=xu[i::3]
-            x[i+3::6]=xv[i::3]
-
+    if mod.args['output_options']['output_mode'] in ['hdf5']:
+        print '*****\nno solve for hdf5 output'
+        print 'solve from the files you just wrote: '
+        mesg = 'python '
+        for arg in sys.argv:
+            mesg = mesg+arg+' '
+        mesg = mesg+ '--start_from_file '+mod.args['output_options']['output_dir']
+        mesg = mesg.replace('hdf5','none')
+        print mesg
+        print 'or, run it again to solve with no output:'
+        mesg = 'python '
+        for arg in sys.argv:
+            mesg = mesg+arg+' '
+        mesg = mesg.replace('hdf5','none')
+        print mesg
     else:
-        Lm = reg.dot(filt_tforms[0])
-        x = solve(Lm)
-        err = A.dot(x)
-        precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
-
-    del filt_tforms,reg
-
-    message = '***-------------***\n'
-    message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t0)
-    message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
-    message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
-    message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
-    print message
-    del A,K,ATW,Lm
-
-    #replace the last transform in the tilespec with the new one
-    for m in np.arange(len(filt_tspecs)):
+        #don't solve on hdf5 output
+        #regularized least squares
+        ATW = A.transpose().dot(weights)
+        K = ATW.dot(A) + reg
+        mat_stats(K,'K')
+        print ' K created in %0.1f seconds'%(time.time()-t0)
+        t0=time.time()
+        del weights
+    
+        #factorize, then solve, efficient for large affine
+        solve = factorized(K)
         if mod.args['transformation']=='affine':
-            filt_tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
-            filt_tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
-            filt_tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
-            filt_tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
-            filt_tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
-            filt_tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
-        elif mod.args['transformation']=='rigid':
-            filt_tspecs[m].tforms[-1].M[0,0] = x[m*4+0]
-            filt_tspecs[m].tforms[-1].M[0,1] = x[m*4+1]
-            filt_tspecs[m].tforms[-1].M[0,2] = x[m*4+2]
-            filt_tspecs[m].tforms[-1].M[1,0] = -x[m*4+1]
-            filt_tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
-            filt_tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
+            Lm = reg.dot(filt_tforms[0])
+            xu = solve(Lm)
+            erru = A.dot(xu)
+            precisionu = np.linalg.norm(K.dot(xu)-Lm)/np.linalg.norm(Lm)
 
-    #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
-    if ingestconn!=None:
-        renderapi.client.import_tilespecs_parallel(mod.args['output_stack']['name'],filt_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+            Lm = reg.dot(filt_tforms[1])
+            xv = solve(Lm)
+            errv = A.dot(xv)
+            precisionv = np.linalg.norm(K.dot(xv)-Lm)/np.linalg.norm(Lm)
+            precision = np.sqrt(precisionu**2+precisionv**2)
+
+            x = np.zeros(xu.size*2).astype('float64')
+            err = np.hstack((erru,errv))
+            for i in np.arange(3):
+                x[i::6]=xu[i::3]
+                x[i+3::6]=xv[i::3]
+
+        else:
+            Lm = reg.dot(filt_tforms[0])
+            x = solve(Lm)
+            err = A.dot(x)
+            precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
+
+        del filt_tforms,reg
+
+        print 'solved in %0.1f seconds'%(time.time()-t0)
+        t0=time.time()
+        message = '***-------------***\n'
+        message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t00)
+        message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
+        message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
+        message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
         print message
-    del shared_tforms,x,filt_tspecs
+        del A,K,ATW,Lm
+
+        #replace the last transform in the tilespec with the new one
+        for m in np.arange(len(filt_tspecs)):
+            if mod.args['transformation']=='affine':
+                filt_tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
+                filt_tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
+                filt_tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
+                filt_tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
+                filt_tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
+                filt_tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
+            elif mod.args['transformation']=='rigid':
+                filt_tspecs[m].tforms[-1].M[0,0] = x[m*4+0]
+                filt_tspecs[m].tforms[-1].M[0,1] = x[m*4+1]
+                filt_tspecs[m].tforms[-1].M[0,2] = x[m*4+2]
+                filt_tspecs[m].tforms[-1].M[1,0] = -x[m*4+1]
+                filt_tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
+                filt_tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
+
+        #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
+        if ingestconn!=None:
+            renderapi.client.import_tilespecs_parallel(mod.args['output_stack']['name'],filt_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+            print message
+        del shared_tforms,x,filt_tspecs
     
 if __name__=='__main__':
     t0 = time.time()

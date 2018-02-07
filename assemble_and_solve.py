@@ -222,6 +222,31 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights):
     f.write('file %s contains %ld rows\n'%(tmp[-1],c.shape[0]))
     f.close()
 
+def get_matches(zi,zj,collection,dbconnection):
+    if collection['db_interface']=='render':
+        if zi==zj:
+            matches = renderapi.pointmatch.get_matches_within_group(collection['name'],str(float(zi)),owner=collection['owner'],render=dbconnection)
+        else:
+            matches = renderapi.pointmatch.get_matches_from_group_to_group(collection['name'],str(float(zi)),str(float(zj)),owner=collection['owner'],render=dbconnection)
+        matches = np.array(matches)
+    if collection['db_interface']=='mongo':
+        cursor = dbconnection.find({'pGroupId':str(float(zi)),'qGroupId':str(float(zj))})
+        matches = np.array(list(cursor))
+        if zi!=zj:
+            #in principle, this does nothing if zi < zj, but, just in case
+            cursor = dbconnection.find({'pGroupId':str(float(zj)),'qGroupId':str(float(zi))})
+            matches = np.append(matches,list(cursor))
+    return matches
+
+def tilepair_weight(i,j,matrix_assembly):
+    if i==j:
+        tp_weight = matrix_assembly['montage_pt_weight']
+    else:
+        tp_weight = matrix_assembly['cross_pt_weight']
+        if matrix_assembly['inverse_dz']:
+            tp_weight = tp_weight/np.abs(j-i+1)
+    return tp_weight
+
 def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_options):
     #connect to the database
     dbconnection = make_dbconnection(collection)
@@ -244,26 +269,14 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
         jmax = np.min([i+matrix_assembly['depth']+1,len(zvals)])
         for j in np.arange(i,jmax): #depth, upward looking
             t0=time.time()
-            if collection['db_interface']=='render':
-                if i==j:
-                    matches = renderapi.pointmatch.get_matches_within_group(collection['name'],str(float(zvals[i])),owner=collection['owner'],render=dbconnection)
-                else:
-                    matches = renderapi.pointmatch.get_matches_from_group_to_group(collection['name'],str(float(zvals[i])),str(float(zvals[j])),owner=collection['owner'],render=dbconnection)
-                matches = np.array(matches)
 
-            if collection['db_interface']=='mongo':
-                cursor = dbconnection.find({'pGroupId':str(float(zvals[i])),'qGroupId':str(float(zvals[j]))})
-                matches = np.array(list(cursor))
-                if i!=j:
-                    #in principle, this does nothing if zvals[i] < zvals[j], but, just in case
-                    cursor = dbconnection.find({'pGroupId':str(float(zvals[j])),'qGroupId':str(float(zvals[i]))})
-                    matches = np.append(matches,list(cursor))
+            matches = get_matches(zvals[i],zvals[j],collection,dbconnection)
 
             if len(matches)==0:
                 print 'WARNING: %d matches for z1=%d z2=%d in pointmatch collection'%(len(matches),zvals[i],zvals[j])
                 continue
 
-            #extract IDs for checking
+            #extract IDs for fast checking
             pids = []
             qids = []
             for m in matches:
@@ -286,34 +299,34 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
         
             t0 = time.time()
             
-            #for the given point matches, these are the indices in tile_ids that are being called
+            #for the given point matches, these are the indices in tile_ids 
+            #these determine the column locations in A for each tile pair
+            #this is a fast version of np.argwhere() loop
             pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
             qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
 
-            #conservative pre-allocation
+            #conservative pre-allocation of the arrays we need to populate
+            #will truncate at the end
             nmatches = len(matches)
             data = np.zeros(tform_obj.nnz_per_row*tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches).astype('float64')
             indices = np.zeros(tform_obj.nnz_per_row*tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches).astype('int64')
             indptr = np.zeros(tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches+1).astype('int64')
             weights = np.zeros(tform_obj.rows_per_ptmatch*matrix_assembly['npts_max']*nmatches).astype('float64')
 
+            #see definition of CSR format, wikipedia for example
             indptr[0] = 0
+
+            #track how many rows
             nrows = 0
+
+            tilepair_weightfac = tilepair_weight(i,j,matrix_assembly)
 
             for k in np.arange(nmatches):
                 #create the CSR sub-matrix for this tile pair
                 d,ind,iptr,wts = tform_obj.CSR_tile_pair(matches[k],pinds[k],qinds[k])
                 npts = tform_obj.npts
-
                 if d is None:
                     continue #if npts<nmin, for example
-
-                if i==j:
-                    matchweight = matrix_assembly['montage_pt_weight']
-                else:
-                    matchweight = matrix_assembly['cross_pt_weight']
-                    if matrix_assembly['inverse_dz']:
-                        matchweight = matchweight/np.abs(j-i+1)
 
                 #add both tile ids to the list
                 tiles_used.append(matches[k]['pId'])
@@ -325,7 +338,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
                 indices[global_dind] = ind
 
                 global_rowind = np.arange(npts*tform_obj.rows_per_ptmatch)+nrows
-                weights[global_rowind] = wts*matchweight
+                weights[global_rowind] = wts*tilepair_weightfac
                 indptr[global_rowind+1] = iptr+indptr[nrows]
 
                 nrows += wts.size
@@ -416,6 +429,7 @@ def write_reg_and_tforms(output_options,filt_tforms,reg,filt_tids):
 def assemble(mod):
     #make a transform object
     tform_obj = transform_csr(mod.args['transformation'],mod.args['matrix_assembly']['npts_min'],mod.args['matrix_assembly']['npts_max'])
+
     #get the tile IDs and transforms
     tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(mod.args['input_stack'],tform_obj,zvals)
     if mod.args['transformation']=='affine':
@@ -426,8 +440,10 @@ def assemble(mod):
         del utforms,vtforms
     else:
         tile_tforms = [tile_tforms]
+
     #create A matrix in compressed sparse row (CSR) format
     A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tform_obj,tile_ids,zvals,mod.args['output_options'])
+
     #some book-keeping if there were some unused tiles
     tile_ind = np.in1d(tile_ids,tiles_used)
     filt_tspecs = tile_tspecs[tile_ind]
@@ -510,46 +526,56 @@ def mat_stats(m,name):
         asymm = np.any(m.transpose().data != m.data)
         print ' symm: ',not asymm
 
-def assemble_and_solve(mod,zvals,ingestconn):
-    t0 = time.time()
-    t00 = t0
-    #assembly
-    if mod.args['start_from_file']!='':
-        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod)
-    else:
-        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod)
-    mat_stats(A,'A')
-    print ' A created in %0.1f seconds'%(time.time()-t0)
+def write_to_new_stack(name,tform_type,tspecs,shared_tforms,x,ingestconn):
+    #replace the last transform in the tilespec with the new one
+    for m in np.arange(len(tspecs)):
+        if 'affine' in tform_type:
+            tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
+            tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
+            tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
+            tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
+            tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
+            tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
+        elif tform_type=='rigid':
+            tspecs[m].tforms[-1].M[0,0] = x[m*4+0]
+            tspecs[m].tforms[-1].M[0,1] = x[m*4+1]
+            tspecs[m].tforms[-1].M[0,2] = x[m*4+2]
+            tspecs[m].tforms[-1].M[1,0] = -x[m*4+1]
+            tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
+            tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
+    tspecs = tspecs.tolist()
+    renderapi.client.import_tilespecs_parallel(name,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+    
+def solve_or_not(mod,A,weights,reg,filt_tforms):
     t0=time.time()
-
+    #not
     if mod.args['output_options']['output_mode'] in ['hdf5']:
-        print '*****\nno solve for hdf5 output'
-        print 'solve from the files you just wrote: '
-        mesg = 'python '
+        message = '*****\nno solve for hdf5 output\n'
+        message += 'solve from the files you just wrote:\n\n'
+        message += 'python '
         for arg in sys.argv:
-            mesg = mesg+arg+' '
-        mesg = mesg+ '--start_from_file '+mod.args['output_options']['output_dir']
-        mesg = mesg.replace('hdf5','none')
-        print mesg
-        print 'or, run it again to solve with no output:'
-        mesg = 'python '
+            message += arg+' '
+        message = message+ '--start_from_file '+mod.args['output_options']['output_dir']
+        message += '\n\nor, run it again to solve with no output:\n\n'
+        message += 'python '
         for arg in sys.argv:
-            mesg = mesg+arg+' '
-        mesg = mesg.replace('hdf5','none')
-        print mesg
+            message += arg+' '
+        message = message.replace('hdf5','none')
+        x=None
     else:
-        #don't solve on hdf5 output
         #regularized least squares
         ATW = A.transpose().dot(weights)
         K = ATW.dot(A) + reg
         mat_stats(K,'K')
         print ' K created in %0.1f seconds'%(time.time()-t0)
         t0=time.time()
-        del weights
+        del weights,ATW
     
         #factorize, then solve, efficient for large affine
         solve = factorized(K)
         if mod.args['transformation']=='affine':
+            #affine assembles only half the matrix
+            #then applies the LU decomposition to the u and v transforms separately
             Lm = reg.dot(filt_tforms[0])
             xu = solve(Lm)
             erru = A.dot(xu)
@@ -560,53 +586,50 @@ def assemble_and_solve(mod,zvals,ingestconn):
             errv = A.dot(xv)
             precisionv = np.linalg.norm(K.dot(xv)-Lm)/np.linalg.norm(Lm)
             precision = np.sqrt(precisionu**2+precisionv**2)
-
+           
+            #recombine
             x = np.zeros(xu.size*2).astype('float64')
             err = np.hstack((erru,errv))
             for i in np.arange(3):
                 x[i::6]=xu[i::3]
                 x[i+3::6]=xv[i::3]
-
+            del xu,xv,erru,errv,precisionu,precisionv
         else:
+            #simpler case for rigid, or affine_fullsize, but 2x larger than affine
             Lm = reg.dot(filt_tforms[0])
             x = solve(Lm)
             err = A.dot(x)
             precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
+        del K,Lm
 
-        del filt_tforms,reg
-
-        print 'solved in %0.1f seconds'%(time.time()-t0)
-        t0=time.time()
         message = '***-------------***\n'
-        message = message + ' assembled and solved in %0.1f sec\n'%(time.time()-t00)
+        message = message + ' solved in %0.1f sec\n'%(time.time()-t0)
         message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
         message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
         message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
+
+    return message,x
+
+def assemble_and_solve(mod,zvals,ingestconn):
+    t0 = time.time()
+    t00 = t0
+    #assembly
+    if mod.args['start_from_file']!='':
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod)
+    else:
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod)
+    mat_stats(A,'A')
+    print ' A created in %0.1f seconds'%(time.time()-t0)
+
+    #solve
+    message,x = solve_or_not(mod,A,weights,reg,filt_tforms)
+    print message
+    del A
+
+    if mod.args['output_options']['output_mode']=='stack':
+        write_to_new_stack(mod.args['output_stack']['name'],mod.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn)
         print message
-        del A,K,ATW,Lm
-
-        #replace the last transform in the tilespec with the new one
-        for m in np.arange(len(filt_tspecs)):
-            if mod.args['transformation']=='affine':
-                filt_tspecs[m].tforms[-1].M[0,0] = x[m*6+0]
-                filt_tspecs[m].tforms[-1].M[0,1] = x[m*6+1]
-                filt_tspecs[m].tforms[-1].M[0,2] = x[m*6+2]
-                filt_tspecs[m].tforms[-1].M[1,0] = x[m*6+3]
-                filt_tspecs[m].tforms[-1].M[1,1] = x[m*6+4]
-                filt_tspecs[m].tforms[-1].M[1,2] = x[m*6+5]
-            elif mod.args['transformation']=='rigid':
-                filt_tspecs[m].tforms[-1].M[0,0] = x[m*4+0]
-                filt_tspecs[m].tforms[-1].M[0,1] = x[m*4+1]
-                filt_tspecs[m].tforms[-1].M[0,2] = x[m*4+2]
-                filt_tspecs[m].tforms[-1].M[1,0] = -x[m*4+1]
-                filt_tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
-                filt_tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
-
-        #renderapi.client.import_tilespecs(output['name'],tspout,sharedTransforms=shared_tforms,render=ingestconn)
-        if ingestconn!=None:
-            renderapi.client.import_tilespecs_parallel(mod.args['output_stack']['name'],filt_tspecs.tolist(),sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
-            print message
-        del shared_tforms,x,filt_tspecs
+    del shared_tforms,x,filt_tspecs
     
 if __name__=='__main__':
     t0 = time.time()
@@ -621,9 +644,11 @@ if __name__=='__main__':
         ingestconn = make_dbconnection(mod.args['output_stack'])
         renderapi.stack.create_stack(mod.args['output_stack']['name'],render=ingestconn)
 
+    #montage
     if mod.args['solve_type']=='montage':
         for z in zvals:
             assemble_and_solve(mod,[z],ingestconn)
+    #3D
     elif mod.args['solve_type']=='3D':
         assemble_and_solve(mod,zvals,ingestconn)
      

@@ -197,14 +197,14 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights):
     print ' writing to file: %s'%fname
     f = h5py.File(fname,"w")
     if file_number==0:
-        dset = f.create_dataset("indptr",(c.indptr.size,),dtype='int64')
-        dset[:] = c.indptr+indptr_offset
+        dset = f.create_dataset("indptr",(c.indptr.size,1),dtype='int64')
+        dset[:] = (c.indptr+indptr_offset).reshape(c.indptr.size,1)
     else:
         #because all the files concatenated will be a single valid csr matrix
         dset = f.create_dataset("indptr",(c.indptr[1:].size,),dtype='int64')
-        dset[:] = c.indptr[1:]+indptr_offset
-    dset = f.create_dataset("indices",(c.indices.size,),dtype='int64')
-    dset[:] = c.indices
+        dset[:] = (c.indptr[1:]+indptr_offset).reshape(c.indptr[1:].size,1)
+    dset = f.create_dataset("indices",(c.indices.size,1),dtype='int64')
+    dset[:] = c.indices.reshape(c.indices.size,1)
     dset = f.create_dataset("data",(c.data.size,),dtype='float64')
     dset[:] = c.data
     dset = f.create_dataset("weights",(file_weights.size,),dtype='float64')

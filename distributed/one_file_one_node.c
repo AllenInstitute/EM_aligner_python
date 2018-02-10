@@ -67,7 +67,7 @@ int main(int argc,char **args)
   IS             indices,indptr;
   Vec            data,weights,lambda,tforms0,tforms1,Lm0,Lm1,x0,x1,err0,err1;
   const PetscInt *i,*j;
-  PetscScalar    *a;
+  PetscScalar    *a,s0,s1;
   Mat            A,W,K,L;
   PetscReal      norm0,norm1,tmp0,tmp1;
 
@@ -172,6 +172,20 @@ int main(int argc,char **args)
   ierr = VecNorm(err0,NORM_2,&norm0);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
   ierr = VecNorm(err1,NORM_2,&norm1);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
   ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error %0.3g\n",(double)sqrt(norm0*norm0+norm1*norm1));CHKERRQ(ierr);
+
+  //calculate the mean and standard deviation
+  ierr = VecAbs(err0);CHKERRQ(ierr);
+  ierr = VecAbs(err1);CHKERRQ(ierr);
+  ierr = VecSum(err0,&s0);CHKERRQ(ierr);
+  ierr = VecSum(err1,&s1);CHKERRQ(ierr);
+  printf("%f %f\n",s0,s1);
+  tmp0 = (s0+s1)/(2*nrows); //mean
+  ierr = VecShift(err0,-1.0*tmp0);CHKERRQ(ierr);
+  ierr = VecShift(err1,-1.0*tmp0);CHKERRQ(ierr);
+  ierr = VecNorm(err0,NORM_2,&s0);CHKERRQ(ierr);
+  ierr = VecNorm(err1,NORM_2,&s1);CHKERRQ(ierr);
+  tmp1 = sqrt((s0*s0+s1*s1)/(2*nrows));
+  printf("mean(|Ax|) +/- std(|Ax|) : %0.1f +/- %0.1f pixels\n",tmp0,tmp1);
 
   VecDestroy(&data);
   ISDestroy(&indices);

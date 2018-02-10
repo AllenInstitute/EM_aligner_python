@@ -193,24 +193,30 @@ class transform_csr:
 
        return self.data[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indices[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indptr[0:npts*self.rows_per_ptmatch],self.weights[0:npts*self.rows_per_ptmatch]
 
-def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights):
+def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offsets):
+    ### data file
     print ' writing to file: %s'%fname
-    f = h5py.File(fname,"w")
-    if file_number==0:
-        dset = f.create_dataset("indptr",(c.indptr.size,1),dtype='int64')
-        dset[:] = (c.indptr+indptr_offset).reshape(c.indptr.size,1)
-    else:
+    fcsr = h5py.File(fname,"w")
+    #indptr
+    #if file_number==0:
+    indptr_dset = fcsr.create_dataset("indptr",(c.indptr.size,1),dtype='int64')
+    indptr_dset[:] = (c.indptr+indptr_offset).reshape(c.indptr.size,1)
+    #else:
         #because all the files concatenated will be a single valid csr matrix
-        dset = f.create_dataset("indptr",(c.indptr[1:].size,),dtype='int64')
-        dset[:] = (c.indptr[1:]+indptr_offset).reshape(c.indptr[1:].size,1)
-    dset = f.create_dataset("indices",(c.indices.size,1),dtype='int64')
-    dset[:] = c.indices.reshape(c.indices.size,1)
-    dset = f.create_dataset("data",(c.data.size,),dtype='float64')
-    dset[:] = c.data
-    dset = f.create_dataset("weights",(file_weights.size,),dtype='float64')
-    dset[:] = file_weights
-    f.close()
+    #    indptr_dset = fcsr.create_dataset("indptr",(c.indptr[1:].size,1),dtype='int64')
+    #    indptr_dset[:] = (c.indptr[1:]+indptr_offset).reshape(c.indptr[1:].size,1)
+    #indices
+    indices_dset = fcsr.create_dataset("indices",(c.indices.size,1),dtype='int64')
+    indices_dset[:] = c.indices.reshape(c.indices.size,1)
+    #data
+    data_dset = fcsr.create_dataset("data",(c.data.size,),dtype='float64')
+    data_dset[:] = c.data
+    #weights
+    weights_dset = fcsr.create_dataset("weights",(file_weights.size,),dtype='float64')
+    weights_dset[:] = file_weights
     print ' wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
+
+    ###index.txt
     fmode='a'
     if file_number==0:
         fmode='w'
@@ -219,8 +225,22 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights):
     for t in tmp[:-1]:
         fdir=fdir+'/'+t
     f=open(fdir+'/index.txt',fmode)
-    f.write('file %s contains %ld rows\n'%(tmp[-1],c.shape[0]))
+    imesg =  'file %s '%tmp[-1]
+    imesg += 'inp off %ld n %ld '%(vec_offsets[0],indptr_dset.size)
+    imesg += 'ind off %ld n %ld '%(vec_offsets[1],indices_dset.size)
+    imesg += 'dat off %ld n %ld '%(vec_offsets[2],data_dset.size)
+    imesg += 'wts off %ld n %ld\n'%(vec_offsets[3],weights_dset.size)
+    f.write(imesg)
     f.close()
+ 
+    #track global offsets
+    vec_offsets[0]+=indptr_dset.size
+    vec_offsets[1]+=indices_dset.size
+    vec_offsets[2]+=data_dset.size
+    vec_offsets[3]+=weights_dset.size
+    fcsr.close()
+
+    return vec_offsets
 
 def get_matches(zi,zj,collection,dbconnection):
     if collection['db_interface']=='render':
@@ -375,9 +395,10 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
             if output_options['output_mode']=='hdf5':
                 if file_number==0:
                     indptr_offset=0
+                    vec_offsets = np.array([0,0,0,0]).astype('int64') #different files will keep track of where they are globally
                 fname = output_options['output_dir']+'/%d_%d.h5'%(file_zlist[0],file_zlist[-1])
-                write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights)
-                indptr_offset += file_indptr[-1]
+                vec_offsets = write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offsets)
+                #indptr_offset += file_indptr[-1]
                 del file_data,file_indices,file_indptr
                 file_chunks = 0
                 file_number += 1
@@ -501,12 +522,16 @@ def start_from_file(mod):
     weights = np.array([]).astype('float64')
     indices = np.array([]).astype('int64')
     indptr = np.array([]).astype('int64')
-    for line in lines:
+    for i in np.arange(len(lines)):
+        line = lines [i]
         fname = fdir+'/'+line.split(' ')[1]
         f = h5py.File(fname,'r')
         data = np.append(data,f.get('data')[()])
         indices = np.append(indices,f.get('indices')[()])
-        indptr = np.append(indptr,f.get('indptr')[()])
+        if i==0:
+            indptr = np.append(indptr,f.get('indptr')[()])
+        else:
+            indptr = np.append(indptr,f.get('indptr')[()][1:]+indptr[-1])
         weights = np.append(weights,f.get('weights')[()])
         f.close()
 
@@ -550,7 +575,7 @@ def solve_or_not(mod,A,weights,reg,filt_tforms):
     t0=time.time()
     #not
     if mod.args['output_options']['output_mode'] in ['hdf5']:
-        message = '*****\nno solve for hdf5 output\n'
+        message = '*****\nno solve for file output\n'
         message += 'solve from the files you just wrote:\n\n'
         message += 'python '
         for arg in sys.argv:

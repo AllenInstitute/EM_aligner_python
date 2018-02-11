@@ -226,10 +226,11 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offse
         fdir=fdir+'/'+t
     f=open(fdir+'/index.txt',fmode)
     imesg =  'file %s '%tmp[-1]
-    imesg += 'inp off %ld n %ld '%(vec_offsets[0],indptr_dset.size)
-    imesg += 'ind off %ld n %ld '%(vec_offsets[1],indices_dset.size)
-    imesg += 'dat off %ld n %ld '%(vec_offsets[2],data_dset.size)
-    imesg += 'wts off %ld n %ld\n'%(vec_offsets[3],weights_dset.size)
+    imesg += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
+    #imesg += 'inp off %ld n %ld '%(vec_offsets[0],indptr_dset.size)
+    #imesg += 'ind off %ld n %ld '%(vec_offsets[1],indices_dset.size)
+    #imesg += 'dat off %ld n %ld '%(vec_offsets[2],data_dset.size)
+    #imesg += 'wts off %ld n %ld\n'%(vec_offsets[3],weights_dset.size)
     f.write(imesg)
     f.close()
  

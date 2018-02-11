@@ -22,7 +22,7 @@ run_one_file_one_node:
 	${MPIEXEC} ${mpi_opts_one} ./one_file_one_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output_one/1020_1020.h5 ${pastix_opts} ${petsc_opts}
 
 run_multi_file_multi_node:
-	${MPIEXEC} ${mpi_opts} ./multi_file_multi_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output/index.txt ${pastix_opts} ${petsc_opts}
+	${MPIEXEC} ${mpi_opts} ./multi_file_multi_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output/index.txt ${pastix_opts} ${petsc_opts} -mat_view ::ascii_info
 
 run_valgrind:
 	${MPIEXEC} ${mpi_opts} valgrind --leak-check=yes --suppressions=./valg.supp ./one_file_one_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output/index.txt ${pastix_opts} ${petsc_opts}

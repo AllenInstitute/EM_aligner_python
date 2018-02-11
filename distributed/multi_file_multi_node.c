@@ -64,6 +64,7 @@ int main(int argc,char **args)
   //KSP            ksp;      /* linear solver context */
   PetscViewer    viewer;              /* viewer */
   //PetscInt       nrows,ncols,junk;
+  PetscInt       junk;
   PetscMPIInt    rank,size;
   char           filearg[PETSC_MAX_PATH_LEN];     /* input file name */
   //char           indexname[PETSC_MAX_PATH_LEN];     /* input file name */
@@ -76,11 +77,11 @@ int main(int argc,char **args)
   PetscBool      flg;
   PetscErrorCode ierr;
   IS             indices,indptr;
-  Vec            data;
+  Vec            data,weights,lambda;
   //Vec            data,weights,lambda,tforms0,tforms1,Lm0,Lm1,x0,x1,err0,err1;
   //const PetscInt *i,*j;
   //PetscScalar    *a,s0,s1;
-  Mat              A;
+  Mat              A,W,K,L;
   //Mat            A,W,K,L;
   //PetscReal      norm0,norm1,tmp0,tmp1;
   //PetscLogDouble t0,t1,t2,tall0,tall1;
@@ -185,9 +186,10 @@ int main(int argc,char **args)
     }
   }
   //what are the global row and col sizes
-  PetscInt nrow_global=0,ncol_global,cmin,cmax,row0_local=0;
+  PetscInt nrow_global=0,ncol_global,cmin,cmax,row0_local=0,nnz_global;
   for (i=0;i<nfiles;i++){
     nrow_global+=index_tab[i][0];
+    nnz_global+=index_tab[i][3];
     if (i<local_fileind[0]){
       row0_local+=index_tab[i][0];
     }
@@ -226,62 +228,19 @@ int main(int argc,char **args)
   ncol_local = cmax-cmin+1;
 
   printf("rank %d will handle files %d through %d of %d\n",rank,local_fileind[0],local_fileind[1],nfiles);
-  printf("%d local nrow %ld ncol %ld nnz %ld global nrow %ld ncol %ld\n",rank,nrow_local,ncol_local,nnz_local,nrow_global,ncol_global);
+  printf("%d local nrow %ld ncol %ld nnz %ld global nrow %ld ncol %ld nnz %ld\n",rank,nrow_local,ncol_local,nnz_local,nrow_global,ncol_global,nnz_global);
 
   //create the distributed matrix A
-//  MatCreate(PETSC_COMM_WORLD,&A);
-//  //MatSetSizes(A,nrow_local,ncol_local,nrow_global,ncol_global);
-//  MatSetSizes(A,nrow_local,PETSC_DECIDE,nrow_global,ncol_global);
-//  MatSetType(A,MATMPIAIJ);
-//  //read in the files and determine the d_nnz and o_nnz for effcient memory allocation
-//  PetscInt *d_nnz,*o_nnz;
-//  d_nnz = (PetscInt *)calloc(nrow_local,sizeof(PetscInt));
-//  o_nnz = (PetscInt *)calloc(nrow_local,sizeof(PetscInt));
   PetscInt k,vcnt,niptr,innz=0;
   PetscInt *iptr;
   PetscInt *jcol;
-//  for (i=local_fileind[0];i<=local_fileind[1];i++){
-//    ierr = PetscViewerHDF5Open(PETSC_COMM_SELF,csrnames[i],FILE_MODE_READ,&viewer);CHKERRQ(ierr);
-//    //indptr
-//    ierr = ReadIndexSet(PETSC_COMM_SELF,viewer,(char *)"indptr",&indptr,&niptr);CHKERRQ(ierr);
-//    iptr = malloc(niptr*sizeof(PetscInt));
-//    ISGetIndices(indptr,&iptr);
-//    //for (j=0;j<3;j++){
-//    //  printf("rank %d j %d iptr %ld\n",rank,j,iptr[j]);
-//    //}
-//    //indices
-//    ierr = ReadIndexSet(PETSC_COMM_SELF,viewer,(char *)"indices",&indices,&vcnt);CHKERRQ(ierr);
-//    jcol = malloc(vcnt*sizeof(PetscInt));
-//    ISGetIndices(indices,&jcol);
-//    for (j=1;j<niptr;j++){
-//      for (k=iptr[j-1];k<iptr[j];k++){
-//        if ((jcol[k]<=row0_local) || (jcol[k]>=(row0_local+nrow_local-1))){
-//          o_nnz[innz]++;
-//        }
-//        else{
-//          d_nnz[innz]++;
-//        }
-//      }
-//      //d_nnz[innz]=10;
-//      //o_nnz[innz]=10;
-//      innz++;
-//    }
-//    ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-//  }
-//  //MatMPIAIJSetPreallocation(A,0,d_nnz,0,o_nnz);
-//
-//  //and, populate the matrix, row-by-row
-//  
-//  PetscInt n,*col;
-  PetscScalar *a,*dat;
-//
-//  innz=row0_local;
-  //innz=0;
-  //printf("rank: %d row0_local: %ld\n",rank,innz);
+  PetscScalar *a,*w;
+  //these will concat the multiple files per processor
   PetscInt *w_iptr = (PetscInt *)calloc(nrow_local+1,sizeof(PetscInt));
   PetscInt *w_jcol = (PetscInt *)calloc(nnz_local,sizeof(PetscInt));
   PetscScalar *w_a = (PetscScalar *)calloc(nnz_local,sizeof(PetscScalar));
-  PetscInt roff=1,zoff=0,poff=0,pstart;
+  PetscScalar *w_wts = (PetscScalar *)calloc(nrow_local,sizeof(PetscScalar));
+  PetscInt roff=0,roff2=0,zoff=0,poff=0,pstart;
   for (i=local_fileind[0];i<=local_fileind[1];i++){
     printf("namename %s\n",csrnames[i]);
     ierr = PetscViewerHDF5Open(PETSC_COMM_SELF,csrnames[i],FILE_MODE_READ,&viewer);CHKERRQ(ierr);
@@ -290,16 +249,21 @@ int main(int argc,char **args)
     ierr = ReadIndexSet(PETSC_COMM_SELF,viewer,(char *)"indptr",&indptr,&niptr);CHKERRQ(ierr);
     iptr = malloc(niptr*sizeof(PetscInt));
     ISGetIndices(indptr,&iptr);
+    printf("rank %d w[%ld] =  %ld\n",rank,roff,w_iptr[roff]);
+    printf("niptr %ld\n",niptr);
     for(j=1;j<niptr;j++){
       w_iptr[j+roff] = iptr[j]+poff;
     }
     poff = w_iptr[niptr-1+roff];
+    printf("j+roff %ld\n",j+roff);
+    printf("rank %d w[%ld] =  %ld\n",rank,niptr,w_iptr[niptr]);
     roff += niptr-1;
 
     //indices
     ierr = ReadIndexSet(PETSC_COMM_SELF,viewer,(char *)"indices",&indices,&vcnt);CHKERRQ(ierr);
     jcol = malloc(vcnt*sizeof(PetscInt));
     ISGetIndices(indices,&jcol);
+    printf("vcnt %ld\n",vcnt);
     for (j=0;j<vcnt;j++){
       w_jcol[j+zoff] = jcol[j];
     }
@@ -308,37 +272,88 @@ int main(int argc,char **args)
     ierr = ReadVec(PETSC_COMM_SELF,viewer,(char *)"data",&data,&vcnt);CHKERRQ(ierr);
     a = malloc(vcnt*sizeof(PetscScalar));
     VecGetArray(data,&a);
+    printf("vcnt %ld\n",vcnt);
     for (j=0;j<vcnt;j++){
       w_a[j+zoff] = a[j];
     }
     zoff+=vcnt;
+ 
+    //weights
+    ierr = ReadVec(PETSC_COMM_SELF,viewer,(char *)"weights",&weights,&vcnt);CHKERRQ(ierr);
+    w = malloc(vcnt*sizeof(PetscScalar));
+    VecGetArray(weights,&w);
+    for (j=0;j<vcnt;j++){
+      w_wts[j+roff2] = w[j];
+    }
+    roff2 += niptr;
+
+    printf("vcnt %ld\n",vcnt);
 
     ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-    
-//    //for (j=1;j<niptr;j++){
-//    for (j=1;j<1500;j++){
-//      n = iptr[j]-iptr[j-1];
-//      col = malloc(n*sizeof(PetscInt));
-//      dat = malloc(n*sizeof(PetscScalar));
-//      for (k=iptr[j-1];k<iptr[j];k++){
-//        col[k-iptr[j-1]]=jcol[k];
-//        dat[k-iptr[j-1]]=a[k];
-//      }
-//      MatSetValues(A,1,&innz,n,col,dat,INSERT_VALUES);
-//      innz++;
-//    }
-
-    //MatCreateMPIAIJWithSplitArrays(PETSC_COMM_WORLD,nrows,PETSC_DECIDE,PETSC_DETERMINE,PETSC_DETERMINE,iptr,jcol,a,&A);
   }
-  //MatMPIAIJSetPreallocationCSR(A,w_iptr,w_jcol,w_a);
   MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,nrow_local,PETSC_DECIDE,nrow_global,ncol_global,w_iptr,w_jcol,w_a,&A);
-//  //MatMPIAIJSetPreallocationCSR(A,iptr,jcol,a);
-//  MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);
-//  MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);
+
+  //A is in hand, proceed to K=AT*W*A+L
+
+  /*  Create the W matrix  */
+  Vec global_weights;
+  VecCreate(PETSC_COMM_WORLD,&global_weights);
+  VecSetSizes(global_weights,nrow_local,nrow_global);
+  VecSetType(global_weights,VECMPI);
+  PetscInt *indx = malloc(nrow_local*sizeof(PetscInt));
+  for (i=0;i<nrow_local;i++){
+    indx[i] = row0_local+i;
+  }
+  VecSetValues(global_weights,nrow_local,indx,w_wts,INSERT_VALUES);
+  MPI_Barrier(PETSC_COMM_WORLD);
+  ierr = MatCreate(PETSC_COMM_WORLD,&W);CHKERRQ(ierr);
+  ierr = MatSetSizes(W,nrow_local,nrow_local,nrow_global,nrow_global);CHKERRQ(ierr);
+  ierr = MatSetType(W,MATMPIAIJ);CHKERRQ(ierr);
+  ierr = MatMPIAIJSetPreallocation(W,1,NULL,0,NULL);CHKERRQ(ierr);
+  ierr = MatDiagonalSet(W,global_weights,INSERT_VALUES);CHKERRQ(ierr);
+  if (rank==0){ierr = ShowMatInfo(&W,"W");CHKERRQ(ierr);}
+
+  /*  Start the K matrix  */
+  ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
+  PetscInt rowN_local;
+  MatGetOwnershipRange(K,&row0_local,&rowN_local);
+  ncol_local = rowN_local-row0_local;
+  rowN_local--;
+  printf("%d local nrow %ld to %ld\n",rank,row0_local,rowN_local);
+
+  /*  Create the L matrix  */
+//  Vec global_reg;
+//  VecCreate(PETSC_COMM_WORLD,&global_reg);
+//  VecSetSizes(global_reg,ncol_local,ncol_global);
+//  VecSetType(global_reg,VECMPI);
+//  sprintf(junkstr,"%s/regularization.h5",dir);
+//  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,junkstr,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
+//  ierr = ReadVec(PETSC_COMM_SELF,viewer,(char *)"lambda",&lambda,&junk);CHKERRQ(ierr);
+//  PetscScalar *lam = malloc(ncol_global*sizeof(PetscScalar));
+//  PetscScalar *lamloc = malloc(ncol_local*sizeof(PetscScalar));
+//  VecGetArray(lambda,&lam);
+//  indx = malloc(ncol_local*sizeof(PetscInt));
+//  for (i=0;i<ncol_local;i++){
+//    indx[i] = i+row0_local;
+//    lamloc[i] = lam[indx[i]];
+//  }
+//  VecSetValues(global_reg,ncol_local,indx,lamloc,INSERT_VALUES);
+//  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
+//  VecAssemblyBegin(global_reg);
+//  VecAssemblyEnd(global_reg);
+//  ierr = MatCreate(PETSC_COMM_WORLD,&L);CHKERRQ(ierr);
+//  ierr = MatSetSizes(L,ncol_local,ncol_local,ncol_global,ncol_global);CHKERRQ(ierr);
+//  ierr = MatSetType(L,MATMPIAIJ);CHKERRQ(ierr);
+//  ierr = MatMPIAIJSetPreallocation(L,1,NULL,0,NULL);CHKERRQ(ierr);
+//  ierr = MatDiagonalSet(L,global_reg,INSERT_VALUES);CHKERRQ(ierr);
+//  if (rank==0){ierr = ShowMatInfo(&L,"L");CHKERRQ(ierr);}
+//  
+//  //ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
+//  if (rank==0){ierr = ShowMatInfo(&K,"K");CHKERRQ(ierr);}
+
 
   //local indices
 
-  //MPI_Barrier(PETSC_COMM_WORLD);
   
   //ISCreate(PETSC_COMM_WORLD,indptr);
 

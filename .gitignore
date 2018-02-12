@@ -1,0 +1,14 @@
+**/*.pyc
+*source_me.sh
+build/
+.eggs*
+*.egg-info
+*.egg
+dist/
+**/.DS_Store
+.coverage
+test-reports/
+docs/_build/
+htmlcov/
+.cache
+.tox

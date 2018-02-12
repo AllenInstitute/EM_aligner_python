@@ -36,6 +36,7 @@ montage_parameters = render_json_template(example_env, 'montage_test.json',
                                           render_owner = render_owner,
                                           render_port = render_port,
                                           render_mongo_host = render_mongo_host,
+                                          mongo_port = mongo_port,
                                           render_output_owner = render_output_owner,
                                           solver_output_dir = solver_output_dir
                                           )

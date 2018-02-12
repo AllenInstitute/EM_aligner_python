@@ -1,0 +1,45 @@
+language: python
+python:
+  - "2.7"
+  - "3.5"
+  - "3.5-dev" # 3.5 development branch
+  - "3.6"
+  - "3.6-dev" # 3.6 development branch
+services:
+  - docker
+# command to install dependencies
+addons:
+  apt:
+    packages:
+        - libblas-dev
+        - liblapack-dev
+        - libatlas-base-dev
+        - libopenblas-base
+        - libopenblas-dev
+        - gfortran
+        - oracle-java8-set-default
+        - maven
+install:
+  - pip install codecov
+  - pip install -r requirements.txt
+  - pip install -r test_requirements.txt
+before_install:
+  - git clone --depth 1 https://github.com/saalfeldlab/render.git render -b master
+  - mvn package -pl render-ws-java-client -am -DskipTests -f render/pom.xml
+  - export RENDER_CLIENT_JAR=`readlink -m $TRAVIS_BUILD_DIR/render/render-ws-java-client/target/render-ws-java-client-*-standalone.jar`
+  - export RENDER_JAVA_HOME=$JAVA_HOME
+  - docker-compose up -d
+env:
+  global:
+     - RENDER_HOST=localhost RENDER_PORT=8080 RENDER_CLIENT_SCRIPTS=$TRAVIS_BUILD_DIR/render/render-ws-java-client/src/main/scripts
+     - secure: "gIvBfWzWZizVxIW3eJfMX4V4/wrtn6zVoI9lkDbnXgn42+jIUdZYLEnHdZDtgOYtwUHUiY0UuXX/D9pl5XK+5IrZ+ocRKv8vIL1APJNxJGWJThkk8ifQFn+fuG2MvlA1b3z3903FNMSw3AcG0479YucZkPx7TmexU5DHM/zf/+/KvCV5qDPKjZu4hL3o/njuwNZGpYmT0+pUvugiAhF1c5YBmPBMhaplUYKdjuGMeLOlB/QxmBdkTPWCeVda8ohB3ngGc2yjhtDPAaOo9LKNrdLje6DCr2Zv6e4qo27YNFpXoICN0qUPOaoGOoVJ/HOq8HUZgJMi9KiYH2oqP27RqPOHaGABK7PF5aMg6vvUBcCYP4n93rnbm7g4k/+A/mUeew9lXyrh8+O9d8ul5eNfLdaQ1HGnR093Vx53Sr7Q9lyNU/PUteMGzRYQw2EQGuryGiAKJ5tWD9HIHtqQ7iNZup8ijHCKVdmtLHROTHMvpcagQ33Sl/+U05E50YoDZRzvTNSaWUoNhl01xRIyp35KYy55Ei2X8eMTJlirdzKj1hAeOED98SmKx8ROypxJDzcO/N8AGlPRc9/l+OplKTvpnlD3Nsd/bxErWEmrBDtAkY05rfR48e9xtDyqV4KuAXy0wBJn5eqFEFpNNxzMi78CHsF023UodVsWAzn4HvAojrQ="
+# command to run tests
+script:
+  - python setup.py test # or py.test for Python versions 3.5 and below
+cache:   
+  pip: true                                                                    
+  directories:                                                                  
+    - $HOME/.m2
+after_success:
+  - codecov -t 31f0f992-618d-4d7d-9da2-69f45c32455e
+  - "BRANCHES_TO_MERGE_REGEX='develop' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=AllenInstitute/EM_aligner_python .travis/merge_script.sh"

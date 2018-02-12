@@ -1,0 +1,16 @@
+version: "2.0"
+services:
+ renderservice:
+    image: fcollman/render-ws
+    ports:
+      - "8080:8080"
+    links:
+      - mongo
+    environment:
+      - MONGO_HOST=mongo
+ mongo:
+    image: mongo:3.4.2
+    expose:
+        - "27017:27017"
+    security_opt:
+      - seccomp:unconfined

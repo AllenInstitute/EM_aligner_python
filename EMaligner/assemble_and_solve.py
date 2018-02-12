@@ -13,6 +13,7 @@ import h5py
 import os
 import sys
 
+
 def make_dbconnection(collection,which='tile'):
     #connect to the database
     if collection['db_interface']=='mongo':

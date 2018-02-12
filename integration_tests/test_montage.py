@@ -1,6 +1,7 @@
 from test_data import montage_parameters
-import EMaligner
+from EMaligner import AssembleAndSolve
 
 def test_first_test():
     print(montage_parameters)
-    assert(True)
+    mod = AssembleAndSolve(input_data = montage_parameters,args=[])
+    mod.run()

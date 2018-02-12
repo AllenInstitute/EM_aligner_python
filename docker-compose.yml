@@ -10,7 +10,7 @@ services:
       - MONGO_HOST=mongo
  mongo:
     image: mongo:3.4.2
-    expose:
+    ports:
         - "27017:27017"
     security_opt:
       - seccomp:unconfined

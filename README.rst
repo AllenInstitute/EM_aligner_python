@@ -9,9 +9,11 @@ EM_aligner_python
 #################
 
 Alignment of EM datasets. Builds sparse matrices from tilespecs and pointmatch collections and solves for new transforms using constrained linear least squares.
+
 Level of support
 ################
 We are planning on occasional updating this tool with no fixed schedule. Community involvement is encouraged through both issues and pull requests.
+
 setup
 #####
 1. clone and cd into the repo directory

@@ -187,7 +187,7 @@ void GetGlobalLocalCounts(int nfiles, PetscInt **metadata, int local_firstfile, 
   return;
 }
 
-PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile, int local_lastfile, PetscInt *local_indptr, PetscInt *local_jcol, PetscScalar *local_data, PetscScalar *local_wts){
+PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile, int local_lastfile, PetscInt *local_indptr, PetscInt *local_jcol, PetscScalar *local_data, PetscScalar *local_weights){
 
   PetscViewer    viewer;                               //viewer object for reading files
   IS             indices,indptr;
@@ -230,7 +230,7 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
     //weights
     ierr = ReadVec(COMM,viewer,(char *)"weights",&weights,&vcnt);CHKERRQ(ierr);
     VecGetArray(weights,&w);
-    memcpy(&local_wts[roff2],w,vcnt*sizeof(PetscScalar));
+    memcpy(&local_weights[roff2],w,vcnt*sizeof(PetscScalar));
     VecRestoreArray(weights,&w);
     roff2 += niptr;
 
@@ -243,3 +243,57 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
 
   return ierr;
 }
+
+PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_nrow,PetscInt local_row0,PetscInt global_nrow,Mat *W){
+  PetscErrorCode ierr;
+  Vec global_weights;
+  PetscInt *indx;
+  int i;
+
+  ierr = VecCreate(COMM,&global_weights);CHKERRQ(ierr);
+  ierr = VecSetSizes(global_weights,local_nrow,global_nrow);CHKERRQ(ierr);
+  ierr = VecSetType(global_weights,VECMPI);CHKERRQ(ierr);
+  indx = (PetscInt *)malloc(local_nrow*sizeof(PetscInt));
+  for (i=0;i<local_nrow;i++){
+    indx[i] = local_row0+i;
+  }
+  ierr = VecSetValues(global_weights,local_nrow,indx,local_weights,INSERT_VALUES);CHKERRQ(ierr);
+  free(indx);
+
+  ierr = MatCreate(PETSC_COMM_WORLD,W);CHKERRQ(ierr);
+  ierr = MatSetSizes(*W,local_nrow,local_nrow,global_nrow,global_nrow);CHKERRQ(ierr);
+  ierr = MatSetType(*W,MATMPIAIJ);CHKERRQ(ierr);
+  ierr = MatMPIAIJSetPreallocation(*W,1,NULL,0,NULL);CHKERRQ(ierr);
+  ierr = MatDiagonalSet(*W,global_weights,INSERT_VALUES);CHKERRQ(ierr);
+
+  return ierr;
+}
+
+PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,Mat *L){
+  PetscErrorCode ierr;
+  PetscViewer viewer;
+  Vec global_reg;
+  PetscMPIInt rank;
+  PetscInt junk;
+  char tmp[200];
+
+  ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
+
+  VecCreate(COMM,&global_reg);
+  VecSetSizes(global_reg,local_nrow,global_nrow);
+  VecSetType(global_reg,VECMPI);
+  sprintf(tmp,"%s/regularization.h5",dir);
+  ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
+  ierr = ReadVec(COMM,viewer,(char *)"lambda",&global_reg,&junk);CHKERRQ(ierr);
+
+  ierr = MatCreate(PETSC_COMM_WORLD,L);CHKERRQ(ierr);
+  ierr = MatSetSizes(*L,local_nrow,local_nrow,global_nrow,global_nrow);CHKERRQ(ierr);
+  ierr = MatSetType(*L,MATMPIAIJ);CHKERRQ(ierr);
+  ierr = MatMPIAIJSetPreallocation(*L,1,NULL,0,NULL);CHKERRQ(ierr);
+  ierr = MatDiagonalSet(*L,global_reg,INSERT_VALUES);CHKERRQ(ierr);
+
+  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
+  VecDestroy(&global_reg);
+  return ierr;
+}
+

@@ -25,14 +25,16 @@ int main(int argc,char **args)
   PetscInt       local_firstfile,local_lastfile;       //local file indices
   PetscInt       global_nrow,global_ncol,global_nnz;   //global index info
   PetscInt       local_nrow,local_nnz,local_row0;      //local  index info
+  PetscInt       local_rowN;
   PetscInt       *local_indptr,*local_jcol;            //index arrays for local CSR
-  PetscScalar    *local_data,*local_wts;               //data for local CSR and weights
+  PetscScalar    *local_data,*local_weights;               //data for local CSR and weights
   PetscBool      flg;                                  //boolean used in checking command line
   PetscErrorCode ierr;                                 //error code that gets passed around.
-  Vec            weights,lambda;                       //diagonals for weights and lambda matrices
+  //Vec            weights,lambda;                       //diagonals for weights and lambda matrices
   PetscLogDouble tall0,tall1;                          //timers
   int i,j;
   Mat              A,W,K,L;                            //K and the matrices that build it
+  Vec              global_weights;                     //weights, read from file, diagonal of W
   //Vec            data,weights,lambda,tforms0,tforms1,Lm0,Lm1,x0,x1,err0,err1;
   //const PetscInt *i,*j;
   //PetscScalar    *a,s0,s1;
@@ -70,69 +72,29 @@ int main(int argc,char **args)
   local_indptr = (PetscInt *)calloc(local_nrow+1,sizeof(PetscInt));
   local_jcol = (PetscInt *)calloc(local_nnz,sizeof(PetscInt));
   local_data = (PetscScalar *)calloc(local_nnz,sizeof(PetscScalar));
-  local_wts = (PetscScalar *)calloc(local_nrow,sizeof(PetscScalar));
+  local_weights = (PetscScalar *)calloc(local_nrow,sizeof(PetscScalar));
   /*  read in local hdf5 files and concatenate into CSR arrays  */
-  ierr = ReadLocalCSR(PETSC_COMM_SELF,csrnames,local_firstfile,local_lastfile,local_indptr,local_jcol,local_data,local_wts);CHKERRQ(ierr);
+  ierr = ReadLocalCSR(PETSC_COMM_SELF,csrnames,local_firstfile,local_lastfile,local_indptr,local_jcol,local_data,local_weights);CHKERRQ(ierr);
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,global_nrow,global_ncol,local_indptr,local_jcol,local_data,&A);
   ShowMatInfo(&A,"A");
 
-  //A is in hand, proceed to K=AT*W*A+L
 
   /*  Create the W matrix  */
-//  Vec global_weights;
-//  VecCreate(PETSC_COMM_WORLD,&global_weights);
-//  VecSetSizes(global_weights,local_nrow,global_nrow);
-//  VecSetType(global_weights,VECMPI);
-//  PetscInt *indx = malloc(local_nrow*sizeof(PetscInt));
-//  for (i=0;i<local_nrow;i++){
-//    indx[i] = local_row0+i;
-//  }
-//  VecSetValues(global_weights,local_nrow,indx,local_wts,INSERT_VALUES);
-//  MPI_Barrier(PETSC_COMM_WORLD);
-//  ierr = MatCreate(PETSC_COMM_WORLD,&W);CHKERRQ(ierr);
-//  ierr = MatSetSizes(W,local_nrow,local_nrow,global_nrow,global_nrow);CHKERRQ(ierr);
-//  ierr = MatSetType(W,MATMPIAIJ);CHKERRQ(ierr);
-//  ierr = MatMPIAIJSetPreallocation(W,1,NULL,0,NULL);CHKERRQ(ierr);
-//  ierr = MatDiagonalSet(W,global_weights,INSERT_VALUES);CHKERRQ(ierr);
-//  if (rank==0){ierr = ShowMatInfo(&W,"W");CHKERRQ(ierr);}
-//
-//  /*  Start the K matrix  */
-//  ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
-//  PetscInt rowN_local;
-//  MatGetOwnershipRange(K,&local_row0,&rowN_local);
-//  //ncol_local = rowN_local-local_row0;
-//  rowN_local--;
-//  printf("%d local nrow %ld to %ld\n",rank,local_row0,rowN_local);
+  ierr = CreateW(PETSC_COMM_WORLD,local_weights,local_nrow,local_row0,global_nrow,&W);
+  ierr = ShowMatInfo(&W,"W");CHKERRQ(ierr);
 
-  /*  Create the L matrix  */
-//  Vec global_reg;
-//  VecCreate(PETSC_COMM_WORLD,&global_reg);
-//  VecSetSizes(global_reg,ncol_local,global_ncol);
-//  VecSetType(global_reg,VECMPI);
-//  sprintf(junkstr,"%s/regularization.h5",dir);
-//  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,junkstr,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
-//  ierr = ReadVec(PETSC_COMM_SELF,viewer,(char *)"lambda",&lambda,&junk);CHKERRQ(ierr);
-//  PetscScalar *lam = malloc(global_ncol*sizeof(PetscScalar));
-//  PetscScalar *lamloc = malloc(ncol_local*sizeof(PetscScalar));
-//  VecGetArray(lambda,&lam);
-//  indx = malloc(ncol_local*sizeof(PetscInt));
-//  for (i=0;i<ncol_local;i++){
-//    indx[i] = i+local_row0;
-//    lamloc[i] = lam[indx[i]];
-//  }
-//  VecSetValues(global_reg,ncol_local,indx,lamloc,INSERT_VALUES);
-//  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-//  VecAssemblyBegin(global_reg);
-//  VecAssemblyEnd(global_reg);
-//  ierr = MatCreate(PETSC_COMM_WORLD,&L);CHKERRQ(ierr);
-//  ierr = MatSetSizes(L,ncol_local,ncol_local,global_ncol,global_ncol);CHKERRQ(ierr);
-//  ierr = MatSetType(L,MATMPIAIJ);CHKERRQ(ierr);
-//  ierr = MatMPIAIJSetPreallocation(L,1,NULL,0,NULL);CHKERRQ(ierr);
-//  ierr = MatDiagonalSet(L,global_reg,INSERT_VALUES);CHKERRQ(ierr);
-//  if (rank==0){ierr = ShowMatInfo(&L,"L");CHKERRQ(ierr);}
-//  
-//  //ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
+  /*  Start the K matrix  */
+  ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
+  //find out how the rows are distributed
+  MatGetOwnershipRange(K,&local_row0,&local_rowN);
+  MatGetSize(K,&global_nrow,NULL);
+  local_nrow = local_rowN-local_row0;
+  ierr = CreateL(PETSC_COMM_WORLD,dir,local_nrow,global_nrow,&L);
+  ierr = ShowMatInfo(&L,"L");CHKERRQ(ierr);
+  ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
+  ierr = ShowMatInfo(&K,"K");CHKERRQ(ierr);
+
 //  if (rank==0){ierr = ShowMatInfo(&K,"K");CHKERRQ(ierr);}
 
 
@@ -289,7 +251,7 @@ int main(int argc,char **args)
   free(local_indptr);
   free(local_jcol);
   free(local_data);
-  free(local_wts);
+  free(local_weights);
 
   PetscTime(&tall1);
   printf("rank %d total time: %0.1f sec\n",rank,tall1-tall0);

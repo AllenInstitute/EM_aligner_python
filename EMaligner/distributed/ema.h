@@ -70,13 +70,15 @@ void GetGlobalLocalCounts(int nfiles, PetscInt **metadata, int local_firstfile, 
  * @param global_nrow,global_ncol,global_nnz Read from the metadata, these describe A, the matrix to be read from the hdf5 files.
  * @param local_nrow,local_nnz,local_row0 Read from the metadata, these are concatentations of the metadata for all the owned files for one worker.
 */
-PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile, int local_lastfile, PetscInt *local_indptr, PetscInt *local_jcol, PetscScalar *local_data, PetscScalar *local_wts);
+PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile, int local_lastfile, PetscInt *local_indptr, PetscInt *local_jcol, PetscScalar *local_data, PetscScalar *local_weights);
 /** 
  * @brief Build local CSR block by sequentially reading in local hdf5 files.
  * @param COMM The MPI communicator, PETSC_COMM_SELF.
  * @param *csrnames[] The names of the CSR.hdf5 files
  * @param local_firstfile,local_lastfile Indices of which files are handled by which rank.
  * @param *local_indptr,*local_jcol, *local_data Holds the concatenated CSR arrays for this rank.
- * @param *local_wts Holds the concatenated weights for this rank.
+ * @param *local_weights Holds the concatenated weights for this rank.
 */
+PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_nrow,PetscInt local_row0,PetscInt global_nrow,Mat *W);
+PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,Mat *L);
 

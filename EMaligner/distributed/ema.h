@@ -6,6 +6,7 @@
 #include <petscsys.h>
 #include <petscksp.h>
 #include <stdlib.h>
+#include <petscviewerhdf5.h>
 
 PetscErrorCode CountFiles(MPI_Comm COMM, char indexname[], int *nfiles);
 /** 
@@ -54,9 +55,10 @@ PetscErrorCode ReadIndexSet(MPI_Comm COMM,PetscViewer viewer,char *varname,IS *n
  * @param *n The number of entries in the new object.
 */
 
-PetscErrorCode ShowMatInfo(Mat *m,const char *mesg);
+PetscErrorCode ShowMatInfo(MPI_Comm COMM,Mat *m,const char *mesg);
 /** 
  * @brief Print to stdout MatInfo for a Mat object.
+ * @param COMM The MPI communicator PETSC_COMM_WORLD.
  * @param *m The matrix.
  * @param *mesg Name or some other string to prepend the output.
 */
@@ -81,4 +83,5 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
 */
 PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_nrow,PetscInt local_row0,PetscInt global_nrow,Mat *W);
 PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,Mat *L);
+PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS);
 

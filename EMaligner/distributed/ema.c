@@ -121,27 +121,32 @@ PetscErrorCode ReadIndexSet(MPI_Comm COMM,PetscViewer viewer,char *varname,IS *n
   return ierr;
 }
 
-PetscErrorCode ShowMatInfo(Mat *m,const char *mesg){
+PetscErrorCode ShowMatInfo(MPI_Comm COMM,Mat *m,const char *mesg){
   PetscErrorCode ierr;
   MatInfo info;
   PetscBool      isassembled;
   PetscInt       rowcheck,colcheck;  
-  
-  printf("%s:\n",mesg);
-  ierr = MatAssembled(*m,&isassembled);CHKERRQ(ierr);
-  printf(" is assembled: %d\n",isassembled);
-  ierr = MatGetSize(*m,&rowcheck,&colcheck);CHKERRQ(ierr);
-  printf(" is of size %ld x %ld\n",rowcheck,colcheck);
-  ierr = MatGetInfo(*m,MAT_LOCAL,&info);CHKERRQ(ierr);
-  printf(" block_size: %f\n",info.block_size); 
-  printf(" nz_allocated: %f\n",info.nz_allocated);
-  printf(" nz_used: %f\n",info.nz_used);
-  printf(" nz_unneeded: %f\n",info.nz_unneeded);
-  printf(" memory: %f\n",info.memory); 
-  printf(" assemblies: %f\n",info.assemblies);
-  printf(" mallocs: %f\n",info.mallocs);
-  printf(" fill_ratio_given: %f\n",info.fill_ratio_given);
-  printf(" fill_ratio_needed: %f\n",info.fill_ratio_needed);
+  PetscMPIInt rank,size;
+
+  ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
+  ierr = MatGetInfo(*m,MAT_GLOBAL_SUM,&info);CHKERRQ(ierr);
+  if (rank==0){ 
+    printf("%s info from rank %d:\n",mesg,rank);
+    ierr = MatAssembled(*m,&isassembled);CHKERRQ(ierr);
+    printf(" is assembled: %d\n",isassembled);
+    ierr = MatGetSize(*m,&rowcheck,&colcheck);CHKERRQ(ierr);
+    printf(" global size %ld x %ld\n",rowcheck,colcheck);
+    //ierr = MatGetInfo(*m,MAT_GLOBAL_SUM,&info);CHKERRQ(ierr);
+    printf(" block_size: %f\n",info.block_size); 
+    printf(" nz_allocated: %f\n",info.nz_allocated);
+    printf(" nz_used: %f\n",info.nz_used);
+    printf(" nz_unneeded: %f\n",info.nz_unneeded);
+    printf(" memory: %f\n",info.memory); 
+    printf(" assemblies: %f\n",info.assemblies);
+    printf(" mallocs: %f\n",info.mallocs);
+    printf(" fill_ratio_given: %f\n",info.fill_ratio_given);
+    printf(" fill_ratio_needed: %f\n",info.fill_ratio_needed);
+  }
   return ierr;
 }
 
@@ -297,3 +302,47 @@ PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt glob
   return ierr;
 }
 
+PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS){
+  PetscErrorCode ierr;
+  PetscViewer viewer;
+  PetscInt junk;
+  IS test;
+  char tmp[200];
+
+  *nRHS=0;
+  sprintf(tmp,"%s/regularization.h5",dir);
+  ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
+  ierr = ReadIndexSet(COMM,viewer,"transform_list",&test,&junk);CHKERRQ(ierr);
+  *nRHS=junk;
+  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
+  return ierr;
+}
+
+//PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,Vec *RHS[]){
+//  PetscErrorCode ierr;
+//  PetscViewer viewer;
+//  Vec global_reg;
+//  PetscMPIInt rank;
+//  PetscInt junk;
+//  char tmp[200];
+//
+//  ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
+//
+//  VecCreate(COMM,&global_reg);
+//  VecSetSizes(global_reg,local_nrow,global_nrow);
+//  VecSetType(global_reg,VECMPI);
+//  sprintf(tmp,"%s/regularization.h5",dir);
+//  ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
+//  ierr = ReadVec(COMM,viewer,(char *)"lambda",&global_reg,&junk);CHKERRQ(ierr);
+//
+//  ierr = MatCreate(PETSC_COMM_WORLD,L);CHKERRQ(ierr);
+//  ierr = MatSetSizes(*L,local_nrow,local_nrow,global_nrow,global_nrow);CHKERRQ(ierr);
+//  ierr = MatSetType(*L,MATMPIAIJ);CHKERRQ(ierr);
+//  ierr = MatMPIAIJSetPreallocation(*L,1,NULL,0,NULL);CHKERRQ(ierr);
+//  ierr = MatDiagonalSet(*L,global_reg,INSERT_VALUES);CHKERRQ(ierr);
+//
+//  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
+//  VecDestroy(&global_reg);
+//  return ierr;
+//}
+//

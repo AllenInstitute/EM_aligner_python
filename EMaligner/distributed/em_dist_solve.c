@@ -35,6 +35,7 @@ int main(int argc,char **args)
   int i,j;
   Mat              A,W,K,L;                            //K and the matrices that build it
   Vec              global_weights;                     //weights, read from file, diagonal of W
+  Vec              *rhs;
   //Vec            data,weights,lambda,tforms0,tforms1,Lm0,Lm1,x0,x1,err0,err1;
   //const PetscInt *i,*j;
   //PetscScalar    *a,s0,s1;
@@ -77,26 +78,29 @@ int main(int argc,char **args)
   ierr = ReadLocalCSR(PETSC_COMM_SELF,csrnames,local_firstfile,local_lastfile,local_indptr,local_jcol,local_data,local_weights);CHKERRQ(ierr);
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,global_nrow,global_ncol,local_indptr,local_jcol,local_data,&A);
-  ShowMatInfo(&A,"A");
+  ShowMatInfo(PETSC_COMM_WORLD,&A,"A");
 
 
   /*  Create the W matrix  */
   ierr = CreateW(PETSC_COMM_WORLD,local_weights,local_nrow,local_row0,global_nrow,&W);
-  ierr = ShowMatInfo(&W,"W");CHKERRQ(ierr);
+  ierr = ShowMatInfo(PETSC_COMM_WORLD,&W,"W");CHKERRQ(ierr);
 
-  /*  Start the K matrix  */
+  /*  Start the K matrix with K = AT*W*A */
   ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
   //find out how the rows are distributed
   MatGetOwnershipRange(K,&local_row0,&local_rowN);
   MatGetSize(K,&global_nrow,NULL);
   local_nrow = local_rowN-local_row0;
+  //read in the regularization 
   ierr = CreateL(PETSC_COMM_WORLD,dir,local_nrow,global_nrow,&L);
-  ierr = ShowMatInfo(&L,"L");CHKERRQ(ierr);
+  //K = K+L
   ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
-  ierr = ShowMatInfo(&K,"K");CHKERRQ(ierr);
+  ierr = ShowMatInfo(PETSC_COMM_WORLD,&K,"K");CHKERRQ(ierr);
 
-//  if (rank==0){ierr = ShowMatInfo(&K,"K");CHKERRQ(ierr);}
-
+  /*  Read in the RHS vector(s)  */
+  PetscInt nRHS;
+  ierr = CountRHS(PETSC_COMM_WORLD,dir,&nRHS);
+  printf("nRHS: %d\n",nRHS);
 
   //local indices
 
@@ -133,7 +137,7 @@ int main(int argc,char **args)
 //  ierr = ISGetIndices(indices,&j);CHKERRQ(ierr);
 //  ierr = VecGetArray(data,&a);CHKERRQ(ierr);
 //  ierr = MatCreateSeqAIJWithArrays(PETSC_COMM_WORLD,nrows,ncols,(PetscInt *)i,(PetscInt *)j,a,&A);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(&A,"A");CHKERRQ(ierr);
+//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&A,"A");CHKERRQ(ierr);
 //
 //  /*  Create weights matrix  */
 //  ierr = MatCreate(PETSC_COMM_WORLD,&W);CHKERRQ(ierr);
@@ -141,7 +145,7 @@ int main(int argc,char **args)
 //  ierr = MatSetType(W,MATSEQAIJ);CHKERRQ(ierr);
 //  ierr = MatSeqAIJSetPreallocation(W,(PetscInt)1,NULL);CHKERRQ(ierr);
 //  ierr = MatDiagonalSet(W,weights,INSERT_VALUES);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(&W,"W");CHKERRQ(ierr);
+//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&W,"W");CHKERRQ(ierr);
 //
 //  /*  Create regularization matrix  */
 //  ierr = MatCreate(PETSC_COMM_WORLD,&L);CHKERRQ(ierr);
@@ -149,12 +153,12 @@ int main(int argc,char **args)
 //  ierr = MatSetType(L,MATSEQAIJ);CHKERRQ(ierr);
 //  ierr = MatSeqAIJSetPreallocation(L,(PetscInt)1,NULL);CHKERRQ(ierr);
 //  ierr = MatDiagonalSet(L,lambda,INSERT_VALUES);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(&L,"L");CHKERRQ(ierr);
+//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&L,"L");CHKERRQ(ierr);
 //
 //  /*  Create the K matrix  */
 //  ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
 //  ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(&K,"K");CHKERRQ(ierr);
+//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&K,"K");CHKERRQ(ierr);
 //
 //  /*  Create Lm vectors  */
 //  ierr = VecDuplicate(tforms0,&Lm0);CHKERRQ(ierr);

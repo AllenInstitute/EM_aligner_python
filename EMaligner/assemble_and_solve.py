@@ -434,10 +434,18 @@ def write_reg_and_tforms(output_options,filt_tforms,reg,filt_tids):
         #write the input transforms to disk
         fname = output_options['output_dir']+'/regularization.h5'
         f = h5py.File(fname,"w")
+        tlist = [];
         for j in np.arange(len(filt_tforms)):
             dsetname = 'transforms_%d'%j
             dset = f.create_dataset(dsetname,(filt_tforms[j].size,),dtype='float64')
             dset[:] = filt_tforms[j]
+            tlist.append(j)
+
+        #a list of transform indices (clunky, but works for PETSc to count)
+        tlist = np.array(tlist).astype('int32')
+        dset = f.create_dataset("transform_list",(tlist.size,1),dtype='int32')
+        dset[:] = tlist.reshape(tlist.size,1)
+       
         #create a regularization vector
         vec = reg.diagonal()
         dset = f.create_dataset("lambda",(vec.size,),dtype='float64')
@@ -449,7 +457,7 @@ def write_reg_and_tforms(output_options,filt_tforms,reg,filt_tids):
         f.close()
         print 'wrote %s'%fname
 
-def assemble(mod):
+def assemble(mod,zvals):
     #make a transform object
     tform_obj = transform_csr(mod.args['transformation'],mod.args['matrix_assembly']['npts_min'],mod.args['matrix_assembly']['npts_max'])
 
@@ -484,7 +492,7 @@ def assemble(mod):
 
     return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
 
-def start_from_file(mod):
+def start_from_file(mod,zvals):
     #make a transform object
     tform_obj = transform_csr(mod.args['transformation'],mod.args['matrix_assembly']['npts_min'],mod.args['matrix_assembly']['npts_max'])
     #get the tile IDs and transforms
@@ -642,9 +650,9 @@ def assemble_and_solve(mod,zvals,ingestconn):
     t00 = t0
     #assembly
     if mod.args['start_from_file']!='':
-        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod)
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod,zvals)
     else:
-        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod)
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod,zvals)
     mat_stats(A,'A')
     print ' A created in %0.1f seconds'%(time.time()-t0)
 
@@ -661,7 +669,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
 class AssembleAndSolve(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
-    def run():
+    def run(self):
          #specify the z values
         zvals = np.arange(self.args['first_section'],self.args['last_section']+1)
 
@@ -685,7 +693,6 @@ class AssembleAndSolve(argschema.ArgSchemaParser):
 
 if __name__=='__main__':
     t0 = time.time()
-    mod = argschema.ArgSchemaParser(schema_type=EMA_Schema)
+    mod = AssembleAndSolve(schema_type=EMA_Schema)
     mod.run()
-    print 'total time: %0.1f'%(time.time()-t0)
-   
+print 'total time: %0.1f'%(time.time()-t0)

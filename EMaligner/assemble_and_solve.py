@@ -658,30 +658,34 @@ def assemble_and_solve(mod,zvals,ingestconn):
         print message
     del shared_tforms,x,filt_tspecs
     
+class AssembleAndSolve(argschema.ArgSchemaParser):
+    default_schema = EMA_Schema
+
+    def run():
+         #specify the z values
+        zvals = np.arange(self.args['first_section'],self.args['last_section']+1)
+
+        ingestconn=None
+        #make a connection to the new stack
+        if self.args['output_options']['output_mode']=='stack':
+            ingestconn = make_dbconnection(self.args['output_stack'])
+            renderapi.stack.create_stack(self.args['output_stack']['name'],render=ingestconn)
+
+        #montage
+        if self.args['solve_type']=='montage':
+            for z in zvals:
+                assemble_and_solve(self,[z],ingestconn)
+        #3D
+        elif self.args['solve_type']=='3D':
+            assemble_and_solve(self,zvals,ingestconn)
+        
+        if ingestconn!=None:
+            if self.args['close_stack']:
+                renderapi.stack.set_stack_state(self.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
+
 if __name__=='__main__':
     t0 = time.time()
     mod = argschema.ArgSchemaParser(schema_type=EMA_Schema)
-
-    #specify the z values
-    zvals = np.arange(mod.args['first_section'],mod.args['last_section']+1)
-
-    ingestconn=None
-    #make a connection to the new stack
-    if mod.args['output_options']['output_mode']=='stack':
-        ingestconn = make_dbconnection(mod.args['output_stack'])
-        renderapi.stack.create_stack(mod.args['output_stack']['name'],render=ingestconn)
-
-    #montage
-    if mod.args['solve_type']=='montage':
-        for z in zvals:
-            assemble_and_solve(mod,[z],ingestconn)
-    #3D
-    elif mod.args['solve_type']=='3D':
-        assemble_and_solve(mod,zvals,ingestconn)
-     
-    if ingestconn!=None:
-        if mod.args['close_stack']:
-            renderapi.stack.set_stack_state(mod.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
-
+    mod.run()
     print 'total time: %0.1f'%(time.time()-t0)
-
+   

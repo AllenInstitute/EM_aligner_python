@@ -1,8 +1,8 @@
-.. image:: https://travis-ci.org/fcollman/EM_aligner_python.svg?branch=master
-   :target: https://travis-ci.org/fcollman/EM_aligner_python
+.. image:: https://travis-ci.org/AllenInstitute/EM_aligner_python.svg?branch=master
+   :target: https://travis-ci.org/AllenInstitute/EM_aligner_python
    :alt: Build Status
-.. image:: https://codecov.io/gh/fcollman/EM_aligner_python/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/fcollman/EM_aligner_python
+.. image:: https://codecov.io/gh/AllenInstitute/EM_aligner_python/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/AllenInstitute/EM_aligner_python
   
 
 EM_aligner_python

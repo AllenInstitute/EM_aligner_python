@@ -14,17 +14,17 @@ one_file_one_node: one_file_one_node.o  chkopts
 	-${CLINKER} -o one_file_one_node one_file_one_node.o  ${PETSC_KSP_LIB}
 	${RM} one_file_one_node.o
 
-multi_file_multi_node: multi_file_multi_node.o  chkopts
-	-${CLINKER} -o multi_file_multi_node multi_file_multi_node.o  ${PETSC_KSP_LIB}
-	${RM} multi_file_multi_node.o
+em_dist_solve: ema.o em_dist_solve.o chkopts
+	-${CLINKER} -o em_dist_solve ema.o em_dist_solve.o  ${PETSC_KSP_LIB}
+	${RM} em_dist_solve.o ema.o
 
 run_one_file_one_node:
-	${MPIEXEC} ${mpi_opts_one} ./one_file_one_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output_one/1020_1020.h5 ${pastix_opts} ${petsc_opts}
+	${MPIEXEC} ${mpi_opts_one} ./one_file_one_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/tmp_output_one/1020_1020.h5 ${pastix_opts} ${petsc_opts}
 
-run_multi_file_multi_node:
-	${MPIEXEC} ${mpi_opts} ./multi_file_multi_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output/index.txt ${pastix_opts} ${petsc_opts} -mat_view ::ascii_info
+run_em_dist_solve:
+	${MPIEXEC} ${mpi_opts} ./em_dist_solve -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/tmp_output/index.txt ${pastix_opts} ${petsc_opts} 
 
 run_valgrind:
-	${MPIEXEC} ${mpi_opts} valgrind --leak-check=yes --suppressions=./valg.supp ./one_file_one_node -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp_output/index.txt ${pastix_opts} ${petsc_opts}
+	${MPIEXEC} ${mpi_opts} valgrind --leak-check=yes --suppressions=./valg.supp ./em_dist_solve -f /allen/programs/celltypes/workgroups/em-connectomics/danielk/tmp_output/index.txt ${pastix_opts} ${petsc_opts}
 	#mpiexec -N 1 ./one_file_one_node -f ../tmp_output/1020_1021.h5 ${pastix_opts} ${petsc_opts}
 

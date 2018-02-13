@@ -661,7 +661,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
 class AssembleAndSolve(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
-    def run():
+    def run(self):
          #specify the z values
         zvals = np.arange(self.args['first_section'],self.args['last_section']+1)
 
@@ -685,7 +685,7 @@ class AssembleAndSolve(argschema.ArgSchemaParser):
 
 if __name__=='__main__':
     t0 = time.time()
-    mod = argschema.ArgSchemaParser(schema_type=EMA_Schema)
+    mod = AssembleAndSolve(schema_type=EMA_Schema)
     mod.run()
     print 'total time: %0.1f'%(time.time()-t0)
    

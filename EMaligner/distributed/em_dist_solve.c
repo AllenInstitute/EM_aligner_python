@@ -19,7 +19,7 @@ int main(int argc,char **args)
   PetscViewer    viewer;                               //viewer object for reading files
   PetscMPIInt    rank,size;                            //MPI rank and size
   char           filearg[PETSC_MAX_PATH_LEN];          //input file name
-  char           *dir,*indexname,*tmp,**csrnames;      
+  char           *dir,*indexname,*tmp,**csrnames;      //various strings
   int            nfiles;                               //number of files
   PetscInt       **metadata;                           //metadata read from index.txt
   PetscInt       local_firstfile,local_lastfile;       //local file indices
@@ -27,20 +27,18 @@ int main(int argc,char **args)
   PetscInt       local_nrow,local_nnz,local_row0;      //local  index info
   PetscInt       *local_indptr,*local_jcol;            //index arrays for local CSR
   PetscScalar    *local_data,*local_wts;               //data for local CSR and weights
-  PetscBool      flg;
-  PetscErrorCode ierr;
-  IS             indices,indptr;
-  Vec            data,weights,lambda;
+  PetscBool      flg;                                  //boolean used in checking command line
+  PetscErrorCode ierr;                                 //error code that gets passed around.
+  Vec            weights,lambda;                       //diagonals for weights and lambda matrices
+  PetscLogDouble tall0,tall1;                          //timers
+  int i,j;
+  Mat              A,W,K,L;                            //K and the matrices that build it
   //Vec            data,weights,lambda,tforms0,tforms1,Lm0,Lm1,x0,x1,err0,err1;
   //const PetscInt *i,*j;
   //PetscScalar    *a,s0,s1;
-  Mat              A,W,K,L;
   //Mat            A,W,K,L;
   //PetscReal      norm0,norm1,tmp0,tmp1;
   //PetscLogDouble t0,t1,t2,tall0,tall1;
-  PetscLogDouble tall0,tall1;
-  FILE *fp;
-  int i,j;
 
   /*  Command line handling and setup  */
   PetscTime(&tall0);
@@ -75,73 +73,8 @@ int main(int argc,char **args)
   local_wts = (PetscScalar *)calloc(local_nrow,sizeof(PetscScalar));
   /*  read in local hdf5 files and concatenate into CSR arrays  */
   ierr = ReadLocalCSR(PETSC_COMM_SELF,csrnames,local_firstfile,local_lastfile,local_indptr,local_jcol,local_data,local_wts);CHKERRQ(ierr);
-
- 
-//  //create the distributed matrix A
-//  PetscInt k,vcnt,niptr,innz=0;
-//  PetscInt *iptr;
-//  PetscInt *jcol;
-//  PetscScalar *a,*w;
-//  //these will concat the multiple files per processor
-//  PetscInt roff=0,roff2=0,zoff=0,poff=0,pstart;
-//  for (i=local_firstfile;i<=local_lastfile;i++){
-//    ierr = PetscViewerHDF5Open(PETSC_COMM_SELF,csrnames[i],FILE_MODE_READ,&viewer);CHKERRQ(ierr);
-//
-//    //indptr
-//    ierr = ReadIndexSet(PETSC_COMM_SELF,viewer,(char *)"indptr",&indptr,&niptr);CHKERRQ(ierr);
-//    iptr = malloc(niptr*sizeof(PetscInt));
-//    ISGetIndices(indptr,&iptr);
-//    printf("rank %d w[%ld] =  %ld\n",rank,roff,local_indptr[roff]);
-//    printf("niptr %ld\n",niptr);
-//    for(j=1;j<niptr;j++){
-//      local_indptr[j+roff] = iptr[j]+poff;
-//    }
-//    poff = local_indptr[niptr-1+roff];
-//    printf("j+roff %ld\n",j+roff);
-//    printf("rank %d w[%ld] =  %ld\n",rank,niptr,local_indptr[niptr]);
-//    roff += niptr-1;
-//
-//    //indices
-//    ierr = ReadIndexSet(PETSC_COMM_SELF,viewer,(char *)"indices",&indices,&vcnt);CHKERRQ(ierr);
-//    jcol = malloc(vcnt*sizeof(PetscInt));
-//    ISGetIndices(indices,&jcol);
-//    printf("vcnt %ld\n",vcnt);
-//    for (j=0;j<vcnt;j++){
-//      local_jcol[j+zoff] = jcol[j];
-//    }
-//
-//    //data
-//    ierr = ReadVec(PETSC_COMM_SELF,viewer,(char *)"data",&data,&vcnt);CHKERRQ(ierr);
-//    a = malloc(vcnt*sizeof(PetscScalar));
-//    VecGetArray(data,&a);
-//    printf("vcnt %ld\n",vcnt);
-//    for (j=0;j<vcnt;j++){
-//      local_data[j+zoff] = a[j];
-//    }
-//    zoff+=vcnt;
-// 
-//    //weights
-//    ierr = ReadVec(PETSC_COMM_SELF,viewer,(char *)"weights",&weights,&vcnt);CHKERRQ(ierr);
-//    w = malloc(vcnt*sizeof(PetscScalar));
-//    VecGetArray(weights,&w);
-//    for (j=0;j<vcnt;j++){
-//      local_wts[j+roff2] = w[j];
-//    }
-//    roff2 += niptr;
-//
-//    printf("vcnt %ld\n",vcnt);
-//
-//    ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-//  }
-//  for (i=0;i<4;i++){
-//    printf("rank %d: local_indptr[%ld] %ld\n",rank,i,local_indptr[i]);
-//  }
-//  for (i=local_nrow-5;i<local_nrow+1;i++){
-//    printf("rank %d: local_indptr[%ld] %ld\n",rank,i,local_indptr[i]);
-//  }
-
+  /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,global_nrow,global_ncol,local_indptr,local_jcol,local_data,&A);
-//  MPI_Barrier(PETSC_COMM_WORLD);
   ShowMatInfo(&A,"A");
 
   //A is in hand, proceed to K=AT*W*A+L

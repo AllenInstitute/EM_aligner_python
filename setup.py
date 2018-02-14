@@ -34,7 +34,7 @@ setup(name='EMaligner',
                   'between those tiles and their transformations stored in a render database '
                   'databases see https://github.com/saalfeldlab/render and https://github.com/khaledkhairy/EM_aligner',
       author='Daniel Kapner',
-      author_email='dank@alleninstitute.org',
+      author_email='danielk@alleninstitute.org',
       url='https://github.com/AllenInstitute/EM_Aligner_python',
       packages=['EMaligner'],
       setup_requires=['setuptools_scm'],

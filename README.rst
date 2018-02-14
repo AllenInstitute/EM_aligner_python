@@ -30,14 +30,17 @@ align the images of each tissue section to each other. sections are treated inde
         assemble from montage_matches(z)
         solve with scipy.sparse
         ingest
-
-`python assemble_and_solve.py --input_json montage_test.json`
+command line: 
+::
+    python assemble_and_solve.py --input_json example_jsons/montage_test.json`
 
 rough alignment
 ###############
 apply a 3D alignment to downsampled montage results. Each montaged section is treated as 1 tile. The tiles are aligned with a rigid transformation. The first tile is fixed to prevent drastic scaling.
 
-`python assemble_and_solve.py --input_json rough_test.json`
+command line:
+::
+    python assemble_and_solve.py --input_json example_jsons/rough_test.json`
 
 3D alignment
 #############
@@ -49,9 +52,9 @@ run 3D solve locally, will be RAM limited
         add to assembly from montage_matches(z), cross_matches(z,z+1),...,cross_matches(z,z+depth)
     solve with scipy.sparse
     ingest
-
-
-`python assemble_and_solve.py --input_json small3D_test.json`
+command line:
+::
+    python assemble_and_solve.py --input_json example_jsons/small3D_test.json`
 
 large 3D
 ########
@@ -64,7 +67,7 @@ intended to assemble A locally into multiple files for input to a distributed so
             assembly = 0
     solve elsewhere with PETSc
     ingest
-
+command line:
 ::
     python not_ready_yet.py --input_json not_ready_yet.json
     tar cvzf the_files

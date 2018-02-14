@@ -13,8 +13,7 @@ class db_params(argschema.ArgSchema):
     db_interface = argschema.fields.String(default='mongo')
     client_scripts = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts',description='render bin path')
 
-class output_options(argschema.ArgSchema):
-    output_mode = argschema.fields.String(default='hdf5')
+class hdf5_options(argschema.ArgSchema):
     output_dir = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
     chunks_per_file = argschema.fields.Int(default=5,description='how many sections with upward-looking cross section to write per .h5 file')
 
@@ -42,11 +41,12 @@ class EMA_Schema(argschema.ArgSchema):
     solve_type = argschema.fields.String(default='')
     close_stack = argschema.fields.Boolean(default=True)
     transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
+    output_mode = argschema.fields.String(default='hdf5')
     start_from_file = argschema.fields.String(default='',description = 'fullpath to index.txt')
     input_stack = argschema.fields.Nested(stack)
     output_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)
-    output_options = argschema.fields.Nested(output_options)
+    hdf5_options = argschema.fields.Nested(hdf5_options)
     matrix_assembly = argschema.fields.Nested(matrix_assembly)
     regularization = argschema.fields.Nested(regularization)
     showtiming = argschema.fields.Int(default=1,description = 'have the routine showhow long each process takes')

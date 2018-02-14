@@ -5,6 +5,7 @@
    "close_stack": "True",
    "transformation": "affine",
    "start_from_file": "",
+   "output_mode": "stack",
    "input_stack": {
        "owner": "gayathri",
        "project": "MM2",
@@ -40,9 +41,8 @@
        "collection_type": "stack",
        "db_interface": "render"
    }, 
-   "output_options": {
-       "output_mode": "stack",
-       "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/",
+   "hdf5_options": {
+       "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/example_output/",
        "chunks_per_file": -1
    },
    "matrix_assembly": {

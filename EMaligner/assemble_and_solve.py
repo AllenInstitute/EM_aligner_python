@@ -225,6 +225,7 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offse
     fdir = ''
     for t in tmp[:-1]:
         fdir=fdir+'/'+t
+    print "fdir:",fdir
     f=open(fdir+'/index.txt',fmode)
     imesg =  'file %s '%tmp[-1]
     imesg += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
@@ -269,7 +270,7 @@ def tilepair_weight(i,j,matrix_assembly):
             tp_weight = tp_weight/np.abs(j-i+1)
     return tp_weight
 
-def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_options):
+def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode,hdf5_options):
     #connect to the database
     dbconnection = make_dbconnection(collection)
 
@@ -279,10 +280,10 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
     file_chunks = 0
     tiles_used = []
 
-    if output_options['chunks_per_file']==-1:
+    if hdf5_options['chunks_per_file']==-1:
         nmod=0.1 # np.mod(n+1,0.1) never == 0
     else:
-        nmod = output_options['chunks_per_file']
+        nmod = hdf5_options['chunks_per_file']
 
     file_zlist=[]
 
@@ -394,11 +395,11 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
 
         if (np.mod(i+1,nmod)==0)|(i==len(zvals)-1):
             c = csr_matrix((file_data,file_indices,file_indptr))
-            if output_options['output_mode']=='hdf5':
+            if output_mode=='hdf5':
                 if file_number==0:
                     indptr_offset=0
                     vec_offsets = np.array([0,0,0,0]).astype('int64') #different files will keep track of where they are globally
-                fname = output_options['output_dir']+'/%d_%d.h5'%(file_zlist[0],file_zlist[-1])
+                fname = hdf5_options['output_dir']+'/%d_%d.h5'%(file_zlist[0],file_zlist[-1])
                 vec_offsets = write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offsets)
                 #indptr_offset += file_indptr[-1]
                 del file_data,file_indices,file_indptr
@@ -411,7 +412,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_opti
     del file_weights 
     return c,outw,np.unique(np.array(tiles_used))
 
-def create_regularization(regularization,tform_obj,tile_tforms,output_options):
+def create_regularization(regularization,tform_obj,tile_tforms):
     #affine (half-size) or any other transform, we only need the first one:
     tile_tforms = tile_tforms[0]
 
@@ -429,10 +430,10 @@ def create_regularization(regularization,tform_obj,tile_tforms,output_options):
     outr.data = reg
     return outr
 
-def write_reg_and_tforms(output_options,filt_tforms,reg,filt_tids):
-    if output_options['output_mode']=='hdf5':
+def write_reg_and_tforms(output_mode,hdf5_options,filt_tforms,reg,filt_tids):
+    if output_mode=='hdf5':
         #write the input transforms to disk
-        fname = output_options['output_dir']+'/regularization.h5'
+        fname = hdf5_options['output_dir']+'/regularization.h5'
         f = h5py.File(fname,"w")
         tlist = [];
         for j in np.arange(len(filt_tforms)):
@@ -473,7 +474,7 @@ def assemble(mod,zvals):
         tile_tforms = [tile_tforms]
 
     #create A matrix in compressed sparse row (CSR) format
-    A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tform_obj,tile_ids,zvals,mod.args['output_options'])
+    A,weights,tiles_used = create_CSR_A(mod.args['pointmatch'],mod.args['matrix_assembly'],tform_obj,tile_ids,zvals,mod.args['output_mode'],mod.args['hdf5_options'])
 
     #some book-keeping if there were some unused tiles
     tile_ind = np.in1d(tile_ids,tiles_used)
@@ -485,10 +486,10 @@ def assemble(mod,zvals):
     del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
     
     #create the regularization vectors
-    reg = create_regularization(mod.args['regularization'],tform_obj,filt_tforms,mod.args['output_options'])
+    reg = create_regularization(mod.args['regularization'],tform_obj,filt_tforms)
 
     #output the regularization vectors to hdf5 file
-    write_reg_and_tforms(mod.args['output_options'],filt_tforms,reg,filt_tids)
+    write_reg_and_tforms(mod.args['output_mode'],mod.args['hdf5_options'],filt_tforms,reg,filt_tids)
 
     return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
 
@@ -525,6 +526,7 @@ def start_from_file(mod,zvals):
     reg = outr
 
     #get from the matrix files
+    print 'fdir:',fdir
     f = open(fdir+'/index.txt','r')
     lines = f.readlines()
     f.close()
@@ -584,18 +586,18 @@ def write_to_new_stack(name,tform_type,tspecs,shared_tforms,x,ingestconn):
 def solve_or_not(mod,A,weights,reg,filt_tforms):
     t0=time.time()
     #not
-    if mod.args['output_options']['output_mode'] in ['hdf5']:
+    if mod.args['output_mode'] in ['hdf5']:
         message = '*****\nno solve for file output\n'
         message += 'solve from the files you just wrote:\n\n'
         message += 'python '
         for arg in sys.argv:
             message += arg+' '
-        message = message+ '--start_from_file '+mod.args['output_options']['output_dir']
+        message = message+ '--start_from_file '+mod.args['hdf5_options']['output_dir']
         message += '\n\nor, run it again to solve with no output:\n\n'
         message += 'python '
         for arg in sys.argv:
             message += arg+' '
-        message = message.replace('hdf5','none')
+        message = message.replace(' hdf5 ',' none ')
         x=None
     else:
         #regularized least squares
@@ -661,7 +663,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
     print message
     del A
 
-    if mod.args['output_options']['output_mode']=='stack':
+    if mod.args['output_mode']=='stack':
         write_to_new_stack(mod.args['output_stack']['name'],mod.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn)
         print message
     del shared_tforms,x,filt_tspecs
@@ -675,7 +677,7 @@ class AssembleAndSolve(argschema.ArgSchemaParser):
 
         ingestconn=None
         #make a connection to the new stack
-        if self.args['output_options']['output_mode']=='stack':
+        if self.args['output_mode']=='stack':
             ingestconn = make_dbconnection(self.args['output_stack'])
             renderapi.stack.create_stack(self.args['output_stack']['name'],render=ingestconn)
 

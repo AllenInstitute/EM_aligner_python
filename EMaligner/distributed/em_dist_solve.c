@@ -6,7 +6,6 @@
 static char help[] = "Testing hdf5 I/O\n\n";
 
 #include <stdio.h>
-#include <libgen.h>
 #include <petsctime.h>
 #include "ema.h"
 
@@ -15,11 +14,10 @@ static char help[] = "Testing hdf5 I/O\n\n";
 */
 int main(int argc,char **args)
 {
-  //KSP            ksp;      /* linear solver context */
-  PetscViewer    viewer;                               //viewer object for reading files
+  KSP            ksp;                                  //linear solver context
   PetscMPIInt    rank,size;                            //MPI rank and size
   char           filearg[PETSC_MAX_PATH_LEN];          //input file name
-  char           *dir,*indexname,*tmp,**csrnames;      //various strings
+  char           *dir,*indexname,**csrnames;      //various strings
   int            nfiles;                               //number of files
   PetscInt       **metadata;                           //metadata read from index.txt
   PetscInt       local_firstfile,local_lastfile;       //local file indices
@@ -27,21 +25,15 @@ int main(int argc,char **args)
   PetscInt       local_nrow,local_nnz,local_row0;      //local  index info
   PetscInt       local_rowN;
   PetscInt       *local_indptr,*local_jcol;            //index arrays for local CSR
-  PetscScalar    *local_data,*local_weights;               //data for local CSR and weights
+  PetscScalar    *local_data,*local_weights;           //data for local CSR and weights
   PetscBool      flg;                                  //boolean used in checking command line
   PetscErrorCode ierr;                                 //error code that gets passed around.
-  //Vec            weights,lambda;                       //diagonals for weights and lambda matrices
   PetscLogDouble tall0,tall1;                          //timers
-  int i,j;
+  int i;
   Mat              A,W,K,L;                            //K and the matrices that build it
-  Vec              global_weights;                     //weights, read from file, diagonal of W
-  Vec              *rhs;
-  //Vec            data,weights,lambda,tforms0,tforms1,Lm0,Lm1,x0,x1,err0,err1;
-  //const PetscInt *i,*j;
-  //PetscScalar    *a,s0,s1;
-  //Mat            A,W,K,L;
-  //PetscReal      norm0,norm1,tmp0,tmp1;
-  //PetscLogDouble t0,t1,t2,tall0,tall1;
+  Vec              rhs[2],Lm[2],x[2];           //vectors associated with the solve(s)
+  PetscLogDouble   t0,t1;                              //some timers
+  PetscReal        norm[2],norm2[2];
 
   /*  Command line handling and setup  */
   PetscTime(&tall0);
@@ -67,7 +59,8 @@ int main(int argc,char **args)
   ierr = SetFiles(PETSC_COMM_WORLD,nfiles,&local_firstfile,&local_lastfile);CHKERRQ(ierr);
   /*  how many rows and nnz per worker  */
   GetGlobalLocalCounts(nfiles,metadata,local_firstfile,local_lastfile,&global_nrow,&global_ncol,&global_nnz,&local_nrow,&local_nnz,&local_row0);
-  //printf("rank %d will handle files %d through %d of %d\n",rank,local_firstfile,local_lastfile,nfiles);
+
+  printf("rank %d will handle files %ld through %ld of %d\n",rank,local_firstfile,local_lastfile,nfiles);
 
   /*  allocate space for local CSR arrays  */
   local_indptr = (PetscInt *)calloc(local_nrow+1,sizeof(PetscInt));
@@ -78,12 +71,15 @@ int main(int argc,char **args)
   ierr = ReadLocalCSR(PETSC_COMM_SELF,csrnames,local_firstfile,local_lastfile,local_indptr,local_jcol,local_data,local_weights);CHKERRQ(ierr);
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,global_nrow,global_ncol,local_indptr,local_jcol,local_data,&A);
-  ShowMatInfo(PETSC_COMM_WORLD,&A,"A");
+  //ShowMatInfo(PETSC_COMM_WORLD,&A,"A");
+  if (rank==0){
+    printf("A matrix created\n");
+  }
 
 
   /*  Create the W matrix  */
   ierr = CreateW(PETSC_COMM_WORLD,local_weights,local_nrow,local_row0,global_nrow,&W);
-  ierr = ShowMatInfo(PETSC_COMM_WORLD,&W,"W");CHKERRQ(ierr);
+  //ierr = ShowMatInfo(PETSC_COMM_WORLD,&W,"W");CHKERRQ(ierr);
 
   /*  Start the K matrix with K = AT*W*A */
   ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
@@ -95,155 +91,101 @@ int main(int argc,char **args)
   ierr = CreateL(PETSC_COMM_WORLD,dir,local_nrow,global_nrow,&L);
   //K = K+L
   ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
-  ierr = ShowMatInfo(PETSC_COMM_WORLD,&K,"K");CHKERRQ(ierr);
+  //ierr = ShowMatInfo(PETSC_COMM_WORLD,&K,"K");CHKERRQ(ierr);
+  if (rank==0){
+    printf("K matrix created\n");
+  }
 
   /*  Read in the RHS vector(s)  */
-  PetscInt nRHS;
-  ierr = CountRHS(PETSC_COMM_WORLD,dir,&nRHS);
-  printf("nRHS: %d\n",nRHS);
+  PetscInt nrhs;
+  ierr = CountRHS(PETSC_COMM_WORLD,dir,&nrhs);CHKERRQ(ierr);
+  ierr = ReadRHS(PETSC_COMM_WORLD,dir,local_nrow,global_nrow,nrhs,rhs);CHKERRQ(ierr);
 
-  //local indices
+  /*  Create Lm vectors  */
+  for (i=0;i<nrhs;i++){
+    ierr = VecDuplicate(rhs[i],&Lm[i]);CHKERRQ(ierr);
+    ierr = MatMult(L,rhs[i],Lm[i]);CHKERRQ(ierr);
+  }
 
-  
-  //ISCreate(PETSC_COMM_WORLD,indptr);
+  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                Create the linear solver and set various options
+     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
+  ierr = KSPSetOperators(ksp,K,K);CHKERRQ(ierr);
+  ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
+  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                      Solve the linear system
+     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  for (i=0;i<nrhs;i++){
+    PetscTime(&t0);
+    ierr = VecDuplicate(rhs[i],&x[i]);CHKERRQ(ierr);
+    ierr = KSPSolve(ksp,Lm[i],x[i]);CHKERRQ(ierr);
+    PetscTime(&t1);
+    if (rank==0){
+      printf("solve %d: %0.1f sec\n",i,t1-t0);
+    }
+  }
 
-  
+  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                      Check solution and clean up
+     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  PetscReal num,den;
+  num=0;
+  den=0;
+  for (i=0;i<nrhs;i++){
+    //ierr = VecDuplicate(rhs[i],&rhs[i]);CHKERRQ(ierr);
+    //from here on, rhs is replaced by err
+    ierr = VecScale(Lm[i],(PetscScalar)-1.0);CHKERRQ(ierr);
+    ierr = MatMultAdd(K,x[i],Lm[i],rhs[i]);CHKERRQ(ierr);     //err0 = Kx0-Lm0
+    ierr = VecNorm(rhs[i],NORM_2,&norm[i]);CHKERRQ(ierr);     //NORM_2 denotes sqrt(sum_i |x_i|^2)
+    ierr = VecNorm(Lm[i],NORM_2,&norm2[i]);CHKERRQ(ierr);       //NORM_2 denotes sqrt(sum_i |x_i|^2)
+    num += norm[i]*norm[i];
+    den += norm2[i]*norm2[i];
+  }
+  ierr = PetscPrintf(PETSC_COMM_WORLD,"Precision %0.3g\n",(double)sqrt(num)/sqrt(den));CHKERRQ(ierr);
 
-//  /*  Read CSR matrix and weights  */
-//  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,fname,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
-//  ierr = ReadIndexSet(viewer,(char *)"indptr",&indptr,&nrows);CHKERRQ(ierr);
-//  nrows-=1;
-//  ierr = ReadIndexSet(viewer,(char *)"indices",&indices,&junk);CHKERRQ(ierr);
-//  ierr = ReadVec(viewer,(char *)"data",&data,&junk);CHKERRQ(ierr);
-//  ierr = ReadVec(viewer,(char *)"weights",&weights,&junk);CHKERRQ(ierr);
-//  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-//
-//  /* Read regularization file  */
-//  sprintf(fname,"%s/regularization.h5",dname);
-//  printf("%s\n",fname);
-//  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,fname,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
-//  ierr = ReadVec(viewer,(char *)"lambda",&lambda,&junk);CHKERRQ(ierr);
-//  ierr = ReadVec(viewer,(char *)"transforms_0",&tforms0,&junk);CHKERRQ(ierr);
-//  ierr = ReadVec(viewer,(char *)"transforms_1",&tforms1,&junk);CHKERRQ(ierr);
-//  ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-//
-//  /*  Determine M and N  */
-//  ierr = ISGetMinMax(indices,&junk,&ncols);CHKERRQ(ierr);
-//  ncols+=1;
-//  printf("matrix will be %ld x %ld\n",nrows,ncols);
-//
-//  /*  Create A matrix from the CSR  inputs  */
-//  ierr = ISGetIndices(indptr,&i);CHKERRQ(ierr);
-//  ierr = ISGetIndices(indices,&j);CHKERRQ(ierr);
-//  ierr = VecGetArray(data,&a);CHKERRQ(ierr);
-//  ierr = MatCreateSeqAIJWithArrays(PETSC_COMM_WORLD,nrows,ncols,(PetscInt *)i,(PetscInt *)j,a,&A);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&A,"A");CHKERRQ(ierr);
-//
-//  /*  Create weights matrix  */
-//  ierr = MatCreate(PETSC_COMM_WORLD,&W);CHKERRQ(ierr);
-//  ierr = MatSetSizes(W,nrows,nrows,PETSC_DETERMINE,PETSC_DETERMINE);CHKERRQ(ierr);
-//  ierr = MatSetType(W,MATSEQAIJ);CHKERRQ(ierr);
-//  ierr = MatSeqAIJSetPreallocation(W,(PetscInt)1,NULL);CHKERRQ(ierr);
-//  ierr = MatDiagonalSet(W,weights,INSERT_VALUES);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&W,"W");CHKERRQ(ierr);
-//
-//  /*  Create regularization matrix  */
-//  ierr = MatCreate(PETSC_COMM_WORLD,&L);CHKERRQ(ierr);
-//  ierr = MatSetSizes(L,ncols,ncols,PETSC_DETERMINE,PETSC_DETERMINE);CHKERRQ(ierr);
-//  ierr = MatSetType(L,MATSEQAIJ);CHKERRQ(ierr);
-//  ierr = MatSeqAIJSetPreallocation(L,(PetscInt)1,NULL);CHKERRQ(ierr);
-//  ierr = MatDiagonalSet(L,lambda,INSERT_VALUES);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&L,"L");CHKERRQ(ierr);
-//
-//  /*  Create the K matrix  */
-//  ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
-//  ierr = MatAXPY(K,(PetscScalar)1.0,L,SUBSET_NONZERO_PATTERN);CHKERRQ(ierr);
-//  ierr = ShowMatInfo(PETSC_COMM_WORLD,&K,"K");CHKERRQ(ierr);
-//
-//  /*  Create Lm vectors  */
-//  ierr = VecDuplicate(tforms0,&Lm0);CHKERRQ(ierr);
-//  ierr = VecDuplicate(tforms0,&Lm1);CHKERRQ(ierr);
-//  ierr = MatMult(L,tforms0,Lm0);CHKERRQ(ierr);
-//  ierr = MatMult(L,tforms1,Lm1);CHKERRQ(ierr);
-//
-//  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-//                Create the linear solver and set various options
-//     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-//  ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
-//  ierr = KSPSetOperators(ksp,K,K);CHKERRQ(ierr);
-//  ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
-//  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-//                      Solve the linear system
-//     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-//  ierr = VecDuplicate(tforms0,&x0);CHKERRQ(ierr);
-//  ierr = VecDuplicate(tforms0,&x1);CHKERRQ(ierr);
-//  PetscTime(&t0);
-//  ierr = KSPSolve(ksp,Lm0,x0);CHKERRQ(ierr);
-//  PetscTime(&t1);
-//  ierr = KSPSolve(ksp,Lm1,x1);CHKERRQ(ierr);
-//  PetscTime(&t2);
-//  printf("1st solve: %0.1f sec\n",t1-t0);
-//  printf("2nd solve: %0.1f sec\n",t2-t1);
-//  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-//                      Check solution and clean up
-//     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-//  ierr = VecDuplicate(tforms0,&err0);CHKERRQ(ierr);
-//  ierr = VecDuplicate(tforms0,&err1);CHKERRQ(ierr);
-//  ierr = VecScale(Lm0,(PetscScalar)-1.0);CHKERRQ(ierr);
-//  ierr = VecScale(Lm1,(PetscScalar)-1.0);CHKERRQ(ierr);
-//  ierr = MatMultAdd(K,x0,Lm0,err0);CHKERRQ(ierr);                  //err0 = Kx0-Lm0
-//  ierr = MatMultAdd(K,x1,Lm1,err1);CHKERRQ(ierr);                  //err1 = Kx1-Lm1
-//  ierr = VecNorm(err0,NORM_2,&norm0);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
-//  ierr = VecNorm(err1,NORM_2,&norm1);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
-//  ierr = VecNorm(Lm0,NORM_2,&tmp0);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
-//  ierr = VecNorm(Lm1,NORM_2,&tmp1);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
-//  ierr = PetscPrintf(PETSC_COMM_WORLD,"Precision %0.3g\n",(double)sqrt(norm0*norm0+norm1*norm1)/sqrt(tmp0*tmp0+tmp1*tmp1));CHKERRQ(ierr);
-//
-//  ierr = VecDuplicate(weights,&err0);CHKERRQ(ierr);
-//  ierr = VecDuplicate(weights,&err1);CHKERRQ(ierr);
-//  ierr = MatMult(A,x0,err0);CHKERRQ(ierr);                  //err0 = Ax0
-//  ierr = MatMult(A,x1,err1);CHKERRQ(ierr);                  //err1 = Ax1
-//  ierr = VecNorm(err0,NORM_2,&norm0);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
-//  ierr = VecNorm(err1,NORM_2,&norm1);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
-//  ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error %0.3g\n",(double)sqrt(norm0*norm0+norm1*norm1));CHKERRQ(ierr);
-//
-//  //calculate the mean and standard deviation
-//  ierr = VecAbs(err0);CHKERRQ(ierr);
-//  ierr = VecAbs(err1);CHKERRQ(ierr);
-//  ierr = VecSum(err0,&s0);CHKERRQ(ierr);
-//  ierr = VecSum(err1,&s1);CHKERRQ(ierr);
-//  printf("%f %f\n",s0,s1);
-//  tmp0 = (s0+s1)/(2*nrows); //mean
-//  ierr = VecShift(err0,-1.0*tmp0);CHKERRQ(ierr);
-//  ierr = VecShift(err1,-1.0*tmp0);CHKERRQ(ierr);
-//  ierr = VecNorm(err0,NORM_2,&s0);CHKERRQ(ierr);
-//  ierr = VecNorm(err1,NORM_2,&s1);CHKERRQ(ierr);
-//  tmp1 = sqrt((s0*s0+s1*s1)/(2*nrows));
-//  printf("mean(|Ax|) +/- std(|Ax|) : %0.1f +/- %0.1f\n",tmp0,tmp1);
-//
-//  //cleanup
-//  VecDestroy(&data);
-//  VecDestroy(&weights);
-//  VecDestroy(&lambda);
-//  VecDestroy(&tforms0);
-//  VecDestroy(&tforms1);
-//  VecDestroy(&Lm0);
-//  VecDestroy(&Lm1);
-//  VecDestroy(&x0);
-//  VecDestroy(&x1);
-//  VecDestroy(&err0);
-//  VecDestroy(&err1);
-//  ISDestroy(&indices);
-//  ISDestroy(&indptr);
+  num=0;
+  PetscInt mA,nA,c0,cn;
+  ierr = MatGetSize(A,&mA,&nA);CHKERRQ(ierr);
+  ierr = MatGetOwnershipRange(A,&c0,&cn);CHKERRQ(ierr);
+  for (i=0;i<nrhs;i++){
+    ierr = VecCreate(PETSC_COMM_WORLD,&rhs[i]);CHKERRQ(ierr);
+    ierr = VecSetType(rhs[i],VECMPI);CHKERRQ(ierr);
+    ierr = VecSetSizes(rhs[i],cn-c0,mA);CHKERRQ(ierr);
+    ierr = MatMult(A,x[i],rhs[i]);CHKERRQ(ierr);                  //err0 = Ax0
+    ierr = VecNorm(rhs[i],NORM_2,&norm[i]);CHKERRQ(ierr);         //NORM_2 denotes sqrt(sum_i |x_i|^2)
+    num += norm[i]*norm[i];
+  }
+  ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error %0.1f\n",(double)sqrt(num));CHKERRQ(ierr);
+
+  //calculate the mean and standard deviation
+  PetscReal s[2];
+  PetscReal tmp0;
+  for (i=0;i<nrhs;i++){
+    ierr = VecAbs(rhs[i]);CHKERRQ(ierr);
+    ierr = VecSum(rhs[i],&s[i]);CHKERRQ(ierr);
+    tmp0 += s[i]/(nrhs*mA);
+  }
+  num=0;
+  for (i=0;i<nrhs;i++){
+    ierr = VecShift(rhs[i],-1.0*tmp0);CHKERRQ(ierr);
+    ierr = VecNorm(rhs[i],NORM_2,&s[i]);CHKERRQ(ierr);
+    num += s[i]*s[i]/(nrhs*mA);    
+  }
+  printf("mean(|Ax|) +/- std(|Ax|) : %0.1f +/- %0.1f\n",tmp0,sqrt(num));
+
+  //cleanup
+  for (i=0;i<nrhs;i++){
+    VecDestroy(&Lm[i]);
+    VecDestroy(&x[i]);
+    VecDestroy(&rhs[i]);
+    //VecDestroy(&rhs[i]);
+  }
   MatDestroy(&A);
-//  MatDestroy(&W);
-//  MatDestroy(&K);
-//  MatDestroy(&L);
-//  KSPDestroy(&ksp);
-//  PetscFree(a);
-//  PetscFree(i);
-//  PetscFree(j);
-
+  MatDestroy(&W);
+  MatDestroy(&K);
+  MatDestroy(&L);
+  KSPDestroy(&ksp);
   free(dir); 
   free(indexname);
   for (i=0;i<nfiles;i++){

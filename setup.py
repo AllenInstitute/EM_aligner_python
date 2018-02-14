@@ -40,4 +40,4 @@ setup(name='EMaligner',
       setup_requires=['setuptools_scm'],
       install_requires=required,
       tests_require=test_required,
-      cmdclass={'test': PyTest},)
+      cmdclass={'test': PyTest})

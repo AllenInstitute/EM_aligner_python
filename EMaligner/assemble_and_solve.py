@@ -1,9 +1,7 @@
-#!/usr/bin/env python
-
 from pymongo import MongoClient
 import numpy as np
 import renderapi
-from EM_aligner_python_schema import *
+from .EM_aligner_python_schema import *
 import copy
 import time
 import scipy.sparse as sparse
@@ -28,7 +26,7 @@ def make_dbconnection(collection,which='tile'):
     elif collection['db_interface']=='render':
         dbconnection = renderapi.connect(**collection)
     else:
-        print 'invalid interface in make_dbconnection()'
+        print('invalid interface in make_dbconnection()')
         return
     return dbconnection
 
@@ -82,7 +80,7 @@ def get_tileids_and_tforms(stack,tform_obj,zvals):
                 tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
             tile_tspecs.append(tspecs[k])
 
-    print 'loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface'])
+    print('loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface']))
     return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms
 
 class transform_csr:
@@ -196,7 +194,7 @@ class transform_csr:
 
 def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offsets):
     ### data file
-    print ' writing to file: %s'%fname
+    print(' writing to file: %s'%fname)
     fcsr = h5py.File(fname,"w")
     #indptr
     #if file_number==0:
@@ -215,7 +213,7 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offse
     #weights
     weights_dset = fcsr.create_dataset("weights",(file_weights.size,),dtype='float64')
     weights_dset[:] = file_weights
-    print ' wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30))
+    print('wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
 
     ###index.txt
     fmode='a'
@@ -225,7 +223,7 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offse
     fdir = ''
     for t in tmp[:-1]:
         fdir=fdir+'/'+t
-    print "fdir:",fdir
+    print("fdir:",fdir)
     f=open(fdir+'/index.txt',fmode)
     imesg =  'file %s '%tmp[-1]
     imesg += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
@@ -288,7 +286,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode
     file_zlist=[]
 
     for i in np.arange(len(zvals)):
-        print ' upward-looking for z %d'%zvals[i]
+        print(' upward-looking for z %d'%zvals[i])
         jmax = np.min([i+matrix_assembly['depth']+1,len(zvals)])
         for j in np.arange(i,jmax): #depth, upward looking
             t0=time.time()
@@ -296,7 +294,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode
             matches = get_matches(zvals[i],zvals[j],collection,dbconnection)
 
             if len(matches)==0:
-                print 'WARNING: %d matches for z1=%d z2=%d in pointmatch collection'%(len(matches),zvals[i],zvals[j])
+                print('WARNING: %d matches for z1=%d z2=%d in pointmatch collection'%(len(matches),zvals[i],zvals[j]))
                 continue
 
             #extract IDs for fast checking
@@ -315,10 +313,10 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode
             qids = qids[instack]
  
             if len(matches)==0:
-                print 'WARNING: no tile pairs in stack for pointmatches in z1=%d z2=%d'%(zvals[i],zvals[j])
+                print('WARNING: no tile pairs in stack for pointmatches in z1=%d z2=%d'%(zvals[i],zvals[j]))
                 continue
 
-            print '  loaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,collection['db_interface'])
+            print('  loaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,collection['db_interface']))
         
             t0 = time.time()
             
@@ -456,7 +454,7 @@ def write_reg_and_tforms(output_mode,hdf5_options,filt_tforms,reg,filt_tids):
         dset = f.create_dataset("tile_ids",(filt_tids.size,),dtype=dt)
         dset[:] = filt_tids
         f.close()
-        print 'wrote %s'%fname
+        print('wrote %s'%fname)
 
 def assemble(mod,zvals):
     #make a transform object
@@ -526,7 +524,7 @@ def start_from_file(mod,zvals):
     reg = outr
 
     #get from the matrix files
-    print 'fdir:',fdir
+    print('fdir:',fdir)
     f = open(fdir+'/index.txt','r')
     lines = f.readlines()
     f.close()
@@ -553,15 +551,15 @@ def start_from_file(mod,zvals):
     outw.data = weights
     weights = outw
 
-    print 'read inputs from files'
+    print('read inputs from files')
 
     return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
 
 def mat_stats(m,name):
-    print ' matrix %s: '%name+' format: ',m.getformat(),', shape: ',m.shape,' nnz: ',m.nnz
+    print(' matrix %s: '%name+' format: ',m.getformat(),', shape: ',m.shape,' nnz: ',m.nnz)
     if m.shape[0]==m.shape[1]:
         asymm = np.any(m.transpose().data != m.data)
-        print ' symm: ',not asymm
+        print(' symm: ',not asymm)
 
 def write_to_new_stack(name,tform_type,tspecs,shared_tforms,x,ingestconn):
     #replace the last transform in the tilespec with the new one
@@ -604,7 +602,7 @@ def solve_or_not(mod,A,weights,reg,filt_tforms):
         ATW = A.transpose().dot(weights)
         K = ATW.dot(A) + reg
         mat_stats(K,'K')
-        print ' K created in %0.1f seconds'%(time.time()-t0)
+        print(' K created in %0.1f seconds'%(time.time()-t0))
         t0=time.time()
         del weights,ATW
     
@@ -656,16 +654,16 @@ def assemble_and_solve(mod,zvals,ingestconn):
     else:
         A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod,zvals)
     mat_stats(A,'A')
-    print ' A created in %0.1f seconds'%(time.time()-t0)
+    print(' A created in %0.1f seconds'%(time.time()-t0))
 
     #solve
     message,x = solve_or_not(mod,A,weights,reg,filt_tforms)
-    print message
+    print(message)
     del A
 
     if mod.args['output_mode']=='stack':
         write_to_new_stack(mod.args['output_stack']['name'],mod.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn)
-        print message
+        print(message)
     del shared_tforms,x,filt_tspecs
     
 class AssembleAndSolve(argschema.ArgSchemaParser):
@@ -697,5 +695,5 @@ if __name__=='__main__':
     t0 = time.time()
     mod = AssembleAndSolve(schema_type=EMA_Schema)
     mod.run()
-    print 'total time: %0.1f'%(time.time()-t0)
+    print('total time: %0.1f'%(time.time()-t0))
    

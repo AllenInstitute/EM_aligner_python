@@ -30,9 +30,12 @@ align the images of each tissue section to each other. sections are treated inde
         assemble from montage_matches(z)
         solve with scipy.sparse
         ingest
-command line: 
+command line from within EMaligner directory:
 ::
-    python assemble_and_solve.py --input_json example_jsons/montage_test.json`
+    python assemble_and_solve.py --input_json example_jsons/montage_test.json
+or, command line after pip install:
+::
+    python -m EMaligner.assemble_and_solve --input_json /path/to/montage_test.json
 
 rough alignment
 ###############
@@ -40,7 +43,7 @@ apply a 3D alignment to downsampled montage results. Each montaged section is tr
 
 command line:
 ::
-    python assemble_and_solve.py --input_json example_jsons/rough_test.json`
+    python assemble_and_solve.py --input_json example_jsons/rough_test.json
 
 3D alignment
 #############
@@ -54,7 +57,7 @@ run 3D solve locally, will be RAM limited
     ingest
 command line:
 ::
-    python assemble_and_solve.py --input_json example_jsons/small3D_test.json`
+    python assemble_and_solve.py --input_json example_jsons/small3D_test.json
 
 large 3D
 ########

@@ -666,7 +666,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
         print(message)
     del shared_tforms,x,filt_tspecs
     
-class AssembleAndSolve(argschema.ArgSchemaParser):
+class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
     def run(self):
@@ -691,9 +691,9 @@ class AssembleAndSolve(argschema.ArgSchemaParser):
             if self.args['close_stack']:
                 renderapi.stack.set_stack_state(self.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
 
-if __name__=='__main__':
+if __name__=='__main__' and __package__ is None:
     t0 = time.time()
-    mod = AssembleAndSolve(schema_type=EMA_Schema)
+    mod = EMaligner(schema_type=EMA_Schema)
     mod.run()
     print('total time: %0.1f'%(time.time()-t0))
    

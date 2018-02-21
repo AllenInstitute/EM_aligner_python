@@ -15,6 +15,9 @@ In [3]: f = cpm.CheckPointMatches(args=["--input_json","path/to/this.json"])
 In [4]: f.run(1241,1241)
 
 ```
+I run the magic %pylab command to make sure interactive plotting works. Maybe you have a better way.
+
+The arguments to f.run() are the two z values between which you'd like to map the point matches.
 
 ### residual map
 

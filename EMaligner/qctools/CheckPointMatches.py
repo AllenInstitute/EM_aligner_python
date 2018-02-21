@@ -54,6 +54,10 @@ def make_plot(z1,z2,stack,collection):
        clist.append(200) #limit was set at 200 for within section matches
 
     if len(pm)!=0: #only plot if there are matches
+        xmin = 1e9
+        xmax = -1e9
+        ymin = 1e9
+        ymax = -1e9
         for k in np.arange(len(pm)):
             #find the tilespecs
             k1 = np.argwhere(id1==pm[k]['qId']).flatten()
@@ -66,14 +70,25 @@ def make_plot(z1,z2,stack,collection):
                 tmp.append((x2[k2],y2[k2]))
                 lclist.append(tmp)
                 clist.append(len(pm[k]['matches']['q'][0]))
-        print sum(clist[2:]) 
+                for ix in [x1[k1],x2[k2]]:
+                    if ix.min() < xmin:
+                        xmin = ix.min()
+                    if ix.max() > xmax:
+                        xmax = ix.max()
+                for iy in [y1[k1],y2[k2]]:
+                    if iy.min() < ymin:
+                        ymin = iy.min()
+                    if iy.max() > ymax:
+                        ymax = iy.max()
+
         #plot the line segments all at once for speed:
         # https://matplotlib.org/examples/pylab_examples/line_collection2.html
         fig = plt.figure(1,figsize=(11.69,8.27))
         fig.clf()
         ax = fig.add_subplot(111)
-        ax.set_xlim(0,580000)
-        ax.set_ylim(0,580000)
+        border=4000
+        ax.set_xlim(xmin-border,xmax+border)
+        ax.set_ylim(ymin-border,ymax+border)
 
         LC = LineCollection(lclist,cmap=cmap)
         LC.set_array(np.array(clist))

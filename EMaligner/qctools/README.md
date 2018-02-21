@@ -19,6 +19,8 @@ I run the magic %pylab command to make sure interactive plotting works. Maybe yo
 
 The arguments to f.run() are the two z values between which you'd like to map the point matches.
 
+Makes a plot and saves a pdf.
+
 ### residual map
 
 ... coming soon

@@ -21,7 +21,7 @@ The arguments to f.run() are the two z values between which you'd like to map th
 
 Makes a plot and saves a pdf.
 
-<img src="./figures/pointmatch_map_example.png" width="500">
+<img src="./figures/pm_map_example.png" width="500">
 
 ### residual map
 

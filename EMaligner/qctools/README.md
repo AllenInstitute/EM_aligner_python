@@ -20,7 +20,8 @@ I run the magic %pylab command to make sure interactive plotting works. Maybe yo
 The arguments to f.run() are the two z values between which you'd like to map the point matches.
 
 Makes a plot and saves a pdf.
-![alt text](./figures/pointmatch_map_example.png "pointmatch map")
+
+<img src="./figures/pointmatch_map_example.png" width="500">
 
 ### residual map
 

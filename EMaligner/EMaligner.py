@@ -80,7 +80,7 @@ def get_tileids_and_tforms(stack,tform_obj,zvals):
                 tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
             tile_tspecs.append(tspecs[k])
 
-    print('loaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface']))
+    print('---\nloaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface']))
     return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms
 
 class transform_csr:
@@ -347,6 +347,7 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode
                 d,ind,iptr,wts = tform_obj.CSR_tile_pair(matches[k],pinds[k],qinds[k])
                 npts = tform_obj.npts
                 if d is None:
+                    print 'k'
                     continue #if npts<nmin, for example
 
                 #add both tile ids to the list
@@ -478,9 +479,13 @@ def assemble(mod,zvals):
     tile_ind = np.in1d(tile_ids,tiles_used)
     filt_tspecs = tile_tspecs[tile_ind]
     filt_tids = tile_ids[tile_ind]
+
+    slice_ind = np.repeat(tile_ind,tform_obj.DOF_per_tile/len(tile_tforms))
+    A = A[:,slice_ind]
+
     filt_tforms = []
     for j in np.arange(len(tile_tforms)):
-        filt_tforms.append(tile_tforms[j][np.repeat(tile_ind,tform_obj.DOF_per_tile/len(tile_tforms))])
+        filt_tforms.append(tile_tforms[j][slice_ind])
     del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
     
     #create the regularization vectors
@@ -601,7 +606,7 @@ def solve_or_not(mod,A,weights,reg,filt_tforms):
         #regularized least squares
         ATW = A.transpose().dot(weights)
         K = ATW.dot(A) + reg
-        mat_stats(K,'K')
+        #mat_stats(K,'K')
         print(' K created in %0.1f seconds'%(time.time()-t0))
         t0=time.time()
         del weights,ATW
@@ -637,8 +642,7 @@ def solve_or_not(mod,A,weights,reg,filt_tforms):
             precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
         del K,Lm
 
-        message = '***-------------***\n'
-        message = message + ' solved in %0.1f sec\n'%(time.time()-t0)
+        message = ' solved in %0.1f sec\n'%(time.time()-t0)
         message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
         message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
         message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
@@ -653,7 +657,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
         A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod,zvals)
     else:
         A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod,zvals)
-    mat_stats(A,'A')
+    #mat_stats(A,'A')
     print(' A created in %0.1f seconds'%(time.time()-t0))
 
     #solve
@@ -691,7 +695,7 @@ class EMaligner(argschema.ArgSchemaParser):
             if self.args['close_stack']:
                 renderapi.stack.set_stack_state(self.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
 
-if __name__=='__main__' and __package__ is None:
+if __name__=='__main__':
     t0 = time.time()
     mod = EMaligner(schema_type=EMA_Schema)
     mod.run()

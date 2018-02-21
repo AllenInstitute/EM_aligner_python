@@ -1,7 +1,9 @@
-## quality control
-# look at what comes in and goes out of the solver
+# quality control
+## look at what comes in and goes out of the solver
 
 modified so that it uses the same argschema and json inputs as the solver.
+
+### pointmatch map
 
 usage:
 ```
@@ -14,3 +16,6 @@ In [4]: f.run(1241,1241)
 
 ```
 
+### residual map
+
+... coming soon

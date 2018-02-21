@@ -35,10 +35,11 @@ In [3]: f = cr.CheckResiduals(args=["--input_json","path/to/this.json"])
 In [4]: f.run(1241,1241,thr=5)
 
 ```
-This function operates on the output_stack. When using a solve json, it assumes the solve has run and ingested. If that's not the intent, need to pass some different args in.
+This function operates on the output_stack. When using a solve json, it assumes the solve has run and ingested. If that's not the intent, user needs to pass some different args in.
+
 thr sets a color threshold for the plots
 
 Makes a plot and saves a pdf.
 
-<img src="./figures/residual_map_example.png" width="500">
+<img src="./figures/residual_map_example.png" width="900">
 

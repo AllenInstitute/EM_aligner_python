@@ -45,4 +45,17 @@ Makes a plot and saves a pdf.
 
 ### transform maps
 
-...coming soon
+
+usage:
+```
+EM_aligner_python >ipython
+
+In [1]: %pylab
+In [2]: import EMaligner.qctools.CheckTransforms as ct
+In [3]: f = ct.CheckTransforms(args=["--input_json","path/to/this.json"])
+In [4]: f.run(1241)
+
+```
+Makes a plot and saves a pdf.
+
+<img src="./figures/transform_map_example.png" width="900">

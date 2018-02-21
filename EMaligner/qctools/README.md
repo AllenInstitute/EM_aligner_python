@@ -1,5 +1,5 @@
 # quality control
-## look at what comes in and goes out of the solver
+## look at what comes into and goes out of the solver
 
 modified so that it uses the same argschema and json inputs as the solver.
 

@@ -85,7 +85,7 @@ def make_plot(z1,z2,stack,collection,thr=None):
     matches = get_matches(z1,z2,collection,dbconnection)
     xya,xyd = compute_residuals(tids,tforms,matches) 
 
-    fig = plt.figure(1,figsize=(16,4))
+    fig = plt.figure(1,figsize=(40,7.5))
     fig.clf()
     #x residuals
     ax1,d = make_sd_plot(fig,1,3,1,xya[0,:],xya[1,:],xyd[0,:])
@@ -111,20 +111,27 @@ def make_plot(z1,z2,stack,collection,thr=None):
     my = my + '\nmean(|dy|) +/- sigma(|dy|): %0.1f +/- %0.1f pixels'%(np.abs(xyd[1,:]).mean(),np.abs(xyd[1,:]).std())
     mr = 'mean(rss)  +/- sigma(rss):  %0.1f +/- %0.1f pixels'%(rss.mean(),rss.std())
    
-    ax1.set_xlabel(mx,fontsize=8)
-    ax2.set_xlabel(my,fontsize=8)
-    ax3.set_xlabel(mr,fontsize=8)
+    ax1.set_xlabel(mx,fontsize=12)
+    ax2.set_xlabel(my,fontsize=12)
+    ax3.set_xlabel(mr,fontsize=12)
     
-    print mx
-    print my
-    print mr
+    ident = 'stack: %s'%stack['name']
+    ident += '\n'+'collection: %s'%collection['name']
+    ident += '\n'+'z1,z2: %d,%d'%(z1,z2)
+    ax1.set_ylabel(ident,fontsize=10)
+    print('\n%s'%ident)
+    print(mx)
+    print(my)
+    print(mr)
     
     fname = 'residuals_%s_%s_%d_%d.pdf'%(stack['name'],collection['name'],z1,z2)
     pdf = PdfPages(fname)
-    pdf.savefig(fig) #save the figure as a pdf page
+    pdf.savefig(fig,dpi=100) #save the figure as a pdf page
     pdf.close()
     plt.ion()
     plt.show()
+   
+    return fname
 
 class CheckResiduals(argschema.ArgSchemaParser):
     default_schema = EMA_Schema

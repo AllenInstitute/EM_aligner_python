@@ -52,11 +52,17 @@ PetscErrorCode ReadIndex(MPI_Comm COMM, char indexname[], int nfiles, char *csrn
   if (rank==0){
     ierr = PetscFOpen(COMM,indexname,"r",&fp);CHKERRQ(ierr);
     for (i=0;i<nfiles;i++){
-      fscanf(fp,"%*s %s",tmpname);
+      ierr = fscanf(fp,"%*s %s",tmpname);
+      if (ierr!=1){
+        printf("failue in reading %s\n",indexname);
+      }
       sprintf(csrnames[i],"%s/%s",dir,tmpname);
       for (j=0;j<4;j++){
-        fscanf(fp," %*s %ld",&metadata[i][j]);
-        fscanf(fp,"\n");
+        ierr = fscanf(fp," %*s %ld",&metadata[i][j]);
+        if (ierr!=1){
+          printf("failue in reading %s\n",indexname);
+        }
+        ierr = fscanf(fp,"\n");
       }
     }
     ierr = PetscFClose(COMM,fp);CHKERRQ(ierr);
@@ -140,7 +146,7 @@ PetscErrorCode ReadVec(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newve
 }
 
 /*! Read data from a PetscViewer into a Vec (scalar) object. This version good for anticipating allocation across nodes.*/
-PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n,PetscInt nlocal,PetscInt nglobal){
+PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n,PetscInt nlocal,PetscInt nglobal,PetscBool trunc){
 /** 
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF or PETSC_COMM_WORLD.
  * @param[in] viewer A PetscViewer instance.
@@ -149,16 +155,42 @@ PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,V
  * @param[out] *n The number of entries in the new object.
  * @param[in] nlocal The number of entries the local rank will own.
  * @param[in] nglobal The total number of expected entries in newvec.
+ * @param[in] trunc Boolean whether to truncate the imported data.
 */
   PetscErrorCode ierr;
+  Vec            tmpvec;
+  PetscInt       i,ntmp,low,high,*indx;
+  PetscScalar    *vtmp;
   char           name[256];
+
   sprintf(name,"%s",varname);
   ierr = VecCreate(COMM,newvec);CHKERRQ(ierr);
   ierr = VecSetSizes(*newvec,nlocal,nglobal);CHKERRQ(ierr);
   ierr = VecSetType(*newvec,VECMPI);CHKERRQ(ierr);
-  ierr = PetscObjectSetName((PetscObject)*newvec,name);CHKERRQ(ierr);
-  ierr = VecLoad(*newvec,viewer);CHKERRQ(ierr);
-  ierr = VecGetSize(*newvec,n);CHKERRQ(ierr);
+  if(trunc){
+    ierr = VecCreate(MPI_COMM_SELF,&tmpvec);CHKERRQ(ierr);
+    ierr = VecSetType(tmpvec,VECSEQ);CHKERRQ(ierr);
+    ierr = PetscObjectSetName((PetscObject)tmpvec,name);CHKERRQ(ierr);
+    ierr = VecLoad(tmpvec,viewer);CHKERRQ(ierr);
+    ierr = VecGetOwnershipRange(*newvec,&low,&high);CHKERRQ(ierr);
+    indx = (PetscInt *)malloc((high-low)*sizeof(PetscInt));
+    vtmp = (PetscScalar *)malloc((high-low)*sizeof(PetscScalar));
+    for (i=low;i<high;i++){
+      indx[i-low]=i;
+    }
+    ierr = VecGetValues(tmpvec,high-low,indx,vtmp);CHKERRQ(ierr);
+    ierr = VecSetValues(*newvec,high-low,indx,vtmp,INSERT_VALUES);CHKERRQ(ierr);
+    free(indx);
+    free(vtmp);
+    ierr = VecAssemblyBegin(*newvec);CHKERRQ(ierr);
+    ierr = VecAssemblyEnd(*newvec);CHKERRQ(ierr);
+    ierr = VecDestroy(&tmpvec);CHKERRQ(ierr);
+  }
+  else{
+    ierr = PetscObjectSetName((PetscObject)*newvec,name);CHKERRQ(ierr);
+    ierr = VecLoad(*newvec,viewer);CHKERRQ(ierr);
+  }
+  ierr = VecGetSize(*newvec,&ntmp);CHKERRQ(ierr);
   return ierr;
 }
 
@@ -213,6 +245,24 @@ PetscErrorCode ShowMatInfo(MPI_Comm COMM,Mat *m,const char *mesg){
     printf(" fill_ratio_given: %f\n",info.fill_ratio_given);
     printf(" fill_ratio_needed: %f\n",info.fill_ratio_needed);
   }
+  ierr = MatGetInfo(*m,MAT_LOCAL,&info);CHKERRQ(ierr);
+  if (rank==0){ 
+    printf("%s local info from rank %d:\n",mesg,rank);
+    ierr = MatAssembled(*m,&isassembled);CHKERRQ(ierr);
+    printf(" is assembled: %d\n",isassembled);
+    ierr = MatGetSize(*m,&rowcheck,&colcheck);CHKERRQ(ierr);
+    printf(" global size %ld x %ld\n",rowcheck,colcheck);
+    //ierr = MatGetInfo(*m,MAT_GLOBAL_SUM,&info);CHKERRQ(ierr);
+    printf(" block_size: %f\n",info.block_size); 
+    printf(" nz_allocated: %f\n",info.nz_allocated);
+    printf(" nz_used: %f\n",info.nz_used);
+    printf(" nz_unneeded: %f\n",info.nz_unneeded);
+    printf(" memory: %f\n",info.memory); 
+    printf(" assemblies: %f\n",info.assemblies);
+    printf(" mallocs: %f\n",info.mallocs);
+    printf(" fill_ratio_given: %f\n",info.fill_ratio_given);
+    printf(" fill_ratio_needed: %f\n",info.fill_ratio_needed);
+  }
   return ierr;
 }
 
@@ -234,7 +284,8 @@ void GetGlobalLocalCounts(int nfiles, PetscInt **metadata, int local_firstfile, 
   *local_nrow=0;
   *local_nnz=0;
   *local_row0=0;
-
+  cmin=0;
+  cmax=0;
   for (i=0;i<nfiles;i++){
     *global_nrow+=metadata[i][0];
     *global_nnz+=metadata[i][3];
@@ -368,7 +419,7 @@ PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_n
 }
 
 /*! Creates a diagonal matrix with the weights as the entries.*/
-PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,Mat *L){
+PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscBool trunc,Mat *L){
 /** 
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] local_nrow Number of rows for this rank
@@ -390,14 +441,15 @@ PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt glob
   //VecSetType(global_reg,VECMPI);
   sprintf(tmp,"%s/regularization.h5",dir);
   ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
-  ierr = ReadVecWithSizes(COMM,viewer,(char *)"lambda",&global_reg,&junk,local_nrow,global_nrow);CHKERRQ(ierr);
+  ierr = ReadVecWithSizes(COMM,viewer,(char *)"lambda",&global_reg,&junk,local_nrow,global_nrow,trunc);CHKERRQ(ierr);
 
   ierr = MatCreate(PETSC_COMM_WORLD,L);CHKERRQ(ierr);
   ierr = MatSetSizes(*L,local_nrow,local_nrow,global_nrow,global_nrow);CHKERRQ(ierr);
   ierr = MatSetType(*L,MATMPIAIJ);CHKERRQ(ierr);
   ierr = MatMPIAIJSetPreallocation(*L,1,NULL,0,NULL);CHKERRQ(ierr);
   ierr = MatDiagonalSet(*L,global_reg,INSERT_VALUES);CHKERRQ(ierr);
-
+  MatAssemblyBegin(*L,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(*L,MAT_FINAL_ASSEMBLY);
   ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
   VecDestroy(&global_reg);
   return ierr;
@@ -426,7 +478,7 @@ PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS){
 }
 
 /*! Read the RHS vectors stored in the regularization file. */
-PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscInt nrhs,Vec rhs[]){
+PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscInt nrhs,PetscBool trunc,Vec rhs[]){
 /** 
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] dir string containing the directory
@@ -448,7 +500,7 @@ PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt glob
     //ierr = VecCreate(COMM,&rhs[i]);CHKERRQ(ierr);
     //ierr = VecSetSizes(rhs[i],local_nrow,global_nrow);CHKERRQ(ierr);
     //ierr = VecSetType(rhs[i],VECMPI);CHKERRQ(ierr);
-    ierr = ReadVecWithSizes(COMM,viewer,tmp,&rhs[i],&junk,local_nrow,global_nrow);CHKERRQ(ierr);
+    ierr = ReadVecWithSizes(COMM,viewer,tmp,&rhs[i],&junk,local_nrow,global_nrow,trunc);CHKERRQ(ierr);
   }
   ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
   return ierr;

@@ -17,7 +17,7 @@ PetscErrorCode SetFiles(MPI_Comm COMM, int nfiles, PetscInt *firstfile, PetscInt
 
 PetscErrorCode ReadVec(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n);
 
-PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n,PetscInt nlocal,PetscInt nglobal);
+PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n,PetscInt nlocal,PetscInt nglobal, PetscBool trunc);
 
 PetscErrorCode ReadIndexSet(MPI_Comm COMM,PetscViewer viewer,char *varname,IS *newIS,long *n);
 
@@ -29,9 +29,9 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
 
 PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_nrow,PetscInt local_row0,PetscInt global_nrow,Mat *W);
 
-PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,Mat *L);
+PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscBool trunc,Mat *L);
 
 PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS);
 
-PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscInt nrhs,Vec rhs[]);
+PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscInt nrhs,PetscBool trunc,Vec rhs[]);
 

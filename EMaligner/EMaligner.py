@@ -11,7 +11,6 @@ import h5py
 import os
 import sys
 
-
 def make_dbconnection(collection,which='tile'):
     #connect to the database
     if collection['db_interface']=='mongo':
@@ -29,6 +28,21 @@ def make_dbconnection(collection,which='tile'):
         print('invalid interface in make_dbconnection()')
         return
     return dbconnection
+
+def get_unused_tspecs(stack,tids):
+    #connect to the database
+    dbconnection = make_dbconnection(stack)
+    tspecs = []
+    if stack['db_interface']=='render':
+        for t in tids:
+            tspecs.append(renderapi.tilespec.get_tile_spec(stack['name'],t,render=dbconnection,owner=stack['owner'],project=stack['project']))
+    if stack['db_interface']=='mongo':
+        #cursor = dbconnection.find({'z':float(z)}) #no order
+        for t in tids:
+            tmp = list(dbconnection.find({'tileId':t}))
+            tspecs.append(renderapi.tilespec.TileSpec(json=tmp[0])) #move to renderapi object
+    return np.array(tspecs) 
+
 
 def get_tileids_and_tforms(stack,tform_obj,zvals):
     #connect to the database
@@ -429,7 +443,7 @@ def create_regularization(regularization,tform_obj,tile_tforms):
     outr.data = reg
     return outr
 
-def write_reg_and_tforms(output_mode,hdf5_options,filt_tforms,reg,filt_tids):
+def write_reg_and_tforms(output_mode,hdf5_options,filt_tforms,reg,filt_tids,unused_tids):
     if output_mode=='hdf5':
         #write the input transforms to disk
         fname = hdf5_options['output_dir']+'/regularization.h5'
@@ -454,6 +468,10 @@ def write_reg_and_tforms(output_mode,hdf5_options,filt_tforms,reg,filt_tids):
         dt = h5py.special_dtype(vlen=str)
         dset = f.create_dataset("tile_ids",(filt_tids.size,),dtype=dt)
         dset[:] = filt_tids
+        #keep track here what tile_ids were not used
+        dt = h5py.special_dtype(vlen=str)
+        dset = f.create_dataset("unused_tile_ids",(unused_tids.size,),dtype=dt)
+        dset[:] = unused_tids
         f.close()
         print('wrote %s'%fname)
 
@@ -479,8 +497,11 @@ def assemble(mod,zvals):
     tile_ind = np.in1d(tile_ids,tiles_used)
     filt_tspecs = tile_tspecs[tile_ind]
     filt_tids = tile_ids[tile_ind]
+    unused_tids = tile_ids[np.invert(tile_ind)]
 
+    #remove columns in A for unused tiles
     slice_ind = np.repeat(tile_ind,tform_obj.DOF_per_tile/len(tile_tforms))
+    #for large matrices, this might be expensive to perform on CSR format
     A = A[:,slice_ind]
 
     filt_tforms = []
@@ -492,9 +513,9 @@ def assemble(mod,zvals):
     reg = create_regularization(mod.args['regularization'],tform_obj,filt_tforms)
 
     #output the regularization vectors to hdf5 file
-    write_reg_and_tforms(mod.args['output_mode'],mod.args['hdf5_options'],filt_tforms,reg,filt_tids)
+    write_reg_and_tforms(mod.args['output_mode'],mod.args['hdf5_options'],filt_tforms,reg,filt_tids,unused_tids)
 
-    return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
+    return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids
 
 def start_from_file(mod,zvals):
     #make a transform object
@@ -511,6 +532,7 @@ def start_from_file(mod,zvals):
     f = h5py.File(fdir+'/regularization.h5','r')
     reg = f.get('lambda')[()]
     filt_tids = f.get('tile_ids')[()]
+    unused_tids = f.get('unused_tile_ids')[()]
     k=0
     filt_tforms=[]
     while True:
@@ -558,7 +580,7 @@ def start_from_file(mod,zvals):
 
     print('read inputs from files')
 
-    return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms
+    return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids
 
 def mat_stats(m,name):
     print(' matrix %s: '%name+' format: ',m.getformat(),', shape: ',m.shape,' nnz: ',m.nnz)
@@ -566,7 +588,7 @@ def mat_stats(m,name):
         asymm = np.any(m.transpose().data != m.data)
         print(' symm: ',not asymm)
 
-def write_to_new_stack(name,tform_type,tspecs,shared_tforms,x,ingestconn):
+def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids):
     #replace the last transform in the tilespec with the new one
     for m in np.arange(len(tspecs)):
         if 'affine' in tform_type:
@@ -584,7 +606,10 @@ def write_to_new_stack(name,tform_type,tspecs,shared_tforms,x,ingestconn):
             tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
             tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
     tspecs = tspecs.tolist()
-    renderapi.client.import_tilespecs_parallel(name,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+    
+    unused_tspecs = get_unused_tspecs(input_stack,unused_tids)
+    tspecs = tspecs + unused_tspecs.tolist()
+    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
     
 def solve_or_not(mod,A,weights,reg,filt_tforms):
     t0=time.time()
@@ -654,9 +679,9 @@ def assemble_and_solve(mod,zvals,ingestconn):
     t00 = t0
     #assembly
     if mod.args['start_from_file']!='':
-        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = start_from_file(mod,zvals)
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = start_from_file(mod,zvals)
     else:
-        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms = assemble(mod,zvals)
+        A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = assemble(mod,zvals)
     #mat_stats(A,'A')
     print(' A created in %0.1f seconds'%(time.time()-t0))
 
@@ -666,7 +691,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
     del A
 
     if mod.args['output_mode']=='stack':
-        write_to_new_stack(mod.args['output_stack']['name'],mod.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn)
+        write_to_new_stack(mod.args['input_stack'],mod.args['output_stack']['name'],mod.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids)
         print(message)
     del shared_tforms,x,filt_tspecs
     
@@ -674,7 +699,8 @@ class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
     def run(self):
-         #specify the z values
+        t0 = time.time()
+        #specify the z values
         zvals = np.arange(self.args['first_section'],self.args['last_section']+1)
 
         ingestconn=None
@@ -694,10 +720,9 @@ class EMaligner(argschema.ArgSchemaParser):
         if ingestconn!=None:
             if self.args['close_stack']:
                 renderapi.stack.set_stack_state(self.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
+        print('total time: %0.1f'%(time.time()-t0))
 
 if __name__=='__main__':
-    t0 = time.time()
     mod = EMaligner(schema_type=EMA_Schema)
     mod.run()
-    print('total time: %0.1f'%(time.time()-t0))
    

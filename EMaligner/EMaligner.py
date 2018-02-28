@@ -47,7 +47,7 @@ def get_unused_tspecs(stack,tids):
 def get_tileids_and_tforms(stack,tform_obj,zvals):
     #connect to the database
     dbconnection = make_dbconnection(stack)
-
+ 
     tile_ids = []
     tile_tforms = []
     tile_tspecs = []
@@ -355,6 +355,8 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode
             nrows = 0
 
             tilepair_weightfac = tilepair_weight(i,j,matrix_assembly)
+
+            print('nmatches: %d'%nmatches)
 
             for k in np.arange(nmatches):
                 #create the CSR sub-matrix for this tile pair
@@ -667,12 +669,19 @@ def solve_or_not(mod,A,weights,reg,filt_tforms):
             precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
         del K,Lm
 
+        error = np.linalg.norm(err)
+
+        results={}
+        results['time']=time.time()-t0
+        results['precision']=precision
+        results['error']=error
+
         message = ' solved in %0.1f sec\n'%(time.time()-t0)
         message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
-        message = message + ' error     [norm(Ax-b)] = %0.3f\n'%(np.linalg.norm(err))
+        message = message + ' error     [norm(Ax-b)] = %0.3f\n'%error
         message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
 
-    return message,x
+    return message,x,results
 
 def assemble_and_solve(mod,zvals,ingestconn):
     t0 = time.time()
@@ -686,7 +695,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
     print(' A created in %0.1f seconds'%(time.time()-t0))
 
     #solve
-    message,x = solve_or_not(mod,A,weights,reg,filt_tforms)
+    message,x,results = solve_or_not(mod,A,weights,reg,filt_tforms)
     print(message)
     del A
 
@@ -694,6 +703,7 @@ def assemble_and_solve(mod,zvals,ingestconn):
         write_to_new_stack(mod.args['input_stack'],mod.args['output_stack']['name'],mod.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids)
         print(message)
     del shared_tforms,x,filt_tspecs
+    return results
     
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
@@ -712,7 +722,7 @@ class EMaligner(argschema.ArgSchemaParser):
         #montage
         if self.args['solve_type']=='montage':
             for z in zvals:
-                assemble_and_solve(self,[z],ingestconn)
+                self.results = assemble_and_solve(self,[z],ingestconn)
         #3D
         elif self.args['solve_type']=='3D':
             assemble_and_solve(self,zvals,ingestconn)

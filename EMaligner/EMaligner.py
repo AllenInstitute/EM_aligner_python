@@ -363,7 +363,6 @@ def create_CSR_A(collection,matrix_assembly,tform_obj,tile_ids,zvals,output_mode
                 d,ind,iptr,wts = tform_obj.CSR_tile_pair(matches[k],pinds[k],qinds[k])
                 npts = tform_obj.npts
                 if d is None:
-                    print 'k'
                     continue #if npts<nmin, for example
 
                 #add both tile ids to the list

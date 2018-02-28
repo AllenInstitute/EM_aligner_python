@@ -37,5 +37,5 @@ def test_first_test(render,montage_pointmatches,raw_stack):
     montage_parameters['pointmatch']['name'] = montage_pointmatches
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
     mod.run()
-    assert mod.results['precision'] < 3e-8
-    assert mod.results['error'] < 115
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 200

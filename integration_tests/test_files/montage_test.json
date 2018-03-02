@@ -1,9 +1,10 @@
 {
-    "first_section": 1020, 
-    "last_section": 1020,
+    "first_section": 1015, 
+    "last_section": 1015,
     "solve_type": "montage",
     "close_stack": "True",
     "transformation": "affine",
+    "output_mode": "stack",
     "start_from_file": "",
     "input_stack": {
         "owner": "{{render_owner}}",
@@ -18,7 +19,7 @@
         "db_interface": "mongo"
     }, 
     "pointmatch": {
-        "owner": "{{render_point_match_owner}}", 
+        "owner": "{{render_owner}}", 
         "name": "{{render_point_match_collection}}",
         "host": "{{render_host}}", 
         "port": {{render_port}}, 
@@ -40,8 +41,7 @@
         "collection_type": "stack",
         "db_interface": "render"
     }, 
-    "output_options": {
-        "output_mode": "stack",
+    "hdf5_options": {
         "output_dir": "{{solver_output_dir}}",
         "chunks_per_file": -1
     },

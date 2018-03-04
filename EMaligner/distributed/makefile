@@ -19,7 +19,7 @@ one_file_one_node: one_file_one_node.o  chkopts
 	${RM} one_file_one_node.o
 
 em_dist_solve: ema.o em_dist_solve.o chkopts
-	-${CLINKER} -o em_dist_solve ema.o em_dist_solve.o  ${PETSC_KSP_LIB}
+	-${CLINKER} -o em_dist_solve_${PETSC_ARCH} ema.o em_dist_solve.o  ${PETSC_KSP_LIB}
 	${RM} em_dist_solve.o ema.o
 
 run_one_file_one_node:

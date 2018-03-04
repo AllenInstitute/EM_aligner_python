@@ -695,6 +695,10 @@ def assemble_and_solve(mod,zvals,ingestconn):
 
     #solve
     message,x,results = solve_or_not(mod,A,weights,reg,filt_tforms)
+    scale = np.sqrt(np.power(x[0::6],2.0)+np.power(x[1::6],2.0))
+    scale += np.sqrt(np.power(x[3::6],2.0)+np.power(x[4::6],2.0))
+    scale = scale.sum()/filt_tids.size/2
+    message = message + '\navg scale = %0.2f'%scale
     print(message)
     del A
 

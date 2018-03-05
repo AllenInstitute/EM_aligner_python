@@ -21,17 +21,19 @@ render_output_owner = os.environ.get("RENDER_OUTPUT_OWNER","test")
 client_script_location = os.environ.get('RENDER_CLIENT_SCRIPTS',
                           ('/var/www/render/render-ws-java-client/'
                           'src/main/scripts/'))
+project = 'test_project'
+outdir = os.environ.get('EM_ALIGNER_OUTPUT_DIR','/home/danielk/tmp')
 
 render_params = {
     'host':render_host,
     'port':render_port,
     'owner':'test',
-    'project':'test_project',
+    'project': project,
     'client_scripts':client_script_location
 }
 
 montage_parameters = render_json_template(example_env, 'montage_test.json',
-                                          render_project = 'em_montage_test',
+                                          render_project = project,
                                           render_host = render_host,
                                           render_owner = render_owner,
                                           render_port = render_port,
@@ -39,21 +41,20 @@ montage_parameters = render_json_template(example_env, 'montage_test.json',
                                           mongo_port = mongo_port,
                                           render_output_owner = render_output_owner,
                                           render_client_scripts = client_script_location,
-                                          solver_output_dir = 'home/$USER'
+                                          solver_output_dir = outdir
                                           )
 
-#test_pm_parameters = render_json_template(example_env,
-#                                          'point_match_parameters.json',
-#                                           render_host = render_host,
-#                                           render_port = render_port,
-#                                           render_project = montage_project,
-#                                           render_owner = render_test_owner,
-#                                           render_client_scripts = client_script_location,
-#                                           spark_log_dir = tempfile.mkdtemp(),
-#                                           point_match_collection = 'test_montage_collection')
+rough_output_stack='rough_result_rigid'
+rough_parameters = render_json_template(example_env, 'rough_test.json',
+                                          render_project = project,
+                                          render_host = render_host,
+                                          render_owner = render_owner,
+                                          render_port = render_port,
+                                          render_mongo_host = render_mongo_host,
+                                          mongo_port = mongo_port,
+                                          render_output_owner = render_output_owner,
+                                          render_client_scripts = client_script_location,
+                                          solver_output_dir = outdir,
+                                          rough_output_stack=rough_output_stack
+                                          )
 
-#RAW_STACK_INPUT_JSON = render_json_template(example_env, 
-#                                            'raw_tiles_for_montage.json',
-#                                            test_data_root=test_files_dir)
-#MONT_PM_INPUT_JSON = json.load(open(test_files_dir+'montage_pointmatches.json','r'))
-#montage_z = 1015

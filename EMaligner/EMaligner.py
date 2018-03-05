@@ -253,7 +253,7 @@ class EMaligner(argschema.ArgSchemaParser):
                 self.results = self.assemble_and_solve([z],ingestconn)
         #3D
         elif self.args['solve_type']=='3D':
-            self.assemble_and_solve(zvals,ingestconn)
+            self.results = self.assemble_and_solve(zvals,ingestconn)
         
         if ingestconn!=None:
             if self.args['close_stack']:
@@ -279,18 +279,11 @@ class EMaligner(argschema.ArgSchemaParser):
         else:
             A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = self.assemble_from_db(zvals)
         #mat_stats(A,'A')
+        self.ntiles_used = filt_tids.size
         print(' A created in %0.1f seconds'%(time.time()-t0))
     
         #solve
         message,x,results = self.solve_or_not(A,weights,reg,filt_tforms)
-        if self.args['transformation']=='rigid':
-            scale = np.sqrt(np.power(x[0::self.DOF_per_tile],2.0)+np.power(x[1::self.DOF_per_tile],2.0))
-        if 'affine' in self.args['transformation']:
-            scale = np.sqrt(np.power(x[0::self.DOF_per_tile],2.0)+np.power(x[1::self.DOF_per_tile],2.0))
-            scale += np.sqrt(np.power(x[3::self.DOF_per_tile],2.0)+np.power(x[4::self.DOF_per_tile],2.0))
-            scale/=2
-        scale = scale.sum()/filt_tids.size
-        message = message + '\n avg scale = %0.2f'%scale
         print(message)
         del A
     
@@ -512,6 +505,8 @@ class EMaligner(argschema.ArgSchemaParser):
         file_number=0
         file_chunks = 0
         file_data = None
+        file_weights = None
+        c = None
         tiles_used = []
     
         if self.args['hdf5_options']['chunks_per_file']==-1:
@@ -644,10 +639,14 @@ class EMaligner(argschema.ArgSchemaParser):
                     file_chunks = 0
                     file_number += 1
                     file_zlist = []
-     
-        outw = sparse.eye(file_weights.size,format='csr')
-        outw.data = file_weights
-        del file_weights 
+                    file_data = None
+        
+        outw=None
+        if file_weights is not None:
+            outw = sparse.eye(file_weights.size,format='csr')
+            outw.data = file_weights
+            del file_weights 
+            file_weights = None
         return c,outw,np.unique(np.array(tiles_used))
   
     def create_regularization(self,tile_tforms):
@@ -737,6 +736,15 @@ class EMaligner(argschema.ArgSchemaParser):
            message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
            message = message + ' error     [norm(Ax-b)] = %0.3f\n'%error
            message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
+
+           if self.args['transformation']=='rigid':
+               scale = np.sqrt(np.power(x[0::self.DOF_per_tile],2.0)+np.power(x[1::self.DOF_per_tile],2.0))
+           if 'affine' in self.args['transformation']:
+               scale = np.sqrt(np.power(x[0::self.DOF_per_tile],2.0)+np.power(x[1::self.DOF_per_tile],2.0))
+               scale += np.sqrt(np.power(x[3::self.DOF_per_tile],2.0)+np.power(x[4::self.DOF_per_tile],2.0))
+               scale/=2
+           scale = scale.sum()/self.ntiles_used
+           message = message + '\n avg scale = %0.2f'%scale
    
        return message,x,results
 

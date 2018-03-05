@@ -87,10 +87,7 @@ def test_rough_rigid(render,rough_pointmatches,rough_input_stack,tmpdir):
     #check again with multiple hdf5 files
     #check output mode HDF5
     rough_parameters['output_mode'] = 'hdf5'
-    rough_parameters['hdf5_options']['chunks_per_file'] = 3
-    #if not os.path.exists(rough_parameters['hdf5_options']['output_dir']):
-    #    cmd = 'mkdir -p '+rough_parameters['hdf5_options']['output_dir']
-    #    os.system(cmd)
+    rough_parameters['hdf5_options']['chunks_per_file'] = 2
     mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
     mod.run()
     indexfile = rough_parameters['hdf5_options']['output_dir']+'/index.txt'

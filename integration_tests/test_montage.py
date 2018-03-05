@@ -33,7 +33,7 @@ def montage_pointmatches(render):
 
 def test_first_test(render,montage_pointmatches,raw_stack):
     montage_parameters['input_stack']['name']=raw_stack
-    montage_parameters['input_stack']['project']=render_params['project']
+#    montage_parameters['input_stack']['project']=render_params['project']
     montage_parameters['pointmatch']['name'] = montage_pointmatches
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
     mod.run()

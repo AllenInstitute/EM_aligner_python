@@ -32,7 +32,7 @@ def rough_pointmatches(render):
     renderapi.pointmatch.import_matches(test_rough_collection,pms_from_json,render=render)
     yield test_rough_collection
 
-def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
+def test_rough_rigid(render,rough_pointmatches,rough_input_stack,tmpdir):
     #do a rough rigid alignment
     rough_parameters['input_stack']['name']=rough_input_stack
     #rough_parameters['input_stack']['project']=render_params['project']
@@ -70,6 +70,7 @@ def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
 
     #check output mode HDF5
     rough_parameters['output_mode'] = 'hdf5'
+    rough_parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
     mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
     mod.run()
     indexfile = rough_parameters['hdf5_options']['output_dir']+'/index.txt'
@@ -87,8 +88,9 @@ def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
     #check output mode HDF5
     rough_parameters['output_mode'] = 'hdf5'
     rough_parameters['hdf5_options']['chunks_per_file'] = 3
-    if not os.path.exists(rough_parameters['hdf5_options']['output_dir']):
-        os.mkdir(rough_parameters['hdf5_options']['output_dir'])
+    #if not os.path.exists(rough_parameters['hdf5_options']['output_dir']):
+    #    cmd = 'mkdir -p '+rough_parameters['hdf5_options']['output_dir']
+    #    os.system(cmd)
     mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
     mod.run()
     indexfile = rough_parameters['hdf5_options']['output_dir']+'/index.txt'

@@ -210,7 +210,7 @@ def mat_stats(m,name):
         asymm = np.any(m.transpose().data != m.data)
         print(' symm: ',not asymm)
 
-def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids):
+def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids,outarg):
     #replace the last transform in the tilespec with the new one
     for m in np.arange(len(tspecs)):
         if 'affine' in tform_type:
@@ -231,7 +231,26 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
     
     unused_tspecs = get_unused_tspecs(input_stack,unused_tids)
     tspecs = tspecs + unused_tspecs.tolist()
-    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+    print('\ningesting results to %s:%d %s__%s__%s'%(ingestconn.DEFAULT_HOST, ingestconn.DEFAULT_PORT,ingestconn.DEFAULT_OWNER,ingestconn.DEFAULT_PROJECT,outputname))
+    if outarg=='null':
+        stdeo = open(os.devnull,'wb')
+        print('render output is going to /dev/null')
+    elif outarg=='stdout':
+        stdeo = sys.stdout
+        print('render output is going to stdout')
+    else:
+        i=0
+        odir,oname = os.path.split(outarg)
+        while os.path.exists(outarg):
+            t = oname.split('.')
+            outarg = odir+'/'
+            for it in t[:-1]:
+                outarg += it
+            outarg += '%d.%s'%(i,t[-1])
+            i += 1
+        stdeo = open(outarg,'a')
+        print('render output is going to %s'%outarg)
+    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False,stderr=stdeo,stdout=stdeo)
     
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
@@ -280,7 +299,7 @@ class EMaligner(argschema.ArgSchemaParser):
             A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = self.assemble_from_db(zvals)
         #mat_stats(A,'A')
         self.ntiles_used = filt_tids.size
-        print(' A created in %0.1f seconds'%(time.time()-t0))
+        print('\n A created in %0.1f seconds'%(time.time()-t0))
     
         #solve
         message,x,results = self.solve_or_not(A,weights,reg,filt_tforms)
@@ -288,8 +307,9 @@ class EMaligner(argschema.ArgSchemaParser):
         del A
     
         if self.args['output_mode']=='stack':
-            write_to_new_stack(self.args['input_stack'],self.args['output_stack']['name'],self.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids)
-            print(message)
+            write_to_new_stack(self.args['input_stack'],self.args['output_stack']['name'],self.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids,self.args['render_output'])
+            if self.args['render_output']=='stdout':
+                print(message)
         del shared_tforms,x,filt_tspecs
         return results
 
@@ -572,8 +592,6 @@ class EMaligner(argschema.ArgSchemaParser):
                 nrows = 0
     
                 tilepair_weightfac = tilepair_weight(i,j,self.args['matrix_assembly'])
-    
-                print('nmatches: %d'%nmatches)
     
                 for k in np.arange(nmatches):
                     #create the CSR sub-matrix for this tile pair

@@ -43,6 +43,7 @@ class EMA_Schema(argschema.ArgSchema):
     transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
     output_mode = argschema.fields.String(default='hdf5')
     start_from_file = argschema.fields.String(default='',description = 'fullpath to index.txt')
+    render_output = argschema.fields.String(default='null',description = '/path/to/file, null (devnull), or stdout for where to redirect render output')
     input_stack = argschema.fields.Nested(stack)
     output_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)

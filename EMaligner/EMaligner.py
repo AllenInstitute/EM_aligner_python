@@ -7,7 +7,10 @@ import time
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import spsolve, factorized
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 import h5py
+warnings.resetwarnings()
 import os
 import sys
 
@@ -127,7 +130,6 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offse
     fdir = ''
     for t in tmp[:-1]:
         fdir=fdir+'/'+t
-    print("fdir:",fdir)
     f=open(fdir+'/index.txt',fmode)
     imesg =  'file %s '%tmp[-1]
     imesg += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
@@ -210,7 +212,7 @@ def mat_stats(m,name):
         asymm = np.any(m.transpose().data != m.data)
         print(' symm: ',not asymm)
 
-def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids):
+def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids,outarg):
     #replace the last transform in the tilespec with the new one
     for m in np.arange(len(tspecs)):
         if 'affine' in tform_type:
@@ -231,7 +233,26 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
     
     unused_tspecs = get_unused_tspecs(input_stack,unused_tids)
     tspecs = tspecs + unused_tspecs.tolist()
-    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
+    print('\ningesting results to %s:%d %s__%s__%s'%(ingestconn.DEFAULT_HOST, ingestconn.DEFAULT_PORT,ingestconn.DEFAULT_OWNER,ingestconn.DEFAULT_PROJECT,outputname))
+    if outarg=='null':
+        stdeo = open(os.devnull,'wb')
+        print('render output is going to /dev/null')
+    elif outarg=='stdout':
+        stdeo = sys.stdout
+        print('render output is going to stdout')
+    else:
+        i=0
+        odir,oname = os.path.split(outarg)
+        while os.path.exists(outarg):
+            t = oname.split('.')
+            outarg = odir+'/'
+            for it in t[:-1]:
+                outarg += it
+            outarg += '%d.%s'%(i,t[-1])
+            i += 1
+        stdeo = open(outarg,'a')
+        print('render output is going to %s'%outarg)
+    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False,stderr=stdeo,stdout=stdeo)
     
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
@@ -280,7 +301,7 @@ class EMaligner(argschema.ArgSchemaParser):
             A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = self.assemble_from_db(zvals)
         #mat_stats(A,'A')
         self.ntiles_used = filt_tids.size
-        print(' A created in %0.1f seconds'%(time.time()-t0))
+        print('\n A created in %0.1f seconds'%(time.time()-t0))
     
         #solve
         message,x,results = self.solve_or_not(A,weights,reg,filt_tforms)
@@ -288,25 +309,26 @@ class EMaligner(argschema.ArgSchemaParser):
         del A
     
         if self.args['output_mode']=='stack':
-            write_to_new_stack(self.args['input_stack'],self.args['output_stack']['name'],self.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids)
-            print(message)
+            write_to_new_stack(self.args['input_stack'],self.args['output_stack']['name'],self.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids,self.args['render_output'])
+            if self.args['render_output']=='stdout':
+                print(message)
         del shared_tforms,x,filt_tspecs
         return results
 
     def assemble_from_hdf5(self,zvals):
         #get the tile IDs and transforms
         tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(self.args['input_stack'],self.args['transformation'],zvals)
-        
         tmp = self.args['start_from_file'].split('/')
         fdir = ''
         for t in tmp[:-1]:
             fdir=fdir+'/'+t
         
         #get from the regularization file
-        f = h5py.File(fdir+'/regularization.h5','r')
+        fname = fdir+'/regularization.h5'
+        f = h5py.File(fname,'r')
         reg = f.get('lambda')[()]
-        filt_tids = f.get('tile_ids')[()]
-        unused_tids = f.get('unused_tile_ids')[()]
+        filt_tids = np.array(f.get('tile_ids')[()]).astype('U')
+        unused_tids = np.array(f.get('unused_tile_ids')[()]).astype('U')
         k=0
         filt_tforms=[]
         while True:
@@ -316,17 +338,19 @@ class EMaligner(argschema.ArgSchemaParser):
                 k+=1
             else:
                break
+        #get the tile IDs and transforms
         tile_ind = np.in1d(tile_ids,filt_tids)
         filt_tspecs = tile_tspecs[tile_ind]
         f.close()
+        print('  %s read'%fname)
     
         outr = sparse.eye(reg.size,format='csr')
         outr.data = reg
         reg = outr
     
         #get from the matrix files
-        print('fdir:',fdir)
-        f = open(fdir+'/index.txt','r')
+        indexname = fdir+'/index.txt'
+        f = open(indexname,'r')
         lines = f.readlines()
         f.close()
         data = np.array([]).astype('float64')
@@ -345,6 +369,7 @@ class EMaligner(argschema.ArgSchemaParser):
                 indptr = np.append(indptr,f.get('indptr')[()][1:]+indptr[-1])
             weights = np.append(weights,f.get('weights')[()])
             f.close()
+            print('  %s read'%fname)
     
         A=csr_matrix((data,indices,indptr))
     
@@ -352,7 +377,7 @@ class EMaligner(argschema.ArgSchemaParser):
         outw.data = weights
         weights = outw
     
-        print('read inputs from files')
+        print('csr inputs read from files listed in : %s'%indexname)
     
         return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids
 
@@ -372,6 +397,7 @@ class EMaligner(argschema.ArgSchemaParser):
         A,weights,tiles_used = self.create_CSR_A(tile_ids,zvals)
     
         #some book-keeping if there were some unused tiles
+        t0 = time.time()
         tile_ind = np.in1d(tile_ids,tiles_used)
         filt_tspecs = tile_tspecs[tile_ind]
         filt_tids = tile_ids[tile_ind]
@@ -420,7 +446,7 @@ class EMaligner(argschema.ArgSchemaParser):
        if npts > self.args['matrix_assembly']['npts_max']: #really dumb filter for limiting size
            npts=self.args['matrix_assembly']['npts_max']
        if npts < self.args['matrix_assembly']['npts_min']:
-           return None,None,None,None
+           return None,None,None,None,None
 
        m = np.arange(npts)
        mstep = m*self.nnz_per_row
@@ -573,8 +599,6 @@ class EMaligner(argschema.ArgSchemaParser):
     
                 tilepair_weightfac = tilepair_weight(i,j,self.args['matrix_assembly'])
     
-                print('nmatches: %d'%nmatches)
-    
                 for k in np.arange(nmatches):
                     #create the CSR sub-matrix for this tile pair
                     d,ind,iptr,wts,npts = self.CSR_from_tile_pair(matches[k],pinds[k],qinds[k])
@@ -678,6 +702,7 @@ class EMaligner(argschema.ArgSchemaParser):
            for arg in sys.argv:
                message += arg+' '
            message = message+ '--start_from_file '+self.args['hdf5_options']['output_dir']
+           message = message+ ' --output_mode none'
            message += '\n\nor, run it again to solve with no output:\n\n'
            message += 'python '
            for arg in sys.argv:

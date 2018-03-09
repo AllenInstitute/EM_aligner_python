@@ -4,4 +4,3 @@ numpy
 scipy
 pymongo
 h5py
-multiprocessing

@@ -38,6 +38,7 @@ class stack(db_params):
 class EMA_Schema(argschema.ArgSchema):
     first_section = argschema.fields.Int(default=1000, description = 'first section for matrix assembly')
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
+    n_parallel_jobs = argschema.fields.Int(default=4, description = 'number of parallel jobs that will run for assembly')
     solve_type = argschema.fields.String(default='')
     close_stack = argschema.fields.Boolean(default=True)
     transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])

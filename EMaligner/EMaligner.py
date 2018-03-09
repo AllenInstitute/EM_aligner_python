@@ -13,6 +13,7 @@ import h5py
 warnings.resetwarnings()
 import os
 import sys
+import multiprocessing
 
 def make_dbconnection(collection,which='tile'):
     #connect to the database
@@ -40,7 +41,6 @@ def get_unused_tspecs(stack,tids):
         for t in tids:
             tspecs.append(renderapi.tilespec.get_tile_spec(stack['name'],t,render=dbconnection,owner=stack['owner'],project=stack['project']))
     if stack['db_interface']=='mongo':
-        #cursor = dbconnection.find({'z':float(z)}) #no order
         for t in tids:
             tmp = list(dbconnection.find({'tileId':t}))
             tspecs.append(renderapi.tilespec.TileSpec(json=tmp[0])) #move to renderapi object
@@ -64,7 +64,6 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
             for st in tmp.transforms:
                 shared_tforms.append(st)
         if stack['db_interface']=='mongo':
-            #cursor = dbconnection.find({'z':float(z)}) #no order
             cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)]) #like renderapi order?
             tspecs = list(cursor)
             refids = []
@@ -73,7 +72,6 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
                     if 'refId' in ts['transforms']['specList'][m]:
                         refids.append(ts['transforms']['specList'][m]['refId'])
             refids = np.unique(np.array(refids))
-
             #be selective of which transforms to pass on to the new stack
             dbconnection2 = make_dbconnection(stack,which='transform')
             for refid in refids:
@@ -99,18 +97,13 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
     print('---\nloaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface']))
     return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms
 
-def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offsets):
+def write_chunk_to_file(fname,c,file_weights):
     ### data file
     print(' writing to file: %s'%fname)
     fcsr = h5py.File(fname,"w")
     #indptr
-    #if file_number==0:
     indptr_dset = fcsr.create_dataset("indptr",(c.indptr.size,1),dtype='int64')
-    indptr_dset[:] = (c.indptr+indptr_offset).reshape(c.indptr.size,1)
-    #else:
-        #because all the files concatenated will be a single valid csr matrix
-    #    indptr_dset = fcsr.create_dataset("indptr",(c.indptr[1:].size,1),dtype='int64')
-    #    indptr_dset[:] = (c.indptr[1:]+indptr_offset).reshape(c.indptr[1:].size,1)
+    indptr_dset[:] = (c.indptr).reshape(c.indptr.size,1)
     #indices
     indices_dset = fcsr.create_dataset("indices",(c.indices.size,1),dtype='int64')
     indices_dset[:] = c.indices.reshape(c.indices.size,1)
@@ -120,34 +113,13 @@ def write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offse
     #weights
     weights_dset = fcsr.create_dataset("weights",(file_weights.size,),dtype='float64')
     weights_dset[:] = file_weights
-    print('wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
-
-    ###index.txt
-    fmode='a'
-    if file_number==0:
-        fmode='w'
+    #text for index file
     tmp = fname.split('/')
-    fdir = ''
-    for t in tmp[:-1]:
-        fdir=fdir+'/'+t
-    f=open(fdir+'/index.txt',fmode)
-    imesg =  'file %s '%tmp[-1]
-    imesg += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
-    #imesg += 'inp off %ld n %ld '%(vec_offsets[0],indptr_dset.size)
-    #imesg += 'ind off %ld n %ld '%(vec_offsets[1],indices_dset.size)
-    #imesg += 'dat off %ld n %ld '%(vec_offsets[2],data_dset.size)
-    #imesg += 'wts off %ld n %ld\n'%(vec_offsets[3],weights_dset.size)
-    f.write(imesg)
-    f.close()
- 
-    #track global offsets
-    vec_offsets[0]+=indptr_dset.size
-    vec_offsets[1]+=indices_dset.size
-    vec_offsets[2]+=data_dset.size
-    vec_offsets[3]+=weights_dset.size
+    indtxt =  'file %s '%tmp[-1]
+    indtxt += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
     fcsr.close()
-
-    return vec_offsets
+    print('wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
+    return indtxt
 
 def get_matches(zi,zj,collection,dbconnection):
     if collection['db_interface']=='render':
@@ -164,6 +136,225 @@ def get_matches(zi,zj,collection,dbconnection):
             cursor = dbconnection.find({'pGroupId':str(float(zj)),'qGroupId':str(float(zi))})
             matches = np.append(matches,list(cursor))
     return matches
+
+def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
+    #determine number of points
+    npts = len(match['matches']['q'][0])
+    if npts > args['matrix_assembly']['npts_max']: #really dumb filter for limiting size
+        npts=args['matrix_assembly']['npts_max']
+    if npts < args['matrix_assembly']['npts_min']:
+        return None,None,None,None,None
+
+    #create arrays
+    nd = npts*transform['rows_per_ptmatch']*transform['nnz_per_row']
+    ni = npts*transform['rows_per_ptmatch']
+    data = np.zeros(nd).astype('float64')
+    indices = np.zeros(nd).astype('int64')
+    indptr = np.zeros(ni)
+    weights = np.zeros(ni)
+
+    m = np.arange(npts)
+    mstep = m*transform['nnz_per_row']
+    if args['transformation']=='affine_fullsize':
+        #u=ax+by+c
+        data[0+mstep] = np.array(match['matches']['p'][0])[m]
+        data[1+mstep] = np.array(match['matches']['p'][1])[m]
+        data[2+mstep] = 1.0
+        data[3+mstep] = -1.0*np.array(match['matches']['q'][0])[m]
+        data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
+        data[5+mstep] = -1.0
+        uindices = np.hstack((tile_ind1*transform['DOF_per_tile']+np.array([0,1,2]),tile_ind2*transform['DOF_per_tile']+np.array([0,1,2])))
+        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        #v=dx+ey+f
+        data[(npts*transform['nnz_per_row']):(2*npts*transform['nnz_per_row'])] = data[0:npts*transform['nnz_per_row']]
+        indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(uindices+3,npts) 
+        indptr[0:2*npts] = np.arange(1,2*npts+1)*transform['nnz_per_row']
+        weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
+    if args['transformation']=='affine':
+        #u=ax+by+c
+        data[0+mstep] = np.array(match['matches']['p'][0])[m]
+        data[1+mstep] = np.array(match['matches']['p'][1])[m]
+        data[2+mstep] = 1.0
+        data[3+mstep] = -1.0*np.array(match['matches']['q'][0])[m]
+        data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
+        data[5+mstep] = -1.0
+        uindices = np.hstack((tile_ind1*transform['DOF_per_tile']/2+np.array([0,1,2]),tile_ind2*transform['DOF_per_tile']/2+np.array([0,1,2])))
+        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        indptr[0:npts] = np.arange(1,npts+1)*transform['nnz_per_row']
+        weights[0:npts] = np.array(match['matches']['w'])[m]
+        #don't do anything for v
+
+    if args['transformation']=='rigid':
+        px = np.array(match['matches']['p'][0])[m]
+        py = np.array(match['matches']['p'][1])[m]
+        qx = np.array(match['matches']['q'][0])[m]
+        qy = np.array(match['matches']['q'][1])[m]
+        #u=ax+by+c
+        data[0+mstep] = px
+        data[1+mstep] = py
+        data[2+mstep] = 1.0
+        data[3+mstep] = -1.0*qx
+        data[4+mstep] = -1.0*qy
+        data[5+mstep] = -1.0
+        uindices = np.hstack((tile_ind1*transform['DOF_per_tile']+np.array([0,1,2]),tile_ind2*transform['DOF_per_tile']+np.array([0,1,2])))
+        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        #v=-bx+ay+d
+        data[0+mstep+npts*transform['nnz_per_row']] = -1.0*px
+        data[1+mstep+npts*transform['nnz_per_row']] = py
+        data[2+mstep+npts*transform['nnz_per_row']] = 1.0
+        data[3+mstep+npts*transform['nnz_per_row']] = 1.0*qx
+        data[4+mstep+npts*transform['nnz_per_row']] = -1.0*qy
+        data[5+mstep+npts*transform['nnz_per_row']] = -1.0
+        vindices = np.hstack((tile_ind1*transform['DOF_per_tile']+np.array([1,0,3]),tile_ind2*transform['DOF_per_tile']+np.array([1,0,3])))
+        indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(vindices,npts) 
+        #du
+        data[0+mstep+2*npts*transform['nnz_per_row']] = px-px.mean()
+        data[1+mstep+2*npts*transform['nnz_per_row']] = py-py.mean()
+        data[2+mstep+2*npts*transform['nnz_per_row']] = 0.0
+        data[3+mstep+2*npts*transform['nnz_per_row']] = -1.0*(qx-qx.mean())
+        data[4+mstep+2*npts*transform['nnz_per_row']] = -1.0*(qy-qy.mean())
+        data[5+mstep+2*npts*transform['nnz_per_row']] = -0.0
+        indices[2*npts*transform['nnz_per_row']:3*npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        #dv
+        data[0+mstep+3*npts*transform['nnz_per_row']] = -1.0*(px-px.mean())
+        data[1+mstep+3*npts*transform['nnz_per_row']] = py-py.mean()
+        data[2+mstep+3*npts*transform['nnz_per_row']] = 0.0
+        data[3+mstep+3*npts*transform['nnz_per_row']] = 1.0*(qx-qx.mean())
+        data[4+mstep+3*npts*transform['nnz_per_row']] = -1.0*(qy-qy.mean())
+        data[5+mstep+3*npts*transform['nnz_per_row']] = -0.0
+        indices[3*npts*transform['nnz_per_row']:4*npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+
+        indptr[0:transform['rows_per_ptmatch']*npts] = np.arange(1,transform['rows_per_ptmatch']*npts+1)*transform['nnz_per_row']
+        weights[0:transform['rows_per_ptmatch']*npts] = np.tile(np.array(match['matches']['w'])[m],transform['rows_per_ptmatch'])
+
+    return data,indices,indptr,weights,npts
+
+def calculate_processing_chunk(fargs):
+    #set up for calling using multiprocessing pool
+    [zvals,zc,zloc,args,tile_ids,transform] = fargs
+
+    dbconnection = make_dbconnection(args['pointmatch'])
+    sorter = np.argsort(tile_ids)
+
+    #this dict will get returned
+    chunk = {}
+    chunk['tiles_used'] = []
+    chunk['data'] = None
+    chunk['indices'] = None
+    chunk['indptr'] = None
+    chunk['weights'] = None
+    chunk['indextxt'] = ""
+    chunk['nchunks'] = 0
+    chunk['zlist'] = []
+
+    pstr = '  proc%d: '%zloc   
+ 
+    for i in zc:
+        print('%supward-looking for z %d'%(pstr,zvals[i]))
+        jmax = np.min([i+args['matrix_assembly']['depth']+1,len(zvals)])
+        for j in np.arange(i,jmax): #depth, upward looking
+            #get point matches
+            t0=time.time()
+            matches = get_matches(zvals[i],zvals[j],args['pointmatch'],dbconnection)
+            if len(matches)==0:
+                print('WARNING%s%d matches for z1=%d z2=%d in pointmatch collection'%(pstr,len(matches),zvals[i],zvals[j]))
+                continue
+
+            #extract IDs for fast checking
+            pids = []
+            qids = []
+            for m in matches:
+                pids.append(m['pId'])
+                qids.append(m['qId'])
+            pids = np.array(pids)
+            qids = np.array(qids)
+
+            #remove matches that don't have both IDs in tile_ids
+            instack = np.in1d(pids,tile_ids)&np.in1d(qids,tile_ids)
+            matches = matches[instack]
+            pids = pids[instack]
+            qids = qids[instack]
+
+            if len(matches)==0:
+                print('WARNING%sno tile pairs in stack for pointmatches in z1=%d z2=%d'%(pstr,zvals[i],zvals[j]))
+                continue
+
+            print('%sloaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(pstr,instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,args['pointmatch']['db_interface']))
+        
+            t0 = time.time()
+            #for the given point matches, these are the indices in tile_ids 
+            #these determine the column locations in A for each tile pair
+            #this is a fast version of np.argwhere() loop
+            pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
+            qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
+
+            #conservative pre-allocation of the arrays we need to populate
+            #will truncate at the end
+            nmatches = len(matches)
+            nd = transform['nnz_per_row']*transform['rows_per_ptmatch']*args['matrix_assembly']['npts_max']*nmatches
+            ni = transform['rows_per_ptmatch']*args['matrix_assembly']['npts_max']*nmatches
+            data = np.zeros(nd).astype('float64')
+            indices = np.zeros(nd).astype('int64')
+            indptr = np.zeros(ni+1).astype('int64')
+            weights = np.zeros(ni).astype('float64')
+
+            #see definition of CSR format, wikipedia for example
+            indptr[0] = 0
+
+            #track how many rows
+            nrows = 0
+
+            tilepair_weightfac = tilepair_weight(i,j,args['matrix_assembly'])
+
+            for k in np.arange(nmatches):
+                #create the CSR sub-matrix for this tile pair
+                d,ind,iptr,wts,npts = CSR_from_tile_pair(args,matches[k],pinds[k],qinds[k],transform)
+                if d is None:
+                    continue #if npts<nmin, for example
+
+                #add both tile ids to the list
+                chunk['tiles_used'].append(matches[k]['pId'])
+                chunk['tiles_used'].append(matches[k]['qId'])
+
+                #add sub-matrix to global matrix
+                global_dind = np.arange(npts*transform['rows_per_ptmatch']*transform['nnz_per_row'])+nrows*transform['nnz_per_row']
+                data[global_dind] = d
+                indices[global_dind] = ind
+
+                global_rowind = np.arange(npts*transform['rows_per_ptmatch'])+nrows
+                weights[global_rowind] = wts*tilepair_weightfac
+                indptr[global_rowind+1] = iptr+indptr[nrows]
+
+                nrows += wts.size
+           
+            del matches 
+            #truncate, because we allocated conservatively
+            data = data[0:nrows*transform['nnz_per_row']]
+            indices = indices[0:nrows*transform['nnz_per_row']]
+            indptr = indptr[0:nrows+1]
+            weights = weights[0:nrows]
+
+            if chunk['nchunks']==0:
+                chunk['data'] = np.copy(data)
+                chunk['weights'] = np.copy(weights)
+                chunk['indices'] = np.copy(indices)
+                chunk['indptr'] = np.copy(indptr)
+            else:
+                chunk['data'] = np.append(chunk['data'],data)
+                chunk['weights'] = np.append(chunk['weights'],weights)
+                chunk['indices'] = np.append(chunk['indices'],indices)
+                lastptr = chunk['indptr'][-1]
+                chunk['indptr'] = np.append(chunk['indptr'],indptr[1:]+lastptr)
+            chunk['nchunks'] += 1
+            chunk['zlist'].append(zvals[i])
+            del data,indices,indptr,weights
+
+    if chunk['data'] is not None:
+        if args['output_mode']=='hdf5':
+            c = csr_matrix((chunk['data'],chunk['indices'],chunk['indptr']))
+            fname = args['hdf5_options']['output_dir']+'/%d_%d.h5'%(chunk['zlist'][0],chunk['zlist'][-1])
+            chunk['indextxt'] += write_chunk_to_file(fname,c,chunk['weights'])
+    return chunk
 
 def tilepair_weight(i,j,matrix_assembly):
     if i==j:
@@ -271,7 +462,7 @@ class EMaligner(argschema.ArgSchemaParser):
         #montage
         if self.args['solve_type']=='montage':
             for z in zvals:
-                self.results = self.assemble_and_solve([z],ingestconn)
+                self.results = self.assemble_and_solve(np.array([z]),ingestconn)
         #3D
         elif self.args['solve_type']=='3D':
             self.results = self.assemble_and_solve(zvals,ingestconn)
@@ -285,21 +476,15 @@ class EMaligner(argschema.ArgSchemaParser):
     def assemble_and_solve(self,zvals,ingestconn):
         t0 = time.time()
         t00 = t0
-        #set transform
-        self.set_transform()
 
-        #allocate some space
-        self.data = np.zeros(self.args['matrix_assembly']['npts_max']*self.nnz_per_row*self.rows_per_ptmatch).astype('float64')
-        self.indices = np.zeros(self.args['matrix_assembly']['npts_max']*self.nnz_per_row*self.rows_per_ptmatch).astype('int64')
-        self.indptr = np.zeros(self.args['matrix_assembly']['npts_max']*self.rows_per_ptmatch).astype('int64')
-        self.weights = np.zeros(self.args['matrix_assembly']['npts_max']*self.rows_per_ptmatch).astype('float64')
+        self.set_transform()
 
         #assembly
         if self.args['start_from_file']!='':
             A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = self.assemble_from_hdf5(zvals)
         else:
             A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = self.assemble_from_db(zvals)
-        #mat_stats(A,'A')
+
         self.ntiles_used = filt_tids.size
         print('\n A created in %0.1f seconds'%(time.time()-t0))
     
@@ -338,6 +523,7 @@ class EMaligner(argschema.ArgSchemaParser):
                 k+=1
             else:
                break
+
         #get the tile IDs and transforms
         tile_ind = np.in1d(tile_ids,filt_tids)
         filt_tspecs = tile_tspecs[tile_ind]
@@ -395,7 +581,7 @@ class EMaligner(argschema.ArgSchemaParser):
     
         #create A matrix in compressed sparse row (CSR) format
         A,weights,tiles_used = self.create_CSR_A(tile_ids,zvals)
-    
+
         #some book-keeping if there were some unused tiles
         t0 = time.time()
         tile_ind = np.in1d(tile_ids,tiles_used)
@@ -404,9 +590,10 @@ class EMaligner(argschema.ArgSchemaParser):
         unused_tids = tile_ids[np.invert(tile_ind)]
     
         #remove columns in A for unused tiles
-        slice_ind = np.repeat(tile_ind,self.DOF_per_tile/len(tile_tforms))
-        #for large matrices, this might be expensive to perform on CSR format
-        A = A[:,slice_ind]
+        slice_ind = np.repeat(tile_ind,self.transform['DOF_per_tile']/len(tile_tforms))
+        if self.args['output_mode'] != 'hdf5':
+            #for large matrices, this might be expensive to perform on CSR format
+            A = A[:,slice_ind]
     
         filt_tforms = []
         for j in np.arange(len(tile_tforms)):
@@ -422,256 +609,72 @@ class EMaligner(argschema.ArgSchemaParser):
         return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids
 
     def set_transform(self):
+        self.transform = {}
+        self.transform['name'] = self.args['transformation']
         if self.args['transformation']=='affine':
-            self.DOF_per_tile=6
-            self.nnz_per_row=6
-            self.rows_per_ptmatch=1
+            self.transform['DOF_per_tile']=6
+            self.transform['nnz_per_row']=6
+            self.transform['rows_per_ptmatch']=1
         if self.args['transformation']=='affine_fullsize':
-            self.DOF_per_tile=6
-            self.nnz_per_row=6
-            self.rows_per_ptmatch=2
+            self.transform['DOF_per_tile']=6
+            self.transform['nnz_per_row']=6
+            self.transform['rows_per_ptmatch']=2
         if self.args['transformation']=='rigid':
-            self.DOF_per_tile=4
-            self.nnz_per_row=6
-            self.rows_per_ptmatch=4
-
-        #allocate some space, we'll use this over and over
-        self.data = np.zeros(self.args['matrix_assembly']['npts_max']*self.nnz_per_row*self.rows_per_ptmatch).astype('float64')
-        self.indices = np.zeros(self.args['matrix_assembly']['npts_max']*self.nnz_per_row*self.rows_per_ptmatch).astype('int64')
-        self.indptr = np.zeros(self.args['matrix_assembly']['npts_max']*self.rows_per_ptmatch).astype('int64')
-        self.weights = np.zeros(self.args['matrix_assembly']['npts_max']*self.rows_per_ptmatch).astype('float64')
-
-    def CSR_from_tile_pair(self,match,tile_ind1,tile_ind2):
-       npts = len(match['matches']['q'][0])
-       if npts > self.args['matrix_assembly']['npts_max']: #really dumb filter for limiting size
-           npts=self.args['matrix_assembly']['npts_max']
-       if npts < self.args['matrix_assembly']['npts_min']:
-           return None,None,None,None,None
-
-       m = np.arange(npts)
-       mstep = m*self.nnz_per_row
-       if self.args['transformation']=='affine_fullsize':
-           #u=ax+by+c
-           self.data[0+mstep] = np.array(match['matches']['p'][0])[m]
-           self.data[1+mstep] = np.array(match['matches']['p'][1])[m]
-           self.data[2+mstep] = 1.0
-           self.data[3+mstep] = -1.0*np.array(match['matches']['q'][0])[m]
-           self.data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
-           self.data[5+mstep] = -1.0
-           uindices = np.hstack((tile_ind1*self.DOF_per_tile+np.array([0,1,2]),tile_ind2*self.DOF_per_tile+np.array([0,1,2])))
-           self.indices[0:npts*self.nnz_per_row] = np.tile(uindices,npts) 
-           #v=dx+ey+f
-           self.data[(npts*self.nnz_per_row):(2*npts*self.nnz_per_row)] = self.data[0:npts*self.nnz_per_row]
-           self.indices[npts*self.nnz_per_row:2*npts*self.nnz_per_row] = np.tile(uindices+3,npts) 
-           self.indptr[0:2*npts] = np.arange(1,2*npts+1)*self.nnz_per_row
-           self.weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
-       if self.args['transformation']=='affine':
-           #u=ax+by+c
-           self.data[0+mstep] = np.array(match['matches']['p'][0])[m]
-           self.data[1+mstep] = np.array(match['matches']['p'][1])[m]
-           self.data[2+mstep] = 1.0
-           self.data[3+mstep] = -1.0*np.array(match['matches']['q'][0])[m]
-           self.data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
-           self.data[5+mstep] = -1.0
-           uindices = np.hstack((tile_ind1*self.DOF_per_tile/2+np.array([0,1,2]),tile_ind2*self.DOF_per_tile/2+np.array([0,1,2])))
-           self.indices[0:npts*self.nnz_per_row] = np.tile(uindices,npts) 
-           self.indptr[0:npts] = np.arange(1,npts+1)*self.nnz_per_row
-           self.weights[0:npts] = np.array(match['matches']['w'])[m]
-           #don't do anything for v
-
-       if self.args['transformation']=='rigid':
-           px = np.array(match['matches']['p'][0])[m]
-           py = np.array(match['matches']['p'][1])[m]
-           qx = np.array(match['matches']['q'][0])[m]
-           qy = np.array(match['matches']['q'][1])[m]
-           #u=ax+by+c
-           self.data[0+mstep] = px
-           self.data[1+mstep] = py
-           self.data[2+mstep] = 1.0
-           self.data[3+mstep] = -1.0*qx
-           self.data[4+mstep] = -1.0*qy
-           self.data[5+mstep] = -1.0
-           uindices = np.hstack((tile_ind1*self.DOF_per_tile+np.array([0,1,2]),tile_ind2*self.DOF_per_tile+np.array([0,1,2])))
-           self.indices[0:npts*self.nnz_per_row] = np.tile(uindices,npts) 
-           #v=-bx+ay+d
-           self.data[0+mstep+npts*self.nnz_per_row] = -1.0*px
-           self.data[1+mstep+npts*self.nnz_per_row] = py
-           self.data[2+mstep+npts*self.nnz_per_row] = 1.0
-           self.data[3+mstep+npts*self.nnz_per_row] = 1.0*qx
-           self.data[4+mstep+npts*self.nnz_per_row] = -1.0*qy
-           self.data[5+mstep+npts*self.nnz_per_row] = -1.0
-           vindices = np.hstack((tile_ind1*self.DOF_per_tile+np.array([1,0,3]),tile_ind2*self.DOF_per_tile+np.array([1,0,3])))
-           self.indices[npts*self.nnz_per_row:2*npts*self.nnz_per_row] = np.tile(vindices,npts) 
-           #du
-           self.data[0+mstep+2*npts*self.nnz_per_row] = px-px.mean()
-           self.data[1+mstep+2*npts*self.nnz_per_row] = py-py.mean()
-           self.data[2+mstep+2*npts*self.nnz_per_row] = 0.0
-           self.data[3+mstep+2*npts*self.nnz_per_row] = -1.0*(qx-qx.mean())
-           self.data[4+mstep+2*npts*self.nnz_per_row] = -1.0*(qy-qy.mean())
-           self.data[5+mstep+2*npts*self.nnz_per_row] = -0.0
-           self.indices[2*npts*self.nnz_per_row:3*npts*self.nnz_per_row] = np.tile(uindices,npts) 
-           #dv
-           self.data[0+mstep+3*npts*self.nnz_per_row] = -1.0*(px-px.mean())
-           self.data[1+mstep+3*npts*self.nnz_per_row] = py-py.mean()
-           self.data[2+mstep+3*npts*self.nnz_per_row] = 0.0
-           self.data[3+mstep+3*npts*self.nnz_per_row] = 1.0*(qx-qx.mean())
-           self.data[4+mstep+3*npts*self.nnz_per_row] = -1.0*(qy-qy.mean())
-           self.data[5+mstep+3*npts*self.nnz_per_row] = -0.0
-           self.indices[3*npts*self.nnz_per_row:4*npts*self.nnz_per_row] = np.tile(uindices,npts) 
-  
-           self.indptr[0:self.rows_per_ptmatch*npts] = np.arange(1,self.rows_per_ptmatch*npts+1)*self.nnz_per_row
-           self.weights[0:self.rows_per_ptmatch*npts] = np.tile(np.array(match['matches']['w'])[m],self.rows_per_ptmatch)
-
-       return self.data[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indices[0:npts*self.rows_per_ptmatch*self.nnz_per_row],self.indptr[0:npts*self.rows_per_ptmatch],self.weights[0:npts*self.rows_per_ptmatch],npts
+            self.transform['DOF_per_tile']=4
+            self.transform['nnz_per_row']=6
+            self.transform['rows_per_ptmatch']=4
 
     def create_CSR_A(self,tile_ids,zvals):
-        #connect to the database
-        dbconnection = make_dbconnection(self.args['pointmatch'])
-        sorter = np.argsort(tile_ids)
-        file_number=0
-        file_chunks = 0
-        file_data = None
-        file_weights = None
-        c = None
-        tiles_used = []
-    
+        #split up the work 
         if self.args['hdf5_options']['chunks_per_file']==-1:
-            nmod=0.1 # np.mod(n+1,0.1) never == 0
+            proc_chunks = [np.arange(zvals.size)]
         else:
-            nmod = self.args['hdf5_options']['chunks_per_file']
-    
-        file_zlist=[]
-    
-        for i in np.arange(len(zvals)):
-            print(' upward-looking for z %d'%zvals[i])
-            jmax = np.min([i+self.args['matrix_assembly']['depth']+1,len(zvals)])
-            for j in np.arange(i,jmax): #depth, upward looking
-                t0=time.time()
-    
-                matches = get_matches(zvals[i],zvals[j],self.args['pointmatch'],dbconnection)
-    
-                if len(matches)==0:
-                    print('WARNING: %d matches for z1=%d z2=%d in pointmatch collection'%(len(matches),zvals[i],zvals[j]))
-                    continue
-    
-                #extract IDs for fast checking
-                pids = []
-                qids = []
-                for m in matches:
-                    pids.append(m['pId'])
-                    qids.append(m['qId'])
-                pids = np.array(pids)
-                qids = np.array(qids)
-    
-                #remove matches that don't have both IDs in tile_ids
-                instack = np.in1d(pids,tile_ids)&np.in1d(qids,tile_ids)
-                matches = matches[instack]
-                pids = pids[instack]
-                qids = qids[instack]
-     
-                if len(matches)==0:
-                    print('WARNING: no tile pairs in stack for pointmatches in z1=%d z2=%d'%(zvals[i],zvals[j]))
-                    continue
-    
-                print('  loaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,self.args['pointmatch']['db_interface']))
-            
-                t0 = time.time()
-                
-                #for the given point matches, these are the indices in tile_ids 
-                #these determine the column locations in A for each tile pair
-                #this is a fast version of np.argwhere() loop
-                pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
-                qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
-    
-                #conservative pre-allocation of the arrays we need to populate
-                #will truncate at the end
-                nmatches = len(matches)
-                data = np.zeros(self.nnz_per_row*self.rows_per_ptmatch*self.args['matrix_assembly']['npts_max']*nmatches).astype('float64')
-                indices = np.zeros(self.nnz_per_row*self.rows_per_ptmatch*self.args['matrix_assembly']['npts_max']*nmatches).astype('int64')
-                indptr = np.zeros(self.rows_per_ptmatch*self.args['matrix_assembly']['npts_max']*nmatches+1).astype('int64')
-                weights = np.zeros(self.rows_per_ptmatch*self.args['matrix_assembly']['npts_max']*nmatches).astype('float64')
-    
-                #see definition of CSR format, wikipedia for example
-                indptr[0] = 0
-    
-                #track how many rows
-                nrows = 0
-    
-                tilepair_weightfac = tilepair_weight(i,j,self.args['matrix_assembly'])
-    
-                for k in np.arange(nmatches):
-                    #create the CSR sub-matrix for this tile pair
-                    d,ind,iptr,wts,npts = self.CSR_from_tile_pair(matches[k],pinds[k],qinds[k])
-                    if d is None:
-                        continue #if npts<nmin, for example
-    
-                    #add both tile ids to the list
-                    tiles_used.append(matches[k]['pId'])
-                    tiles_used.append(matches[k]['qId'])
-    
-                    #add sub-matrix to global matrix
-                    global_dind = np.arange(npts*self.rows_per_ptmatch*self.nnz_per_row)+nrows*self.nnz_per_row
-                    data[global_dind] = d
-                    indices[global_dind] = ind
-    
-                    global_rowind = np.arange(npts*self.rows_per_ptmatch)+nrows
-                    weights[global_rowind] = wts*tilepair_weightfac
-                    indptr[global_rowind+1] = iptr+indptr[nrows]
-    
-                    nrows += wts.size
-               
-                del matches 
-                #truncate, because we allocated conservatively
-                data = data[0:nrows*self.nnz_per_row]
-                indices = indices[0:nrows*self.nnz_per_row]
-                indptr = indptr[0:nrows+1]
-                weights = weights[0:nrows]
-    
-                #can check CSR form here, but seems to be working
-                #c = csr_matrix((data,indices,indptr))
-                #print '  created submatrix in %0.1f sec.'%(time.time()-t0),'canonical format: ',c.has_canonical_format,', shape: ',c.shape,' nnz: ',c.nnz
-                #del c
-            
-                if file_chunks==0:
-                    file_data = copy.deepcopy(data)
-                    file_weights = copy.deepcopy(weights)
-                    file_indices = copy.deepcopy(indices)
-                    file_indptr = copy.deepcopy(indptr)
-                else:
-                    file_data = np.append(file_data,data)
-                    file_weights = np.append(file_weights,weights)
-                    file_indices = np.append(file_indices,indices)
-                    lastptr = file_indptr[-1]
-                    file_indptr = np.append(file_indptr,indptr[1:]+lastptr)
-                file_chunks += 1
-                file_zlist.append(zvals[i])
-                del data,indices,indptr,weights
-    
-            case1 = np.mod(i+1,nmod)==0     #time to write a chunk?
-            case2 = i==len(zvals)-1         #or, last entry (maybe not a full chunk)
-            case3 = file_data is not None   #is there data?
-            if case3&(case1|case2):
-                c = csr_matrix((file_data,file_indices,file_indptr))
-                if self.args['output_mode']=='hdf5':
-                    if file_number==0:
-                        indptr_offset=0
-                        vec_offsets = np.array([0,0,0,0]).astype('int64') #different files will keep track of where they are globally
-                    fname = self.args['hdf5_options']['output_dir']+'/%d_%d.h5'%(file_zlist[0],file_zlist[-1])
-                    vec_offsets = write_chunk_to_file(fname,file_number,c,indptr_offset,file_weights,vec_offsets)
-                    #indptr_offset += file_indptr[-1]
-                    del file_data,file_indices,file_indptr
-                    file_chunks = 0
-                    file_number += 1
-                    file_zlist = []
-                    file_data = None
+            proc_chunks = np.array_split(np.arange(zvals.size),np.ceil(float(zvals.size)/self.args['hdf5_options']['chunks_per_file']))
         
-        outw=None
-        if file_weights is not None:
-            outw = sparse.eye(file_weights.size,format='csr')
-            outw.data = file_weights
-            del file_weights 
-            file_weights = None
-        return c,outw,np.unique(np.array(tiles_used))
+        pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
+
+        print('processing chunked as:')
+        for i in np.arange(len(proc_chunks)):
+            print(i,zvals[proc_chunks[i]])
+   
+        fargs = []
+        for i in np.arange(len(proc_chunks)):
+            fargs.append([zvals,proc_chunks[i],i,self.args,tile_ids,self.transform])
+        results = pool.map(calculate_processing_chunk,fargs)
+
+        tiles_used = []
+        indextxt = ""
+        for i in np.arange(len(results)):
+            indextxt += results[i]['indextxt']
+            tiles_used += results[i]['tiles_used']
+
+        if self.args['output_mode']=='hdf5':
+            indexname = self.args['hdf5_options']['output_dir']+'/index.txt'
+            f=open(indexname,'w')
+            f.write(indextxt)
+            f.close()
+            print('wrote %s'%indexname)
+            return None,None,np.array(tiles_used)
+        
+        else:
+            data = np.array([]).astype('float64')
+            weights = np.array([]).astype('float64')
+            indices = np.array([]).astype('int64')
+            indptr = np.array([]).astype('int64')
+            for i in np.arange(len(results)):
+                data = np.append(data,results[i]['data'])
+                indices = np.append(indices,results[i]['indices'])
+                weights = np.append(weights,results[i]['weights'])
+                if i==0:
+                    indptr = np.append(indptr,results[i]['indptr'])
+                else:
+                    indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
+    
+            A=csr_matrix((data,indices,indptr))
+            outw = sparse.eye(weights.size,format='csr')
+            outw.data = weights
+            weights = outw
+            return A,outw,np.array(tiles_used)
   
     def create_regularization(self,tile_tforms):
         #affine (half-size) or any other transform, we only need the first one:
@@ -686,7 +689,7 @@ class EMaligner(argschema.ArgSchemaParser):
             reg[3::4] = reg[3::4]*self.args['regularization']['translation_factor']
             reg[0::16] = 1e15
         if self.args['regularization']['freeze_first_tile']:
-            reg[0:self.DOF_per_tile] = 1e15
+            reg[0:self.transform['DOF_per_tile']] = 1e15
     
         outr = sparse.eye(reg.size,format='csr')
         outr.data = reg
@@ -763,10 +766,10 @@ class EMaligner(argschema.ArgSchemaParser):
            message = message + ' avg cartesian projection displacement per point [mean(|Ax|)+/-std(|Ax|)] : %0.1f +/- %0.1f pixels'%(np.abs(err).mean(),np.abs(err).std())
 
            if self.args['transformation']=='rigid':
-               scale = np.sqrt(np.power(x[0::self.DOF_per_tile],2.0)+np.power(x[1::self.DOF_per_tile],2.0))
+               scale = np.sqrt(np.power(x[0::self.transform['DOF_per_tile']],2.0)+np.power(x[1::self.transform['DOF_per_tile']],2.0))
            if 'affine' in self.args['transformation']:
-               scale = np.sqrt(np.power(x[0::self.DOF_per_tile],2.0)+np.power(x[1::self.DOF_per_tile],2.0))
-               scale += np.sqrt(np.power(x[3::self.DOF_per_tile],2.0)+np.power(x[4::self.DOF_per_tile],2.0))
+               scale = np.sqrt(np.power(x[0::self.transform['DOF_per_tile']],2.0)+np.power(x[1::self.transform['DOF_per_tile']],2.0))
+               scale += np.sqrt(np.power(x[3::self.transform['DOF_per_tile']],2.0)+np.power(x[4::self.transform['DOF_per_tile']],2.0))
                scale/=2
            scale = scale.sum()/self.ntiles_used
            message = message + '\n avg scale = %0.2f'%scale

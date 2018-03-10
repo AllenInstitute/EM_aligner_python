@@ -3,6 +3,7 @@ import renderapi
 from test_data import (render_params,render_json_template,example_env,montage_parameters)
 from EMaligner.EM_aligner_python_schema import *
 from EMaligner.qctools.CheckPointMatches import CheckPointMatches
+from EMaligner.qctools.CheckResiduals import CheckResiduals
 import json
 import os
 
@@ -36,6 +37,16 @@ def test_pmplot(render,montage_pointmatches,raw_stack,tmpdir):
     montage_parameters['input_stack']['name']=raw_stack
     montage_parameters['pointmatch']['name'] = montage_pointmatches
     mod = CheckPointMatches(input_data = montage_parameters,args=[])
+    mod.args['z1'] = 1015
+    mod.args['z2'] = 1015
+    mod.args['plot_dir'] = str(tmpdir.mkdir('plotoutput'))
+    mod.run()
+    assert os.path.exists(mod.outputname)
+
+def test_resplot(render,montage_pointmatches,raw_stack,tmpdir):
+    montage_parameters['input_stack']['name']=raw_stack
+    montage_parameters['pointmatch']['name'] = montage_pointmatches
+    mod = CheckResiduals(input_data = montage_parameters,args=[])
     mod.args['z1'] = 1015
     mod.args['z2'] = 1015
     mod.args['plot_dir'] = str(tmpdir.mkdir('plotoutput'))

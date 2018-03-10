@@ -47,7 +47,7 @@ class CheckPointMatches(argschema.ArgSchemaParser):
     
         #use mongo to get the point matches
         self.pm = get_matches(z1,z2,collection,dbconnection)
-        print'%d tile pairs for z1,z2=%d,%d in collection %s__%s'%(len(self.pm),z1,z2,collection['owner'],collection['name'])
+        print('%d tile pairs for z1,z2=%d,%d in collection %s__%s'%(len(self.pm),z1,z2,collection['owner'],collection['name']))
         if not plot:
             return
     
@@ -99,7 +99,7 @@ class CheckPointMatches(argschema.ArgSchemaParser):
                             ymin = iy.min()
                         if iy.max() > ymax:
                             ymax = iy.max()
-            print'%d tile pairs match stack %s__%s__%s'%(ntp,stack['owner'],stack['project'],stack['name'])
+            print('%d tile pairs match stack %s__%s__%s'%(ntp,stack['owner'],stack['project'],stack['name']))
     
             #plot the line segments all at once for speed:
             # https://matplotlib.org/examples/pylab_examples/line_collection2.html

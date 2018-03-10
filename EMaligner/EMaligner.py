@@ -15,6 +15,9 @@ import os
 import sys
 import multiprocessing
 
+def junk(nothing):
+    return nothing
+
 def make_dbconnection(collection,which='tile'):
     #connect to the database
     if collection['db_interface']=='mongo':

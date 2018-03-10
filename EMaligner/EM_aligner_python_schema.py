@@ -53,3 +53,9 @@ class EMA_Schema(argschema.ArgSchema):
     regularization = argschema.fields.Nested(regularization)
     showtiming = argschema.fields.Int(default=1,description = 'have the routine showhow long each process takes')
 
+class EMA_PlotSchema(EMA_Schema):
+    z1 = argschema.fields.Int(default=1000,description='first z for plot')
+    z2 = argschema.fields.Int(default=1000,description='second z for plot')
+    plot = argschema.fields.Boolean(default=True,description='make a plot, otherwise, just text output')
+    plot_dir = argschema.fields.String(default='./')
+

@@ -4,16 +4,26 @@ import renderapi
 from .. EM_aligner_python_schema import *
 from .. EMaligner import make_dbconnection,get_matches
 import time
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.collections import LineCollection
 import matplotlib.pyplot as plt
 import subprocess
+import sys
+import argschema
+from argschema import ArgSchemaParser, ArgSchema
+import json
 
 class CheckPointMatches(argschema.ArgSchemaParser):
-    default_schema = EMA_Schema
+    default_schema = EMA_PlotSchema
 
-    def run(self,z1,z2,readpm_only=False):
-        self.make_plot(z1,z2,self.args['input_stack'],self.args['pointmatch'],readpm_only=readpm_only)
+    def run(self,readpm_only=False):
+        if self.args['z1'] > self.args['z2']:
+            tmp = self.args['z1']
+            self.args['z1'] = self.args['z2']
+            self.args['z2'] = tmp
+        self.make_plot(self.args['z1'],self.args['z2'],self.args['input_stack'],self.args['pointmatch'],self.args['plot'])
 
     def specs(self,z,stack):
         #force render, so we can read the bbox
@@ -29,16 +39,16 @@ class CheckPointMatches(argschema.ArgSchemaParser):
             tid.append(tspecs[k].tileId)
         return np.array(xc),np.array(yc),np.array(tid)
     
-    def make_plot(self,z1,z2,stack,collection,readpm_only=False):
+    def make_plot(self,z1,z2,stack,collection,plot):
         cmap = plt.cm.plasma_r
-        x1,y1,id1 = specs(z1,stack)
-        x2,y2,id2 = specs(z2,stack)
+        x1,y1,id1 = self.specs(z1,stack)
+        x2,y2,id2 = self.specs(z2,stack)
         dbconnection = make_dbconnection(collection)
     
         #use mongo to get the point matches
         self.pm = get_matches(z1,z2,collection,dbconnection)
-        print'len(self.pm): %d'%(len(self.pm))
-        if readpm_only:
+        print'%d tile pairs for z1,z2=%d,%d in collection %s__%s'%(len(self.pm),z1,z2,collection['owner'],collection['name'])
+        if not plot:
             return
     
         lclist = [] #will hold coordinates of line segments (between tile pairs)
@@ -59,7 +69,8 @@ class CheckPointMatches(argschema.ArgSchemaParser):
            clist.append(500) #limit was set at 500 for cross-section matches
         else:
            clist.append(200) #limit was set at 200 for within section matches
-    
+       
+        ntp = 0 
         if len(self.pm)!=0: #only plot if there are matches
             xmin = 1e9
             xmax = -1e9
@@ -67,9 +78,10 @@ class CheckPointMatches(argschema.ArgSchemaParser):
             ymax = -1e9
             for k in np.arange(len(self.pm)):
                 #find the tilespecs
-                k1 = np.argwhere(id1==self.pm[k]['qId']).flatten()
-                k2 = np.argwhere(id2==self.pm[k]['pId']).flatten()
+                k1 = np.argwhere(id1==self.pm[k]['pId']).flatten()
+                k2 = np.argwhere(id2==self.pm[k]['qId']).flatten()
                 if (k1.size!=0)&(k2.size!=0):
+                    ntp += 1
                     k1 = k1[0]
                     k2 = k2[0]
                     tmp=[]
@@ -87,6 +99,7 @@ class CheckPointMatches(argschema.ArgSchemaParser):
                             ymin = iy.min()
                         if iy.max() > ymax:
                             ymax = iy.max()
+            print'%d tile pairs match stack %s__%s__%s'%(ntp,stack['owner'],stack['project'],stack['name'])
     
             #plot the line segments all at once for speed:
             # https://matplotlib.org/examples/pylab_examples/line_collection2.html
@@ -106,19 +119,18 @@ class CheckPointMatches(argschema.ArgSchemaParser):
             ax.set_title('%s %s\n%d tile pairs %d point pairs'%(z1,z2,len(self.pm),sum(clist[2:])))
             fig.colorbar(LC)
             plt.draw()
-            #plt.show()
-            fname = '%s_%d_%d.pdf'%(collection['name'],z1,z2)
+            fname = '%s/%s_%d_%d.pdf'%(self.args['plot_dir'],collection['name'],z1,z2)
             pdf = PdfPages(fname)
             pdf.savefig(fig) #save the figure as a pdf page
             pdf.close()
             plt.ion()
             plt.show()
-            print('wrote %s\n'%fname)
+            print('wrote %s'%fname)
+            self.outputname = fname
   
-
 if __name__=='__main__':
     t0 = time.time()
-    mod = CheckPointMatches(schema_type=EMA_Schema)
-    mod.run(z1,z2)
+    mod = CheckPointMatches(schema_type=EMA_PlotSchema)
+    mod.run()
     print('total time: %0.1f'%(time.time()-t0))
    

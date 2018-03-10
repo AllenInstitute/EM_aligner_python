@@ -4,6 +4,8 @@ import renderapi
 from .. EM_aligner_python_schema import *
 from .. EMaligner import make_dbconnection,get_matches
 import time
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -11,8 +13,6 @@ import matplotlib.patches as mpatches
 from shapely.geometry import Polygon
 from descartes.patch import PolygonPatch
 import mpl_scatter_density
-import mpl_scatter_density
-import subprocess
 
 def fixpi(arr):
     #make the angular values fall around zero
@@ -25,7 +25,6 @@ def fixpi(arr):
         arr[ind] = arr[ind]+2.0*np.pi
         ind = np.argwhere(arr<-np.pi)
     return arr
-
 
 def make_patch(tile):
     pts = []
@@ -70,12 +69,12 @@ def make_transform_patches(tilespecs):
     return [patches,shearlist,rotlist,xscalelist,yscalelist],(xmin-border,xmax+border),(ymin-border,ymax+border)
 
 class CheckTransforms(argschema.ArgSchemaParser):
-    default_schema = EMA_Schema
+    default_schema = EMA_PlotSchema
 
-    def run(self,z1,plot=True):
-        self.make_plot(z1,self.args['output_stack'],plot=plot)
+    def run(self):
+        self.make_plot(self.args['z1'],self.args['output_stack'],plot=self.args['plot'])
 
-    def make_transform_plot(fig,i,j,k,xlim,ylim,patches,value,bar=True):
+    def make_transform_plot(self,fig,i,j,k,xlim,ylim,patches,value,bar=True):
         #plot a map of the transform value
         cmap = plt.cm.plasma_r
         ax = fig.add_subplot(i,j,k)
@@ -93,7 +92,6 @@ class CheckTransforms(argschema.ArgSchemaParser):
         ax.set_yticks([])
         return ax
     
-    
     def make_plot(self,z1,stack,thr=None,plot=True):
         stack['db_interface']='render'
         stack_dbconnection = make_dbconnection(stack)
@@ -106,34 +104,39 @@ class CheckTransforms(argschema.ArgSchemaParser):
             tforms.append(ts.tforms[-1])
     
         fig = plt.figure(1,figsize=(16,4))
-        fig.clf()
     
         tpatches,xlim,ylim = make_transform_patches(tspecs)
         self.shear = tpatches[1]
         self.rotation = tpatches[2]
         self.xscale = tpatches[3]
         self.yscale = tpatches[4]
+        print('z=%d in stack %s__%s__%s'%(z1,stack['owner'],stack['project'],stack['name']))
+        print("average shear: %0.2f"%tpatches[1].mean())
+        print("average rotation: %0.2f"%tpatches[2].mean())
+        print("average xscale: %0.2f"%tpatches[3].mean())
+        print("average yscale: %0.2f"%tpatches[4].mean())
 
-        i=0
         if plot:
+            axs = []
             for j in np.arange(1,5):
-                make_transform_plot(fig,2,2,j,xlim,ylim,tpatches[0],tpatches[j])
-            plt.subplot(2,2,1);plt.title('shear')
-            plt.subplot(2,2,2);plt.title('rotation')
-            plt.subplot(2,2,3);plt.title('xscale')
-            plt.subplot(2,2,4);plt.title('yscale')
+                axs.append(self.make_transform_plot(fig,2,2,j,xlim,ylim,tpatches[0],tpatches[j]))
+            axs[0].set_title('shear')
+            axs[1].set_title('rotation')
+            axs[2].set_title('xscale')
+            axs[3].set_title('yscale')
     
-            fname = 'transforms_%s_%d.pdf'%(stack['name'],z1)
+            fname = '%s/transforms_%s_%d.pdf'%(self.args['plot_dir'],stack['name'],z1)
             pdf = PdfPages(fname)
             pdf.savefig(fig) #save the figure as a pdf page
             pdf.close()
             plt.ion()
             plt.show()
-
+            print('wrote %s'%fname)
+            self.outputname = fname
 
 if __name__=='__main__':
     t0 = time.time()
-    mod = CheckTransforms(schema_type=EMA_Schema)
-    mod.run(z1)
+    mod = CheckTransforms(schema_type=EMA_PlotSchema)
+    mod.run()
     print('total time: %0.1f'%(time.time()-t0))
    

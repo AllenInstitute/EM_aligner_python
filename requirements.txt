@@ -5,3 +5,4 @@ scipy
 pymongo
 h5py
 matplotlib
+mpl_scatter_density

@@ -93,7 +93,7 @@ PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *c
     status = H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,mxcol);
     dset = H5Dopen (file, "datafile_nnz", H5P_DEFAULT);
     status = H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,nnz);
-    for (i=0;i<10;i++){
+    for (i=0;i<nfiles;i++){
         metadata[i][0] = row[i];
         metadata[i][1] = mncol[i];
         metadata[i][2] = mxcol[i];
@@ -115,6 +115,38 @@ PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *c
   free(dir);
   free(tmp);
   return ierr;
+}
+
+PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char outputname []){
+  hid_t       filein, fileout, filetype, memtype, space, dset,dsetout;
+  herr_t      status;
+  hsize_t     dims[1];
+  char *tmp,*dir;
+  int nds = 3;
+  char *copyds[3] = {"input_args", "used_tile_ids", "unused_tile_ids"};
+  char **rdata;
+  int ndims,i;
+
+  filein = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
+  fileout = H5Fcreate (outputname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  for (i=0;i<nds;i++){ 
+      dset = H5Dopen (filein,copyds[i],H5P_DEFAULT);
+      filetype = H5Dget_type (dset);
+      space = H5Dget_space (dset);
+      ndims = H5Sget_simple_extent_dims (space, dims, NULL);
+      rdata = (char **) malloc (dims[0] * sizeof (char *));
+      memtype = H5Tcopy (H5T_C_S1);
+      status = H5Tset_size (memtype, H5T_VARIABLE);
+      status = H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
+      dsetout = H5Dcreate (fileout, copyds[i], filetype, space, H5P_DEFAULT, H5P_DEFAULT,H5P_DEFAULT);
+      status = H5Dwrite (dsetout, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
+      status = H5Dclose (dset);
+      status = H5Dclose (dsetout);
+      status = H5Tclose (filetype);
+      status = H5Tclose (memtype);
+  }
+  status = H5Fclose (filein);
+  status = H5Fclose (fileout);
 }
 
 /*! Split the list of files roughly evenly amongst all the workers. */

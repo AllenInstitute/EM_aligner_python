@@ -191,7 +191,10 @@ int main(int argc,char **args)
   char xname[10];
   PetscViewer viewer;
   sprintf(outputname,"%s/solution_output.h5",dir);
-  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,outputname,FILE_MODE_WRITE,&viewer);CHKERRQ(ierr);
+  if (rank==0){
+      ierr = CopyDataSetstoSolutionOut(PETSC_COMM_SELF,sln_input,outputname); CHKERRQ(ierr);
+  }
+  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,outputname,FILE_MODE_APPEND,&viewer);CHKERRQ(ierr);
   for (i=0;i<nrhs;i++){
     PetscTime(&t0);
     ierr = VecDuplicate(rhs[i],&x[i]);CHKERRQ(ierr);

@@ -15,6 +15,8 @@ PetscErrorCode CountFiles(MPI_Comm COMM, char indexname[], int *nfiles);
 
 PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[], PetscInt **metadata);
 
+PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char outputname []);
+
 PetscErrorCode SetFiles(MPI_Comm COMM, int nfiles, PetscInt *firstfile, PetscInt *lastfile);
 
 PetscErrorCode ReadVec(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,PetscInt *n);

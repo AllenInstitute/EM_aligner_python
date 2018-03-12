@@ -1,71 +1,112 @@
 /** @file ema.c
-  * @brief functions used by em_dist_solve
   *
-  * 
+  *
 */
 #include "ema.h"
 
 /*! Rank 0 process counts the number of files from index.txt and broadcasts the result */
 PetscErrorCode CountFiles(MPI_Comm COMM, char indexname[], int *nfiles){
-/** 
+/**
  * @param[in] COMM The MPI communicator, probably PETSC_COMM_WORLD.
  * @param[in] indexname The full path to index.txt, given as command-line argument with -f.
  * @param[out] *nfiles The result of the count, returned to main().
 */
   PetscErrorCode ierr;
-  FILE *fp; 
-  int ch;
   PetscMPIInt rank;
+  hid_t       file,filetype,memtype,space,dset;
+  herr_t      status;
+  hsize_t     dims[1];
+  int ndims;
+  char dsname[200];
+
   ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
+
   if (rank==0){
-    *nfiles = 0;
-    ierr = PetscFOpen(COMM,indexname,"r",&fp);CHKERRQ(ierr);
-    while(!feof(fp)){
-      ch = fgetc(fp);
-      if(ch == '\n'){
-        *nfiles+=1;
-      }
-    }
-    ierr = PetscFClose(COMM,fp);CHKERRQ(ierr);
+    file = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
+    sprintf(dsname,"datafile_names");
+    dset = H5Dopen (file,dsname,H5P_DEFAULT);
+    space = H5Dget_space (dset);
+    ndims = H5Sget_simple_extent_dims (space, dims, NULL);
+    *nfiles = dims[0];
+    status = H5Dclose (dset);
+    status = H5Sclose (space);
+    status = H5Fclose (file);
   }
   MPI_Bcast(nfiles,1,MPI_INT,0,COMM);
   return ierr;
 }
 
 /*! @brief Rank 0 processor reads metadata and broadcasts */
-PetscErrorCode ReadIndex(MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[], PetscInt **metadata){
+PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[], PetscInt **metadata){
 /**
  * @param[in] COMM The MPI communicator, probably PETSC_COMM_WORLD.
  * @param[in] indexname The full path to index.txt, given as command-line argument with -f.
- * @param[in] nfiles The number of lines in index.txt, read from previous CountFiles() call.
+ * @param[in] nfiles The number of files listed in input.h5 file, read from previous CountFiles() call.
  * @param[out] *csrnames An array of file names from index.txt, populated by this function.
  * @param[out] *metadata An array of metadata from index.txt, populated by this function.
 */
   PetscErrorCode ierr;
-  FILE *fp; 
+  PetscViewer viewer;
   PetscMPIInt rank;
+  PetscInt junk;
   int i,j;
   char *dir,*tmp,tmpname[200];
+  char **rdata;
+  char dsname[200];
+  hid_t       file, filetype, memtype, space, dset;
+  herr_t      status;
+  hsize_t     dims[1];
+  int         ndims;
+
   tmp = strdup(indexname);
   dir = strdup(dirname(tmp));
   ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
   if (rank==0){
-    ierr = PetscFOpen(COMM,indexname,"r",&fp);CHKERRQ(ierr);
+    file = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
+    sprintf(dsname,"datafile_names");
+    dset = H5Dopen (file,dsname,H5P_DEFAULT);
+    filetype = H5Dget_type (dset);
+    space = H5Dget_space (dset);
+    ndims = H5Sget_simple_extent_dims (space, dims, NULL);
+    rdata = (char **) malloc (dims[0] * sizeof (char *));
+    memtype = H5Tcopy (H5T_C_S1);
+    status = H5Tset_size (memtype, H5T_VARIABLE);
+    status = H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
     for (i=0;i<nfiles;i++){
-      ierr = fscanf(fp,"%*s %s",tmpname);
-      if (ierr!=1){
-        printf("failue in reading %s\n",indexname);
-      }
-      sprintf(csrnames[i],"%s/%s",dir,tmpname);
-      for (j=0;j<4;j++){
-        ierr = fscanf(fp," %*s %ld",&metadata[i][j]);
-        if (ierr!=1){
-          printf("failue in reading %s\n",indexname);
-        }
-        ierr = fscanf(fp,"\n");
-      }
+        sprintf(csrnames[i],"%s/%s",dir,rdata[i]);
     }
-    ierr = PetscFClose(COMM,fp);CHKERRQ(ierr);
+    status = H5Dvlen_reclaim (memtype, space, H5P_DEFAULT, rdata);
+    free (rdata);
+    status = H5Dclose (dset);
+    status = H5Sclose (space);
+
+    PetscInt *row,*mxcol,*mncol,*nnz;
+    row = (PetscInt *)malloc(nfiles*sizeof(PetscInt));
+    mxcol = (PetscInt *)malloc(nfiles*sizeof(PetscInt));
+    mncol = (PetscInt *)malloc(nfiles*sizeof(PetscInt));
+    nnz = (PetscInt *)malloc(nfiles*sizeof(PetscInt));
+    dset = H5Dopen (file, "datafile_nrows", H5P_DEFAULT);
+    status = H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,row);
+    dset = H5Dopen (file, "datafile_mincol", H5P_DEFAULT);
+    status = H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,mncol);
+    dset = H5Dopen (file, "datafile_maxcol", H5P_DEFAULT);
+    status = H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,mxcol);
+    dset = H5Dopen (file, "datafile_nnz", H5P_DEFAULT);
+    status = H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,nnz);
+    for (i=0;i<10;i++){
+        metadata[i][0] = row[i];
+        metadata[i][1] = mncol[i];
+        metadata[i][2] = mxcol[i];
+        metadata[i][3] = nnz[i];
+    }
+    free(row);
+    free(mncol);
+    free(mxcol);
+    free(nnz);
+    status = H5Dclose (dset);
+    status = H5Tclose (filetype);
+    status = H5Tclose (memtype);
+    status = H5Fclose (file);
   }
   for (i=0;i<nfiles;i++){
     MPI_Bcast(csrnames[i],PETSC_MAX_PATH_LEN,MPI_CHAR,0,COMM);
@@ -78,7 +119,7 @@ PetscErrorCode ReadIndex(MPI_Comm COMM, char indexname[], int nfiles, char *csrn
 
 /*! Split the list of files roughly evenly amongst all the workers. */
 PetscErrorCode SetFiles(MPI_Comm COMM, int nfiles, PetscInt *firstfile,PetscInt *lastfile){
-/** 
+/**
  * @param[in] COMM The MPI communicator, probably PETSC_COMM_WORLD.
  * @param[in] nfiles The number of lines in index.txt, read from previous CountFiles() call.
  * @param[out] *firstfile The index of the first file for this worker.
@@ -127,8 +168,8 @@ PetscErrorCode SetFiles(MPI_Comm COMM, int nfiles, PetscInt *firstfile,PetscInt 
 }
 
 /*! Read data from a PetscViewer into a Vec (scalar) object. This version good for single-rank reads.*/
-PetscErrorCode ReadVec(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n){
-/** 
+PetscErrorCode ReadVec(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,PetscInt *n){
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF or PETSC_COMM_WORLD.
  * @param[in] viewer A PetscViewer instance.
  * @param[in] *varname The new vector will have this name. For reading from hdf5 files, this name must match the dataset name in the file.
@@ -146,8 +187,8 @@ PetscErrorCode ReadVec(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newve
 }
 
 /*! Read data from a PetscViewer into a Vec (scalar) object. This version good for anticipating allocation across nodes.*/
-PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,long *n,PetscInt nlocal,PetscInt nglobal,PetscBool trunc){
-/** 
+PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,Vec *newvec,PetscInt *n,PetscInt nlocal,PetscInt nglobal,PetscBool trunc){
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF or PETSC_COMM_WORLD.
  * @param[in] viewer A PetscViewer instance.
  * @param[in] *varname The new vector will have this name. For reading from hdf5 files, this name must match the dataset name in the file.
@@ -195,8 +236,8 @@ PetscErrorCode ReadVecWithSizes(MPI_Comm COMM,PetscViewer viewer,char *varname,V
 }
 
 /*! Read data from a PetscViewer into an IS (Index Set, i.e. integer) object.*/
-PetscErrorCode ReadIndexSet(MPI_Comm COMM,PetscViewer viewer,char *varname,IS *newIS,long *n){
-/** 
+PetscErrorCode ReadIndexSet(MPI_Comm COMM,PetscViewer viewer,char *varname,IS *newIS,PetscInt *n){
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF or PETSC_COMM_WORLD.
  * @param[in] viewer A PetscViewer instance.
  * @param[in] *varname The new IS will have this name. For reading from hdf5 files, this name must match the dataset name in the file.
@@ -215,7 +256,7 @@ PetscErrorCode ReadIndexSet(MPI_Comm COMM,PetscViewer viewer,char *varname,IS *n
 
 /*! Print to stdout MatInfo for a Mat object.*/
 PetscErrorCode ShowMatInfo(MPI_Comm COMM,Mat *m,const char *mesg){
-/** 
+/**
  * @param[in] COMM The MPI communicator PETSC_COMM_WORLD.
  * @param[in] *m The matrix.
  * @param[in] *mesg Name or some other string to prepend the output.
@@ -223,41 +264,41 @@ PetscErrorCode ShowMatInfo(MPI_Comm COMM,Mat *m,const char *mesg){
   PetscErrorCode ierr;
   MatInfo info;
   PetscBool      isassembled;
-  PetscInt       rowcheck,colcheck;  
+  PetscInt       rowcheck,colcheck;
   PetscMPIInt rank;
 
   ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
   ierr = MatGetInfo(*m,MAT_GLOBAL_SUM,&info);CHKERRQ(ierr);
-  if (rank==0){ 
+  if (rank==0){
     printf("%s info from rank %d:\n",mesg,rank);
     ierr = MatAssembled(*m,&isassembled);CHKERRQ(ierr);
     printf(" is assembled: %d\n",isassembled);
     ierr = MatGetSize(*m,&rowcheck,&colcheck);CHKERRQ(ierr);
     printf(" global size %ld x %ld\n",rowcheck,colcheck);
     //ierr = MatGetInfo(*m,MAT_GLOBAL_SUM,&info);CHKERRQ(ierr);
-    printf(" block_size: %f\n",info.block_size); 
+    printf(" block_size: %f\n",info.block_size);
     printf(" nz_allocated: %f\n",info.nz_allocated);
     printf(" nz_used: %f\n",info.nz_used);
     printf(" nz_unneeded: %f\n",info.nz_unneeded);
-    printf(" memory: %f\n",info.memory); 
+    printf(" memory: %f\n",info.memory);
     printf(" assemblies: %f\n",info.assemblies);
     printf(" mallocs: %f\n",info.mallocs);
     printf(" fill_ratio_given: %f\n",info.fill_ratio_given);
     printf(" fill_ratio_needed: %f\n",info.fill_ratio_needed);
   }
   ierr = MatGetInfo(*m,MAT_LOCAL,&info);CHKERRQ(ierr);
-  if (rank==0){ 
+  if (rank==0){
     printf("%s local info from rank %d:\n",mesg,rank);
     ierr = MatAssembled(*m,&isassembled);CHKERRQ(ierr);
     printf(" is assembled: %d\n",isassembled);
     ierr = MatGetSize(*m,&rowcheck,&colcheck);CHKERRQ(ierr);
     printf(" global size %ld x %ld\n",rowcheck,colcheck);
     //ierr = MatGetInfo(*m,MAT_GLOBAL_SUM,&info);CHKERRQ(ierr);
-    printf(" block_size: %f\n",info.block_size); 
+    printf(" block_size: %f\n",info.block_size);
     printf(" nz_allocated: %f\n",info.nz_allocated);
     printf(" nz_used: %f\n",info.nz_used);
     printf(" nz_unneeded: %f\n",info.nz_unneeded);
-    printf(" memory: %f\n",info.memory); 
+    printf(" memory: %f\n",info.memory);
     printf(" assemblies: %f\n",info.assemblies);
     printf(" mallocs: %f\n",info.mallocs);
     printf(" fill_ratio_given: %f\n",info.fill_ratio_given);
@@ -268,7 +309,7 @@ PetscErrorCode ShowMatInfo(MPI_Comm COMM,Mat *m,const char *mesg){
 
 /*! Use metadata to determine global and local sizes and indices.*/
 void GetGlobalLocalCounts(int nfiles, PetscInt **metadata, int local_firstfile, int local_lastfile, PetscInt *global_nrow, PetscInt *global_ncol, PetscInt *global_nnz, PetscInt *local_nrow, PetscInt *local_nnz, PetscInt *local_row0){
-/** 
+/**
  * @param[in] nfiles The number of CSR.hdf5 files, from a previous call to CountFiles()
  * @param[in] **metadata Metadata from index.txt from a previous call to ReadIndex()
  * @param[in] local_firstfile, local_lastfile Indices in the list of files for the local worker.
@@ -319,7 +360,7 @@ void GetGlobalLocalCounts(int nfiles, PetscInt **metadata, int local_firstfile, 
 
 /*! Build local CSR block by sequentially reading in local hdf5 files.*/
 PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile, int local_lastfile, PetscInt *local_indptr, PetscInt *local_jcol, PetscScalar *local_data, PetscScalar *local_weights){
-/** 
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.
  * @param[in] *csrnames[] The names of the CSR.hdf5 files
  * @param[in] local_firstfile,local_lastfile Indices of which files are handled by which rank.
@@ -365,7 +406,7 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
     memcpy(&local_data[zoff],a,vcnt*sizeof(PetscScalar));
     VecRestoreArray(data,&a);
     zoff+=vcnt;
- 
+
     //weights
     ierr = ReadVec(COMM,viewer,(char *)"weights",&weights,&vcnt);CHKERRQ(ierr);
     VecGetArray(weights,&w);
@@ -385,7 +426,7 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
 
 /*! Creates a diagonal matrix with the weights as the entries.*/
 PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_nrow,PetscInt local_row0,PetscInt global_nrow,Mat *W){
-/** 
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] *local_weights Passed into this function to get built into W.
  * @param[in] local_nrow Number of rows for this rank
@@ -420,7 +461,7 @@ PetscErrorCode CreateW(MPI_Comm COMM,PetscScalar *local_weights,PetscInt local_n
 
 /*! Creates a diagonal matrix with the weights as the entries.*/
 PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscBool trunc,Mat *L){
-/** 
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] local_nrow Number of rows for this rank
  * @param[in] local_row0 The starting row for this rank.
@@ -439,7 +480,7 @@ PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt glob
   //VecCreate(COMM,&global_reg);
   //VecSetSizes(global_reg,local_nrow,global_nrow);
   //VecSetType(global_reg,VECMPI);
-  sprintf(tmp,"%s/regularization.h5",dir);
+  sprintf(tmp,"%s/solution_input.h5",dir);
   ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
   ierr = ReadVecWithSizes(COMM,viewer,(char *)"lambda",&global_reg,&junk,local_nrow,global_nrow,trunc);CHKERRQ(ierr);
 
@@ -457,7 +498,7 @@ PetscErrorCode CreateL(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt glob
 
 /*! Counts how many RHS vectors are stored in the regularization file. */
 PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS){
-/** 
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] dir string containing the directory
  * @param[out] number of RHS vectors
@@ -469,7 +510,7 @@ PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS){
   char tmp[200];
 
   *nRHS=0;
-  sprintf(tmp,"%s/regularization.h5",dir);
+  sprintf(tmp,"%s/solution_input.h5",dir);
   ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
   ierr = ReadIndexSet(COMM,viewer,(char *)"transform_list",&test,&junk);CHKERRQ(ierr);
   *nRHS=junk;
@@ -479,7 +520,7 @@ PetscErrorCode CountRHS(MPI_Comm COMM,char *dir,PetscInt *nRHS){
 
 /*! Read the RHS vectors stored in the regularization file. */
 PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt global_nrow,PetscInt nrhs,PetscBool trunc,Vec rhs[]){
-/** 
+/**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] dir string containing the directory
  * @param[in] local_nrow Number of local rows this rank will own
@@ -493,7 +534,7 @@ PetscErrorCode ReadRHS(MPI_Comm COMM,char *dir,PetscInt local_nrow,PetscInt glob
   char tmp[200];
   int i;
 
-  sprintf(tmp,"%s/regularization.h5",dir);
+  sprintf(tmp,"%s/solution_input.h5",dir);
   ierr = PetscViewerHDF5Open(COMM,tmp,FILE_MODE_READ,&viewer);CHKERRQ(ierr);
   for(i=0;i<nrhs;i++){
     sprintf(tmp,"transforms_%d",i);

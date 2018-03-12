@@ -38,11 +38,13 @@ class stack(db_params):
 class EMA_Schema(argschema.ArgSchema):
     first_section = argschema.fields.Int(default=1000, description = 'first section for matrix assembly')
     last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
+    n_parallel_jobs = argschema.fields.Int(default=4, description = 'number of parallel jobs that will run for assembly')
     solve_type = argschema.fields.String(default='')
     close_stack = argschema.fields.Boolean(default=True)
     transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
     output_mode = argschema.fields.String(default='hdf5')
     start_from_file = argschema.fields.String(default='',description = 'fullpath to index.txt')
+    render_output = argschema.fields.String(default='null',description = '/path/to/file, null (devnull), or stdout for where to redirect render output')
     input_stack = argschema.fields.Nested(stack)
     output_stack = argschema.fields.Nested(stack)
     pointmatch = argschema.fields.Nested(pointmatch)
@@ -50,4 +52,12 @@ class EMA_Schema(argschema.ArgSchema):
     matrix_assembly = argschema.fields.Nested(matrix_assembly)
     regularization = argschema.fields.Nested(regularization)
     showtiming = argschema.fields.Int(default=1,description = 'have the routine showhow long each process takes')
+
+class EMA_PlotSchema(EMA_Schema):
+    z1 = argschema.fields.Int(default=1000,description='first z for plot')
+    z2 = argschema.fields.Int(default=1000,description='second z for plot')
+    plot = argschema.fields.Boolean(default=True,description='make a plot, otherwise, just text output')
+    plot_dir = argschema.fields.String(default='./')
+    threshold = argschema.fields.Float(default=5.0,description='threshold for colors in residual plot [pixels]')
+    density = argschema.fields.Boolean(default=True,description='whether residual plot is density (for large numbers of points) or just points')
 

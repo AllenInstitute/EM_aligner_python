@@ -33,9 +33,24 @@ def montage_pointmatches(render):
 
 def test_first_test(render,montage_pointmatches,raw_stack):
     montage_parameters['input_stack']['name']=raw_stack
-    montage_parameters['input_stack']['project']=render_params['project']
     montage_parameters['pointmatch']['name'] = montage_pointmatches
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
+
+    #try with affine_fullsize
+    montage_parameters['transformation'] = 'affine_fullsize'
+    mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
+    mod.run()
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 200
+
+    #try with render interface
+    montage_parameters['input_stack']['db_interface']='render'
+    montage_parameters['pointmatch']['db_interface']='render'
+    mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
+    mod.run()
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 200
+

@@ -1,9 +1,11 @@
 {
-    "first_section": 1020, 
-    "last_section": 1030,
+    "first_section": 154, 
+    "last_section": 250,
     "solve_type": "3D",
     "close_stack": "True",
     "transformation": "rigid",
+    "output_mode": "stack",
+    "start_from_file": "",
     "input_stack": {
         "owner": "{{render_owner}}",
         "project": "{{render_project}}",
@@ -17,7 +19,7 @@
         "db_interface": "mongo"
     }, 
     "pointmatch": {
-        "owner": "{{render_point_match_owner}}", 
+        "owner": "{{render_owner}}", 
         "name": "{{render_point_match_collection}}",
         "host": "{{render_host}}", 
         "port": {{render_port}}, 
@@ -28,20 +30,19 @@
         "db_interface": "mongo"
     },
     "output_stack": {
-        "owner": "danielk",
-        "project": "Tests",
-        "name": "python_rough_results",
-        "host": "em-131fs",
-        "port": 8080,
-        "mongo_host": "em-131fs",
-        "mongo_port": 27017,
-        "client_scripts": "/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts",
+        "owner": "{{render_output_owner}}",
+        "project": "{{render_project}}",
+        "name": "{{rough_output_stack}}",
+        "host": "{{render_host}}",
+        "port": {{render_port}},
+        "mongo_host": "{{render_mongo_host}}",
+        "mongo_port": {{mongo_port}},
+        "client_scripts": "{{render_client_scripts}}",
         "collection_type": "stack",
         "db_interface": "render"
     }, 
-    "output_options": {
-        "output_mode": "stack",
-        "output_dir": "/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/",
+    "hdf5_options": {
+        "output_dir": "{{solver_output_dir}}",
         "chunks_per_file": -1
     },
     "matrix_assembly": {
@@ -53,7 +54,7 @@
         "inverse_dz":"True"
     },
     "regularization": {
-        "default_lambda": 1.0e3,
+        "default_lambda": 1.0e0,
         "translation_factor": 1.0e-5,
         "freeze_first_tile": "True"
     }

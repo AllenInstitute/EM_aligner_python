@@ -18,7 +18,8 @@ int main(int argc,char **args)
 {
   KSP            ksp;                                  //linear solver context
   PetscMPIInt    rank,size;                            //MPI rank and size
-  char           filearg[PETSC_MAX_PATH_LEN];          //input file name
+  char           fileinarg[PETSC_MAX_PATH_LEN];          //input file name
+  char           sln_output[PETSC_MAX_PATH_LEN];          //input file name
   char           *dir,*sln_input,**csrnames;           //various strings
   int            nfiles;                               //number of files
   PetscInt       **metadata;                           //metadata read from index.txt
@@ -44,12 +45,13 @@ int main(int argc,char **args)
   MPI_Init_thread(0,0,MPI_THREAD_MULTIPLE,&mpisupp);
 
   ierr = PetscInitialize(&argc,&args,(char*)0,help);if (ierr) return ierr;
-  ierr = PetscOptionsGetString(NULL,NULL,"-f",filearg,PETSC_MAX_PATH_LEN,&flg);CHKERRQ(ierr);
+  ierr = PetscOptionsGetString(NULL,NULL,"-input",fileinarg,PETSC_MAX_PATH_LEN,&flg);CHKERRQ(ierr);
+  ierr = PetscOptionsGetString(NULL,NULL,"-output",sln_output,PETSC_MAX_PATH_LEN,&flg);CHKERRQ(ierr);
   ierr = PetscOptionsHasName(NULL,NULL,"-truncate",&trunc);CHKERRQ(ierr);
 
   PetscTime(&tall0);
-  sln_input = strdup(filearg);
-  dir = strdup(dirname(filearg));
+  sln_input = strdup(fileinarg);
+  dir = strdup(dirname(fileinarg));
   ierr = MPI_Comm_rank(PETSC_COMM_WORLD,&rank);CHKERRQ(ierr);
   ierr = MPI_Comm_size(PETSC_COMM_WORLD,&size);CHKERRQ(ierr);
 
@@ -187,14 +189,12 @@ int main(int argc,char **args)
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-  char outputname[2048];
   char xname[10];
   PetscViewer viewer;
-  sprintf(outputname,"%s/solution_output.h5",dir);
   if (rank==0){
-      ierr = CopyDataSetstoSolutionOut(PETSC_COMM_SELF,sln_input,outputname); CHKERRQ(ierr);
+      ierr = CopyDataSetstoSolutionOut(PETSC_COMM_SELF,sln_input,sln_output); CHKERRQ(ierr);
   }
-  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,outputname,FILE_MODE_APPEND,&viewer);CHKERRQ(ierr);
+  ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,sln_output,FILE_MODE_APPEND,&viewer);CHKERRQ(ierr);
   for (i=0;i<nrhs;i++){
     PetscTime(&t0);
     ierr = VecDuplicate(rhs[i],&x[i]);CHKERRQ(ierr);

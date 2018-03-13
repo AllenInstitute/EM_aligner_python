@@ -13,19 +13,16 @@ PetscErrorCode CountFiles(MPI_Comm COMM, char indexname[], int *nfiles){
 */
   PetscErrorCode ierr;
   PetscMPIInt rank;
-  hid_t       file,filetype,memtype,space,dset;
+  hid_t       file,space,dset;
   herr_t      status;
   hsize_t     dims[1];
   int ndims;
-  char dsname[200];
 
   ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
-
   if (rank==0){
-    file = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
-    sprintf(dsname,"datafile_names");
-    dset = H5Dopen (file,dsname,H5P_DEFAULT);
-    space = H5Dget_space (dset);
+    file = H5Fopen(indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
+    dset = H5Dopen(file,"datafile_names",H5P_DEFAULT);
+    space = H5Dget_space(dset);
     ndims = H5Sget_simple_extent_dims (space, dims, NULL);
     *nfiles = dims[0];
     status = H5Dclose (dset);
@@ -40,9 +37,9 @@ PetscErrorCode CountFiles(MPI_Comm COMM, char indexname[], int *nfiles){
 PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[], PetscInt **metadata){
 /**
  * @param[in] COMM The MPI communicator, probably PETSC_COMM_WORLD.
- * @param[in] indexname The full path to index.txt, given as command-line argument with -f.
- * @param[in] nfiles The number of files listed in input.h5 file, read from previous CountFiles() call.
- * @param[out] *csrnames An array of file names from index.txt, populated by this function.
+ * @param[in] indexname The full path to solution_input.h5, given as command-line argument with -f.
+ * @param[in] nfiles The number of files listed in solution_input.h5 file, read from previous CountFiles() call.
+ * @param[out] *csrnames An array of file names from solution_input.h5, populated by this function.
  * @param[out] *metadata An array of metadata from index.txt, populated by this function.
 */
   PetscErrorCode ierr;
@@ -52,7 +49,6 @@ PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *c
   int i,j;
   char *dir,*tmp,tmpname[200];
   char **rdata;
-  char dsname[200];
   hid_t       file, filetype, memtype, space, dset;
   herr_t      status;
   hsize_t     dims[1];
@@ -62,20 +58,19 @@ PetscErrorCode ReadMetadata(MPI_Comm COMM, char indexname[], int nfiles, char *c
   dir = strdup(dirname(tmp));
   ierr = MPI_Comm_rank(COMM,&rank);CHKERRQ(ierr);
   if (rank==0){
-    file = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
-    sprintf(dsname,"datafile_names");
-    dset = H5Dopen (file,dsname,H5P_DEFAULT);
+    file = H5Fopen(indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
+    dset = H5Dopen(file,"datafile_names",H5P_DEFAULT);
     filetype = H5Dget_type (dset);
-    space = H5Dget_space (dset);
-    ndims = H5Sget_simple_extent_dims (space, dims, NULL);
-    rdata = (char **) malloc (dims[0] * sizeof (char *));
-    memtype = H5Tcopy (H5T_C_S1);
+    space = H5Dget_space(dset);
+    ndims = H5Sget_simple_extent_dims(space, dims, NULL);
+    rdata = (char **)malloc(dims[0]*sizeof (char *));
+    memtype = H5Tcopy(H5T_C_S1);
     status = H5Tset_size (memtype, H5T_VARIABLE);
     status = H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
     for (i=0;i<nfiles;i++){
         sprintf(csrnames[i],"%s/%s",dir,rdata[i]);
     }
-    status = H5Dvlen_reclaim (memtype, space, H5P_DEFAULT, rdata);
+    status = H5Dvlen_reclaim(memtype, space, H5P_DEFAULT, rdata);
     free (rdata);
     status = H5Dclose (dset);
     status = H5Sclose (space);
@@ -121,7 +116,6 @@ PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char o
   hid_t       filein, fileout, filetype, memtype, space, dset,dsetout;
   herr_t      status;
   hsize_t     dims[1];
-  char *tmp,*dir;
   int nds = 3;
   char *copyds[3] = {"input_args", "used_tile_ids", "unused_tile_ids"};
   char **rdata;
@@ -144,6 +138,8 @@ PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char o
       status = H5Dclose (dsetout);
       status = H5Tclose (filetype);
       status = H5Tclose (memtype);
+      status = H5Dvlen_reclaim(memtype, space, H5P_DEFAULT, rdata);
+      free (rdata);
   }
   status = H5Fclose (filein);
   status = H5Fclose (fileout);

@@ -65,10 +65,11 @@ class CheckPointMatches(argschema.ArgSchemaParser):
         tmp.append((0.1,0.1))
         tmp.append((0,0.1))
         lclist.append(tmp)
-        if z1!=z2:
-           clist.append(500) #limit was set at 500 for cross-section matches
-        else:
-           clist.append(200) #limit was set at 200 for within section matches
+        clist.append(self.args['threshold'])
+        #if z1!=z2:
+        #   clist.append(500) #limit was set at 500 for cross-section matches
+        #else:
+        #   clist.append(200) #limit was set at 200 for within section matches
        
         ntp = 0 
         if len(self.pm)!=0: #only plot if there are matches
@@ -117,6 +118,7 @@ class CheckPointMatches(argschema.ArgSchemaParser):
             ax.set_aspect('equal')
             ax.patch.set_color([0.5,0.5,0.5]) #gray background, easier to see yellow
             ax.set_title('%s %s\n%d tile pairs %d point pairs'%(z1,z2,len(self.pm),sum(clist[2:])))
+            ax.invert_yaxis()
             fig.colorbar(LC)
             plt.draw()
             fname = '%s/%s_%d_%d.pdf'%(self.args['plot_dir'],collection['name'],z1,z2)

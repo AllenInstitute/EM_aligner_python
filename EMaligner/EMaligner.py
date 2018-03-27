@@ -129,11 +129,11 @@ def get_matches(zi,zj,collection,dbconnection):
             matches = renderapi.pointmatch.get_matches_from_group_to_group(collection['name'],str(float(zi)),str(float(zj)),owner=collection['owner'],render=dbconnection)
         matches = np.array(matches)
     if collection['db_interface']=='mongo':
-        cursor = dbconnection.find({'pGroupId':str(float(zi)),'qGroupId':str(float(zj))})
+        cursor = dbconnection.find({'pGroupId':str(float(zi)),'qGroupId':str(float(zj))},{'_id': False})
         matches = np.array(list(cursor))
         if zi!=zj:
             #in principle, this does nothing if zi < zj, but, just in case
-            cursor = dbconnection.find({'pGroupId':str(float(zj)),'qGroupId':str(float(zi))})
+            cursor = dbconnection.find({'pGroupId':str(float(zj)),'qGroupId':str(float(zi))},{'_id': False})
             matches = np.append(matches,list(cursor))
     return matches
 
@@ -687,7 +687,6 @@ class EMaligner(argschema.ArgSchemaParser):
         elif self.args['transformation']=='rigid':
             reg[2::4] = reg[2::4]*self.args['regularization']['translation_factor']
             reg[3::4] = reg[3::4]*self.args['regularization']['translation_factor']
-            reg[0::16] = 1e15
         if self.args['regularization']['freeze_first_tile']:
             reg[0:self.transform['DOF_per_tile']] = 1e15
     

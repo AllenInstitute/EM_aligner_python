@@ -13,7 +13,6 @@ class db_params(argschema.ArgSchema):
     mongo_userName = argschema.fields.String(default='temApp',description='mongo user name')
     mongo_authenticationDatabase = argschema.fields.String(default='admin',description='mongo admin db')
     mongo_password = argschema.fields.String(default='',description='mongo pwd')
-    mongo_userName = argschema.fields.String(default='temApp',description='mongo user name')
     db_interface = argschema.fields.String(default='mongo')
     client_scripts = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts',description='render bin path')
 

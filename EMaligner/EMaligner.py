@@ -18,7 +18,7 @@ import multiprocessing
 def make_dbconnection(collection,which='tile'):
     #connect to the database
     if collection['db_interface']=='mongo':
-        client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'],username=collection['mongoUserName'],authSource=collection['mongo_authenticationDatabase'],password=collection['mongo_password'])
+        client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'],username=collection['mongo_userName'],authSource=collection['mongo_authenticationDatabase'],password=collection['mongo_password'])
         if collection['collection_type']=='stack':
             #for getting shared transforms, which='transform'
             mongo_collection_name = collection['owner']+'__'+collection['project']+'__'+collection['name']+'__'+which

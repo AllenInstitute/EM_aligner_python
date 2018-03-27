@@ -461,6 +461,17 @@ class EMaligner(argschema.ArgSchemaParser):
 
         #montage
         if self.args['solve_type']=='montage':
+            #check for zvalues in stack
+            tmp = self.args['input_stack']['db_interface']
+            self.args['input_stack']['db_interface']= 'render'
+            conn = make_dbconnection(self.args['input_stack'])
+            self.args['input_stack']['db_interface']= tmp
+            z_in_stack = renderapi.stack.get_z_values_for_stack(self.args['input_stack']['name'],render=conn)
+            newzvals = []
+            for z in zvals:
+                if z in z_in_stack:
+                    newzvals.append(z)
+            zvals = np.array(newzvals)
             for z in zvals:
                 self.results = self.assemble_and_solve(np.array([z]),ingestconn)
         #3D
@@ -662,13 +673,14 @@ class EMaligner(argschema.ArgSchemaParser):
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
             for i in np.arange(len(results)):
-                data = np.append(data,results[i]['data'])
-                indices = np.append(indices,results[i]['indices'])
-                weights = np.append(weights,results[i]['weights'])
-                if i==0:
-                    indptr = np.append(indptr,results[i]['indptr'])
-                else:
-                    indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
+                if results[i]['data'] is not None:
+                    data = np.append(data,results[i]['data'])
+                    indices = np.append(indices,results[i]['indices'])
+                    weights = np.append(weights,results[i]['weights'])
+                    if i==0:
+                        indptr = np.append(indptr,results[i]['indptr'])
+                    else:
+                        indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
     
             A=csr_matrix((data,indices,indptr))
             outw = sparse.eye(weights.size,format='csr')

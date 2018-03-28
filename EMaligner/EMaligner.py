@@ -18,7 +18,13 @@ import multiprocessing
 def make_dbconnection(collection,which='tile'):
     #connect to the database
     if collection['db_interface']=='mongo':
-        client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'])
+        if collection['mongo_userName']!='':
+            #assume authentication
+            client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'],username=collection['mongo_userName'],authSource=collection['mongo_authenticationDatabase'],password=collection['mongo_password'])
+        else:
+            #no authentication
+            client = MongoClient(host=collection['mongo_host'],port=collection['mongo_port'])
+
         if collection['collection_type']=='stack':
             #for getting shared transforms, which='transform'
             mongo_collection_name = collection['owner']+'__'+collection['project']+'__'+collection['name']+'__'+which
@@ -170,7 +176,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(uindices+3,npts) 
         indptr[0:2*npts] = np.arange(1,2*npts+1)*transform['nnz_per_row']
         weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
-    if args['transformation']=='affine':
+    elif args['transformation']=='affine':
         #u=ax+by+c
         data[0+mstep] = np.array(match['matches']['p'][0])[m]
         data[1+mstep] = np.array(match['matches']['p'][1])[m]
@@ -184,7 +190,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         weights[0:npts] = np.array(match['matches']['w'])[m]
         #don't do anything for v
 
-    if args['transformation']=='rigid':
+    elif args['transformation']=='rigid':
         px = np.array(match['matches']['p'][0])[m]
         py = np.array(match['matches']['p'][1])[m]
         qx = np.array(match['matches']['q'][0])[m]
@@ -461,6 +467,17 @@ class EMaligner(argschema.ArgSchemaParser):
 
         #montage
         if self.args['solve_type']=='montage':
+            #check for zvalues in stack
+            tmp = self.args['input_stack']['db_interface']
+            self.args['input_stack']['db_interface']= 'render'
+            conn = make_dbconnection(self.args['input_stack'])
+            self.args['input_stack']['db_interface']= tmp
+            z_in_stack = renderapi.stack.get_z_values_for_stack(self.args['input_stack']['name'],render=conn)
+            newzvals = []
+            for z in zvals:
+                if z in z_in_stack:
+                    newzvals.append(z)
+            zvals = np.array(newzvals)
             for z in zvals:
                 self.results = self.assemble_and_solve(np.array([z]),ingestconn)
         #3D
@@ -662,13 +679,14 @@ class EMaligner(argschema.ArgSchemaParser):
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
             for i in np.arange(len(results)):
-                data = np.append(data,results[i]['data'])
-                indices = np.append(indices,results[i]['indices'])
-                weights = np.append(weights,results[i]['weights'])
-                if i==0:
-                    indptr = np.append(indptr,results[i]['indptr'])
-                else:
-                    indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
+                if results[i]['data'] is not None:
+                    data = np.append(data,results[i]['data'])
+                    indices = np.append(indices,results[i]['indices'])
+                    weights = np.append(weights,results[i]['weights'])
+                    if i==0:
+                        indptr = np.append(indptr,results[i]['indptr'])
+                    else:
+                        indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
     
             A=csr_matrix((data,indices,indptr))
             outw = sparse.eye(weights.size,format='csr')

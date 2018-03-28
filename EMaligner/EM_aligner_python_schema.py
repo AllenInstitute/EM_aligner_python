@@ -10,6 +10,9 @@ class db_params(argschema.ArgSchema):
     port = argschema.fields.Int(default=8080,description='render port')
     mongo_host = argschema.fields.String(default='em-131fs',description='mongodb host')
     mongo_port = argschema.fields.Int(default=27017,description='mongodb port')
+    mongo_userName = argschema.fields.String(default='',description='mongo user name')
+    mongo_authenticationDatabase = argschema.fields.String(default='',description='mongo admin db')
+    mongo_password = argschema.fields.String(default='',description='mongo pwd')
     db_interface = argschema.fields.String(default='mongo')
     client_scripts = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts',description='render bin path')
 

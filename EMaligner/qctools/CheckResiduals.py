@@ -59,25 +59,12 @@ class CheckResiduals(argschema.ArgSchemaParser):
             tmp = self.args['z1']
             self.args['z1'] = self.args['z2']
             self.args['z2'] = tmp
-        self.make_plot(thr=self.args['threshold'],density=self.args['density'],plot=self.args['plot'])
-
-    def make_sd_plot(self,fig,i,j,k,x,y,c,density=True):
-        #function to make the map of the residuals as scatter density plots
-        ax = fig.add_subplot(i,j,k,projection='scatter_density')
-        if density:
-            density = ax.scatter_density(x, y, c=c,cmap=plt.cm.plasma_r)
-        else:
-            density = ax.scatter(x, y, c=c,cmap=plt.cm.plasma_r,edgecolors=None)
-        ax.set_aspect('equal')
-        ax.patch.set_color([0.5,0.5,0.5])
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.invert_yaxis() #match fine stack in ndviz
-        fig.colorbar(density)
-        return ax,density
+        self.compute_values()
+        if self.args['plot']:
+            self.make_plots()
     
-    def make_plot(self,thr=None,density=True,plot=True):
-        cmap = plt.cm.plasma_r
+    def compute_values(self):
+        self.cmap = plt.cm.plasma_r
         self.args['output_stack']['db_interface']='render'
         z1 = self.args['z1']
         z2 = self.args['z2']
@@ -100,58 +87,84 @@ class CheckResiduals(argschema.ArgSchemaParser):
     
         #use mongo to get the point matches
         matches = get_matches(z1,z2,self.args['pointmatch'],dbconnection)
-        xya,xyd = compute_residuals(tids,tforms,matches) 
-        rss = np.sqrt(np.power(xyd[0,:],2.0)+np.power(xyd[1,:],2.0))
+        self.xya,self.xyd = compute_residuals(tids,tforms,matches) 
+        self.rss = np.sqrt(np.power(self.xyd[0,:],2.0)+np.power(self.xyd[1,:],2.0))
     
-        mx = 'mean(dx)   +/- sigma(dx):   %0.1f +/- %0.1f pixels'%(xyd[0,:].mean(),xyd[0,:].std())
-        mx = mx + '\nmean(|dx|) +/- sigma(|dx|): %0.1f +/- %0.1f pixels'%(np.abs(xyd[0,:]).mean(),np.abs(xyd[0,:]).std())
-        my = 'mean(dy)   +/- sigma(dy):   %0.1f +/- %0.1f pixels'%(xyd[1,:].mean(),xyd[1,:].std())
-        my = my + '\nmean(|dy|) +/- sigma(|dy|): %0.1f +/- %0.1f pixels'%(np.abs(xyd[1,:]).mean(),np.abs(xyd[1,:]).std())
-        mr = 'mean(rss)  +/- sigma(rss):  %0.1f +/- %0.1f pixels'%(rss.mean(),rss.std())
+        self.mx = '[min , max] ave +/- sig\n[%0.1f , %0.1f] %0.1f +/- %0.1f'%(self.xyd[0,:].min(),self.xyd[0,:].max(),self.xyd[0,:].mean(),self.xyd[0,:].std())
+        self.my = '[min , max] ave +/- sig\n[%0.1f , %0.1f] %0.1f +/- %0.1f'%(self.xyd[1,:].min(),self.xyd[1,:].max(),self.xyd[1,:].mean(),self.xyd[1,:].std())
+        self.mr = '[min , max] ave +/- sig\n[%0.1f , %0.1f] %0.1f +/- %0.1f'%(self.rss.min(),self.rss.max(),self.rss.mean(),self.rss.std())
     
-        ident = 'owner: %s'%self.args['output_stack']['owner']
-        ident += '\nproject: %s'%self.args['output_stack']['project']
-        ident += '\nstack: %s'%self.args['output_stack']['name']
-        ident += '\n'+'collection: %s'%self.args['pointmatch']['name']
-        ident += '\n'+'z1,z2: %d,%d'%(z1,z2)
-        print('\n%s'%ident)
-        print(mx)
-        print(my)
-        print(mr)
+        self.ident = 'owner: %s'%self.args['output_stack']['owner']
+        self.ident += '\nproject: %s'%self.args['output_stack']['project']
+        self.ident += '\nstack: %s'%self.args['output_stack']['name']
+        self.ident += '\n'+'collection: %s'%self.args['pointmatch']['name']
+        self.ident += '\n'+'z1,z2: %d,%d'%(z1,z2)
+        print('\n%s'%self.ident)
+        print(self.mx)
+        print(self.my)
+        print(self.mr)
+
+
+    def make_sd_plot(self,ax,choice='rss'):
+        cmin = -self.args['threshold']
+        cmax = self.args['threshold']
+        if choice=='x':
+            c = self.xyd[0,:]
+            xlab = self.mx
+        elif choice=='y':
+            c = self.xyd[1,:]
+            xlab = self.my
+        elif choice=='rss':
+            c = self.rss
+            xlab = self.mr
+            cmin=0
+
+        #function to make the map of the residuals as scatter density plots
+        if self.args['density']:
+            density = ax.scatter_density(self.xya[0,:],self.xya[1,:], c=c,cmap=self.cmap)
+        else:
+            density = ax.scatter(self.xya[0,:],self.xya[1,:], c=c,cmap=self.cmap,edgecolors=None)
+        ax.set_aspect('equal')
+        ax.patch.set_color([0.5,0.5,0.5])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.invert_yaxis() #match fine stack in ndviz
+        ax.set_xlabel(xlab)
+        fig = plt.gcf()
+        fig.colorbar(density)
+        if self.args['threshold'] is not None:
+            density.set_clim(cmin,cmax)
+
+    def make_plots(self):
+        fig = plt.figure(1,figsize=(40,7.5))
+        fig.clf()
+
+        #x residuals
+        ax1 = fig.add_subplot(1,3,1,projection='scatter_density')
+        self.make_sd_plot(ax1,choice='x')
+        #y residuals
+        ax2 = fig.add_subplot(1,3,2,projection='scatter_density')
+        self.make_sd_plot(ax2,choice='y')
+        #rss residuals
+        ax3 = fig.add_subplot(1,3,3,projection='scatter_density')
+        self.make_sd_plot(ax3,choice='rss')
+    
+        ax1.set_title(self.ident+'\n$\Delta x$',fontsize=10)
+        ax2.set_title(self.ident+'\n$\Delta y$',fontsize=10)
+        ax3.set_title(self.ident+'\n$\sqrt{\Delta x^2+\Delta y^2}$',fontsize=10)
        
-        if plot:
-            fig = plt.figure(1,figsize=(40,7.5))
-            fig.clf()
-            #x residuals
-            ax1,d = self.make_sd_plot(fig,1,3,1,xya[0,:],xya[1,:],xyd[0,:],density=density)
-            if thr is not None:
-                d.set_clim(-thr,thr)
-            #y residuals
-            ax2,d = self.make_sd_plot(fig,1,3,2,xya[0,:],xya[1,:],xyd[1,:],density=density)
-            if thr is not None:
-                d.set_clim(-thr,thr)
-            #rss
-            ax3,d = self.make_sd_plot(fig,1,3,3,xya[0,:],xya[1,:],rss,density=density)
-            if thr is not None:
-                d.set_clim(0,thr)
-    
-            ident += '\n$\Delta x$'
-            ax1.set_title(ident,fontsize=10)
-            ax2.set_title('$\Delta y$',fontsize=18)
-            ax3.set_title('$\sqrt{\Delta x^2+\Delta y^2}$',fontsize=18)
-       
-            ax1.set_xlabel(mx,fontsize=12)
-            ax2.set_xlabel(my,fontsize=12)
-            ax3.set_xlabel(mr,fontsize=12)
-            
-            fname = '%s/residuals_%s_%s_%d_%d.pdf'%(self.args['plot_dir'],self.args['output_stack']['name'],self.args['pointmatch']['name'],z1,z2)
-            pdf = PdfPages(fname)
-            pdf.savefig(fig,dpi=100) #save the figure as a pdf page
-            pdf.close()
-            plt.ion()
-            plt.show()
-            print('wrote %s'%fname)
-            self.outputname = fname
+        ax1.set_xlabel(self.mx,fontsize=12)
+        ax2.set_xlabel(self.my,fontsize=12)
+        ax3.set_xlabel(self.mr,fontsize=12)
+ 
+        if self.args['savefig']:
+           self.outputname = '%s/residuals_%s_%s_%d_%d.pdf'%(self.args['plot_dir'],self.args['output_stack']['name'],self.args['pointmatch']['name'],self.args['z1'],self.args['z2'])
+           pdf = PdfPages(self.outputname)
+           pdf.savefig(fig,dpi=100) #save the figure as a pdf page
+           pdf.close()
+           plt.ion()
+           plt.show()
+           print('wrote %s'%self.outputname)
 
 if __name__=='__main__':
     t0 = time.time()

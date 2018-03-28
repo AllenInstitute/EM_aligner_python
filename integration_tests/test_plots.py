@@ -51,6 +51,7 @@ def test_resplot(render,montage_pointmatches,raw_stack,tmpdir):
     mod.args['z1'] = 1015
     mod.args['z2'] = 1015
     mod.args['plot_dir'] = str(tmpdir.mkdir('plotoutput'))
+    mod.args['savefig'] = "True"
     mod.run()
     assert os.path.exists(mod.outputname)
 

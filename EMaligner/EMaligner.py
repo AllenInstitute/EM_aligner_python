@@ -170,7 +170,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(uindices+3,npts) 
         indptr[0:2*npts] = np.arange(1,2*npts+1)*transform['nnz_per_row']
         weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
-    if args['transformation']=='affine':
+    elif args['transformation']=='affine':
         #u=ax+by+c
         data[0+mstep] = np.array(match['matches']['p'][0])[m]
         data[1+mstep] = np.array(match['matches']['p'][1])[m]
@@ -184,7 +184,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         weights[0:npts] = np.array(match['matches']['w'])[m]
         #don't do anything for v
 
-    if args['transformation']=='rigid':
+    elif args['transformation']=='rigid':
         px = np.array(match['matches']['p'][0])[m]
         py = np.array(match['matches']['p'][1])[m]
         qx = np.array(match['matches']['q'][0])[m]

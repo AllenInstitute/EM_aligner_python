@@ -505,6 +505,10 @@ class EMaligner(argschema.ArgSchemaParser):
         self.ntiles_used = filt_tids.size
         print('\n A created in %0.1f seconds'%(time.time()-t0))
     
+        if self.args['profile_data_load']:
+            print('skipping solve for profile run')
+            sys.exit()
+
         #solve
         message,x,results = self.solve_or_not(A,weights,reg,filt_tforms)
         print(message)

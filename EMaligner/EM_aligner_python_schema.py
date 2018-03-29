@@ -44,6 +44,7 @@ class EMA_Schema(argschema.ArgSchema):
     n_parallel_jobs = argschema.fields.Int(default=4, description = 'number of parallel jobs that will run for assembly')
     solve_type = argschema.fields.String(default='')
     close_stack = argschema.fields.Boolean(default=True)
+    profile_data_load = argschema.fields.Boolean(default=False)
     transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
     output_mode = argschema.fields.String(default='hdf5')
     start_from_file = argschema.fields.String(default='',description = 'fullpath to index.txt')

@@ -506,7 +506,7 @@ class EMaligner(argschema.ArgSchemaParser):
         print('\n A created in %0.1f seconds'%(time.time()-t0))
     
         if self.args['profile_data_load']:
-            print 'skipping solve for profile run'
+            print('skipping solve for profile run')
             sys.exit()
 
         #solve

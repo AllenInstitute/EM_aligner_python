@@ -1,68 +1,185 @@
 #!/usr/bin/env python
 
-import argschema
+from argschema import ArgSchema
+from argschema.fields import String, Int, Boolean, Nested, Float
+import marshmallow as mm
+from marshmallow import post_load, ValidationError
 
-class db_params(argschema.ArgSchema):
-    owner = argschema.fields.String(default='',description='owner') 
-    project = argschema.fields.String(default='',description='project') 
-    name = argschema.fields.String(default='',description='name')
-    host = argschema.fields.String(default='em-131fs',description='render host')
-    port = argschema.fields.Int(default=8080,description='render port')
-    mongo_host = argschema.fields.String(default='em-131fs',description='mongodb host')
-    mongo_port = argschema.fields.Int(default=27017,description='mongodb port')
-    mongo_userName = argschema.fields.String(default='',description='mongo user name')
-    mongo_authenticationDatabase = argschema.fields.String(default='',description='mongo admin db')
-    mongo_password = argschema.fields.String(default='',description='mongo pwd')
-    db_interface = argschema.fields.String(default='mongo')
-    client_scripts = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/gayathrim/nc-em2/Janelia_Pipeline/render_latest/render-ws-java-client/src/main/scripts',description='render bin path')
+class db_params(ArgSchema):
+    owner = String(
+        default='',
+        required=False,
+        description='owner') 
+    project = String(
+        default='',
+        required=False,
+        description='project') 
+    name = String(
+        required=True,
+        description='stack name')
+    host = String(
+        default=None,
+        required=False,
+        description='render host')
+    port = Int(
+        default=8080,
+        required=False,
+        description='render port')
+    mongo_host = String(
+        default='em-131fs',
+        required=False,
+        description='mongodb host')
+    mongo_port = Int(
+        default=27017,
+        required=False,
+        description='mongodb port')
+    mongo_userName = String(
+        default='',
+        required=False,
+        description='mongo user name')
+    mongo_authenticationDatabase = String(
+        default='',
+        required=False,
+        description='mongo admin db')
+    mongo_password = String(
+        default='',
+        required=False,
+        description='mongo pwd')
+    db_interface = String(
+        default='mongo')
+    client_scripts = String(
+        default='/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts',
+        required=False,
+        description='render bin path')
 
-class hdf5_options(argschema.ArgSchema):
-    output_dir = argschema.fields.String(default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
-    chunks_per_file = argschema.fields.Int(default=5,description='how many sections with upward-looking cross section to write per .h5 file')
+    @post_load
+    def validate_data(self, data):
+        if data['db_interface'] is 'mongo':
+            if data['mongo_host'] is None or data['mongo_userName'] is None or data['mongo_authenticationDatabase'] is None or data['mongo_password'] is None:
+                raise ValidationError("Need mongo DB details")
+        else:
+            if data['host'] is None:
+                raise ValidationError("Need render host") 
 
-class matrix_assembly(argschema.ArgSchema):
-    depth = argschema.fields.Int(default=2,description='depth in z for matrix assembly point matches')
-    cross_pt_weight = argschema.fields.Float(default=1.0,description='weight of cross section point matches')
-    montage_pt_weight = argschema.fields.Float(default=1.0,description='weight of montage point matches')
-    npts_min = argschema.fields.Int(default=5,description='disregard any tile pairs with fewer points than this')
-    npts_max = argschema.fields.Int(default=500,description='truncate any tile pairs to this size')
-    inverse_dz = argschema.fields.Boolean(default=True,description='cross section point match weighting fades with z')
+class hdf5_options(ArgSchema):
+    output_dir = String(
+        default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
+    chunks_per_file = Int(
+        default=5,
+        description='how many sections with upward-looking cross section to write per .h5 file')
 
-class regularization(argschema.ArgSchema):
-    default_lambda = argschema.fields.Float(0.005,description='regularization factor')
-    translation_factor = argschema.fields.Float(0.005,description='regularization factor')
-    freeze_first_tile = argschema.fields.Boolean(default=False)
+class matrix_assembly(ArgSchema):
+    depth = Int(
+        default=2,
+        required=False,
+        description='depth in z for matrix assembly point matches')
+    cross_pt_weight = Float(
+        default=1.0,
+        required=False,
+        description='weight of cross section point matches')
+    montage_pt_weight = Float(
+        default=1.0,
+        required=False,
+        description='weight of montage point matches')
+    npts_min = Int(
+        default=5,
+        required=False,
+        description='disregard any tile pairs with fewer points than this')
+    npts_max = Int(
+        default=500,
+        required=False,
+        description='truncate any tile pairs to this size')
+    inverse_dz = Boolean(
+        default=True,
+        required=False,
+        description='cross section point match weighting fades with z')
+
+
+class regularization(ArgSchema):
+    default_lambda = Float(
+        default=0.005,
+        description='regularization factor')
+    translation_factor = Float(
+        default=0.005,
+        description='regularization factor')
+    freeze_first_tile = Boolean(
+        default=False,
+        required=False)
+
 
 class pointmatch(db_params):
-    collection_type = argschema.fields.String(default='pointmatch',description="'stack' or 'pointmatch'")
-class stack(db_params):
-    collection_type = argschema.fields.String(default='stack',description="'stack' or 'pointmatch'")
+    collection_type = String(
+        default='pointmatch',
+        description="'stack' or 'pointmatch'")
 
-class EMA_Schema(argschema.ArgSchema):
-    first_section = argschema.fields.Int(default=1000, description = 'first section for matrix assembly')
-    last_section = argschema.fields.Int(default=1000, description = 'last section for matrix assembly')
-    n_parallel_jobs = argschema.fields.Int(default=4, description = 'number of parallel jobs that will run for assembly')
-    solve_type = argschema.fields.String(default='')
-    close_stack = argschema.fields.Boolean(default=True)
-    profile_data_load = argschema.fields.Boolean(default=False)
-    transformation = argschema.fields.String(default='affine',validate=lambda x: x in ['affine','rigid','affine_fullsize'])
-    output_mode = argschema.fields.String(default='hdf5')
-    start_from_file = argschema.fields.String(default='',description = 'fullpath to index.txt')
-    render_output = argschema.fields.String(default='null',description = '/path/to/file, null (devnull), or stdout for where to redirect render output')
-    input_stack = argschema.fields.Nested(stack)
-    output_stack = argschema.fields.Nested(stack)
-    pointmatch = argschema.fields.Nested(pointmatch)
-    hdf5_options = argschema.fields.Nested(hdf5_options)
-    matrix_assembly = argschema.fields.Nested(matrix_assembly)
-    regularization = argschema.fields.Nested(regularization)
-    showtiming = argschema.fields.Int(default=1,description = 'have the routine showhow long each process takes')
+
+class stack(db_params):
+    collection_type = String(
+        default='stack',
+        description="'stack' or 'pointmatch'")
+
+
+class EMA_Schema(ArgSchema):
+    first_section = Int(
+        required=True, 
+        description = 'first section for matrix assembly')
+    last_section = Int(
+        required=True,
+        description = 'last section for matrix assembly')
+    n_parallel_jobs = Int(
+        default=4,
+        required=False,
+        description = 'number of parallel jobs that will run for assembly')
+    solve_type = String(
+        default='montage',
+        required=False,
+        description='Solve type options (montage, 3D) Default=montage')
+    close_stack = Boolean(
+        default=True,
+        required=False,
+        description='Close the output stack? - default - True')
+    profile_data_load = Boolean(
+        default=False)
+    transformation = String(
+        default='affine',
+        validate=lambda x: x in ['affine','rigid','affine_fullsize'])
+    output_mode = String(
+        default='hdf5')
+    start_from_file = String(
+        default='',
+        description = 'fullpath to index.txt')
+    render_output = String(
+        default='null',
+        description = '/path/to/file, null (devnull), or stdout for where to redirect render output')
+    input_stack = Nested(stack)
+    output_stack = Nested(stack)
+    pointmatch = Nested(pointmatch)
+    hdf5_options = Nested(hdf5_options)
+    matrix_assembly = Nested(matrix_assembly)
+    regularization = Nested(regularization)
+    showtiming = Int(
+        default=1,
+        description = 'have the routine showhow long each process takes')
 
 class EMA_PlotSchema(EMA_Schema):
-    z1 = argschema.fields.Int(default=1000,description='first z for plot')
-    z2 = argschema.fields.Int(default=1000,description='second z for plot')
-    plot = argschema.fields.Boolean(default=True,description='make a plot, otherwise, just text output')
-    savefig = argschema.fields.Boolean(default=False,description='save to a pdf')
-    plot_dir = argschema.fields.String(default='./')
-    threshold = argschema.fields.Float(default=5.0,description='threshold for colors in residual plot [pixels]')
-    density = argschema.fields.Boolean(default=True,description='whether residual plot is density (for large numbers of points) or just points')
+    z1 = Int(
+        default=1000,
+        description='first z for plot')
+    z2 = Int(
+        default=1000,
+        description='second z for plot')
+    plot = Boolean(
+        default=True,
+        description='make a plot, otherwise, just text output')
+    savefig = Boolean(
+        default=False,
+        description='save to a pdf')
+    plot_dir = String(
+        default='./')
+    threshold = Float(
+        default=5.0,
+        description='threshold for colors in residual plot [pixels]')
+    density = Boolean(
+        default=True,
+        description='whether residual plot is density (for large numbers of points) or just points')
 

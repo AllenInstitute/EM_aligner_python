@@ -1,6 +1,7 @@
 from pymongo import MongoClient
 import numpy as np
 import renderapi
+import argschema
 from .EM_aligner_python_schema import *
 import copy
 import time

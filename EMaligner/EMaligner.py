@@ -450,7 +450,7 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
             i += 1
         stdeo = open(outarg,'a')
         print('render output is going to %s'%outarg)
-    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False,stderr=stdeo,stdout=stdeo)
+    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False)
     
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema

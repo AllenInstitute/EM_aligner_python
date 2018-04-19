@@ -1,7 +1,11 @@
 from pymongo import MongoClient
 import numpy as np
 import renderapi
+<<<<<<< HEAD
 import argschema
+=======
+from renderapi.external.processpools import pool_pathos
+>>>>>>> c3365711a5eb0a307686c2cc0f40af641a710975
 from .EM_aligner_python_schema import *
 import copy
 import time
@@ -450,7 +454,7 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
             i += 1
         stdeo = open(outarg,'a')
         print('render output is going to %s'%outarg)
-    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False,stderr=stdeo,stdout=stdeo)
+    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False,mpPool=pool_pathos.PathosWithPool,stderr=stdeo,stdout=stdeo)
     
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema

@@ -1,4 +1,4 @@
-render-python>=1.6.2
+render-python>=1.10.1
 argschema>=1.15.17
 numpy
 scipy
@@ -8,3 +8,4 @@ matplotlib
 mpl_scatter_density
 descartes
 shapely
+pathos

@@ -1,11 +1,8 @@
 from pymongo import MongoClient
 import numpy as np
 import renderapi
-<<<<<<< HEAD
 import argschema
-=======
 from renderapi.external.processpools import pool_pathos
->>>>>>> c3365711a5eb0a307686c2cc0f40af641a710975
 from .EM_aligner_python_schema import *
 import copy
 import time

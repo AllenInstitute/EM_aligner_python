@@ -37,6 +37,7 @@ class pointmatch(db_params):
     collection_type = argschema.fields.String(default='pointmatch',description="'stack' or 'pointmatch'")
 class stack(db_params):
     collection_type = argschema.fields.String(default='stack',description="'stack' or 'pointmatch'")
+    use_rest = argschema.fields.Boolean(default=False)
 
 class EMA_Schema(argschema.ArgSchema):
     first_section = argschema.fields.Int(default=1000, description = 'first section for matrix assembly')

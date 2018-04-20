@@ -1,0 +1,7 @@
+[
+  "integration_tests/test_montage.py::test_first_test", 
+  "integration_tests/test_plots.py::test_pmplot", 
+  "integration_tests/test_plots.py::test_resplot", 
+  "integration_tests/test_plots.py::test_trplot", 
+  "integration_tests/test_rough.py::test_rough_rigid"
+]

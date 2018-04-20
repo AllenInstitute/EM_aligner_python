@@ -117,6 +117,9 @@ class stack(db_params):
     collection_type = String(
         default='stack',
         description="'stack' or 'pointmatch'")
+    use_rest = Boolean(
+        default=False,
+        description="passed as arg in import_tilespecs_parallel")
 
 
 class EMA_Schema(ArgSchema):

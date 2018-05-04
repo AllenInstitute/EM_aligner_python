@@ -8,6 +8,10 @@ def render_json_template(env, template_file, **kwargs):
     d = json.loads(template.render(**kwargs))
     return d
 
+
+TEST_DATA_ROOT = os.environ.get(
+    'RENDER_TEST_DATA_ROOT', '/allen/aibs/pipeline/image_processing/volume_assembly')
+
 test_files_dir = os.path.join(os.path.dirname(__file__), 'test_files')
 example_env = Environment(loader=FileSystemLoader(test_files_dir))
 
@@ -32,6 +36,9 @@ render_params = {
     'project': project,
     'client_scripts':client_script_location
 }
+
+montage_raw_tilespecs_json = render_json_template(example_env, 'montage_raw_tilespecs.json',
+                                                  test_data_root=TEST_DATA_ROOT)
 
 montage_parameters = render_json_template(example_env, 'montage_test.json',
                                           render_project = project,

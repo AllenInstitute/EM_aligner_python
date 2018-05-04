@@ -9,7 +9,7 @@ from EMaligner import EMaligner
 import json
 import os
 
-FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
+#FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
 FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
 
 @pytest.fixture(scope='module')

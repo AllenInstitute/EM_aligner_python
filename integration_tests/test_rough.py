@@ -39,6 +39,7 @@ def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
     rough_parameters['pointmatch']['name'] = rough_pointmatches
     rough_parameters['transformation'] = 'rigid'
     mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    mod.args['transformation'] = 'rigid'
     mod.run()
     rigid_out=rough_parameters['output_stack']['name']
     tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['input_stack']['name'],render=render)

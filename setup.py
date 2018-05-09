@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from setuptools import setup
+from setuptools import setup,find_packages
 import sys
 from setuptools.command.test import test as TestCommand
 
@@ -36,7 +36,7 @@ setup(name='EMaligner',
       author='Daniel Kapner',
       author_email='danielk@alleninstitute.org',
       url='https://github.com/AllenInstitute/EM_Aligner_python',
-      packages=['EMaligner'],
+      packages=find_packages(),
       setup_requires=['setuptools_scm'],
       install_requires=required,
       tests_require=test_required,

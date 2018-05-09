@@ -1,11 +1,15 @@
 import pytest
 import renderapi
-from test_data import (render_params,render_json_template,example_env,montage_parameters)
+from test_data import (render_params,
+                       render_json_template,
+                       example_env,
+                       montage_raw_tilespecs_json,
+                       montage_parameters)
 from EMaligner import EMaligner
 import json
 import os
 
-FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
+#FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
 FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
 
 @pytest.fixture(scope='module')
@@ -17,11 +21,12 @@ def render():
 @pytest.fixture(scope='module')
 def raw_stack(render):
     test_raw_stack = 'input_raw_stack'
-    ts = []
-    with open(FILE_RAW_TILES, 'r') as f:
-        ts = json.load(f)
+    #ts = []
+    #with open(FILE_RAW_TILES, 'r') as f:
+    #    ts = json.load(f)
 
-    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in ts]
+    #tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in ts]
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack,render=render)
     renderapi.client.import_tilespecs(test_raw_stack,tilespecs,render=render)
     renderapi.stack.set_stack_state(test_raw_stack,'COMPLETE',render=render)

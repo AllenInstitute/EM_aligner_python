@@ -92,7 +92,7 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
                 if 'affine' in tform_name:
                     tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
                 elif tform_name=='rigid':
-                    tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tforms[-1].M[1,2]])
+                    tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,2]])
             if stack['db_interface']=='mongo':
                 tile_ids.append(tspecs[k]['tileId'])
                 if 'affine' in tform_name:

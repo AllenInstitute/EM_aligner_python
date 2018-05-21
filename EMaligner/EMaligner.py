@@ -161,8 +161,15 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
     indptr = np.zeros(ni)
     weights = np.zeros(ni)
 
-    m = np.arange(npts)
-    mstep = m*transform['nnz_per_row']
+    if args['matrix_assembly']['choose_random']:
+        a = np.arange(len(match['matches']['q'][0]))
+        np.random.shuffle(a)
+        m = a[0:npts]
+    else:
+        m = np.arange(npts)
+
+    mstep = np.arange(npts)*transform['nnz_per_row']
+
     if args['transformation']=='affine_fullsize':
         #u=ax+by+c
         data[0+mstep] = np.array(match['matches']['p'][0])[m]

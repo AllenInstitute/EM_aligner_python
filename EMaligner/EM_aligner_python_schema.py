@@ -89,6 +89,10 @@ class matrix_assembly(ArgSchema):
         default=500,
         required=False,
         description='truncate any tile pairs to this size')
+    choose_random = Boolean(
+        default=False,
+        required=False,
+        description='choose random pts to meet for npts_max vs. just first npts_max')
     inverse_dz = Boolean(
         default=True,
         required=False,

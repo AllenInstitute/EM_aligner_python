@@ -418,7 +418,7 @@ def mat_stats(m,name):
         asymm = np.any(m.transpose().data != m.data)
         print(' symm: ',not asymm)
 
-def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids,outarg,use_rest):
+def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,ingestconn,unused_tids,outarg,use_rest,overwrite_zlayer):
     #replace the last transform in the tilespec with the new one
     for m in np.arange(len(tspecs)):
         if 'affine' in tform_type:
@@ -458,7 +458,22 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
             i += 1
         stdeo = open(outarg,'a')
         print('render output is going to %s'%outarg)
-    renderapi.client.import_tilespecs_parallel(outputname,tspecs,sharedTransforms=shared_tforms,render=ingestconn,close_stack=False,mpPool=pool_pathos.PathosWithPool,stderr=stdeo,stdout=stdeo,use_rest=use_rest)
+
+    if overwrite_zlayer:
+        zvalues = np.unique(np.array([t.z for t in tspecs]))
+        for zvalue in zvalues:
+            renderapi.stack.delete_section(outputname,zvalue,render=ingestconn)
+
+    renderapi.client.import_tilespecs_parallel(
+            outputname,
+            tspecs,
+            sharedTransforms=shared_tforms,
+            render=ingestconn,
+            close_stack=False,
+            mpPool=pool_pathos.PathosWithPool,
+            stderr=stdeo,
+            stdout=stdeo,
+            use_rest=use_rest)
     
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
@@ -524,7 +539,18 @@ class EMaligner(argschema.ArgSchemaParser):
         del A
     
         if self.args['output_mode']=='stack':
-            write_to_new_stack(self.args['input_stack'],self.args['output_stack']['name'],self.args['transformation'],filt_tspecs,shared_tforms,x,ingestconn,unused_tids,self.args['render_output'],self.args['output_stack']['use_rest'])
+            write_to_new_stack(
+                    self.args['input_stack'],
+                    self.args['output_stack']['name'],
+                    self.args['transformation'],
+                    filt_tspecs,
+                    shared_tforms,
+                    x,
+                    ingestconn,
+                    unused_tids,
+                    self.args['render_output'],
+                    self.args['output_stack']['use_rest'],
+                    self.args['overwrite_zlayer'])
             if self.args['render_output']=='stdout':
                 print(message)
         del shared_tforms,x,filt_tspecs

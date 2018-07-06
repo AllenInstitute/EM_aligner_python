@@ -145,6 +145,10 @@ class EMA_Schema(ArgSchema):
         default=True,
         required=False,
         description='Close the output stack? - default - True')
+    overwrite_zlayer = Boolean(
+        default=True,
+        required=False,
+        description='delete section before import tilespecs?')
     profile_data_load = Boolean(
         default=False)
     transformation = String(

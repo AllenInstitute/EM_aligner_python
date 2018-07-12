@@ -62,15 +62,27 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
     tile_tforms = []
     tile_tspecs = []
     shared_tforms = []
+    sectionIds = []
     t0 = time.time()
 
     for z in zvals:
         #load tile specs from the database
         if stack['db_interface']=='render':
-            tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(stack['name'],float(z),render=dbconnection,owner=stack['owner'],project=stack['project'])
+            tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(
+                    stack['name'],
+                    float(z),
+                    render=dbconnection,
+                    owner=stack['owner'],
+                    project=stack['project'])
             tspecs = tmp.tilespecs
             for st in tmp.transforms:
                 shared_tforms.append(st)
+            sectionId = renderapi.stack.get_sectionId_for_z(
+                stack['name'],
+                float(z),
+                render=dbconnection,
+                owner=stack['owner'],
+                project=stack['project'])
         if stack['db_interface']=='mongo':
             cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)]) #like renderapi order?
             tspecs = list(cursor)
@@ -84,6 +96,8 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
             dbconnection2 = make_dbconnection(stack,which='transform')
             for refid in refids:
                 shared_tforms.append(renderapi.transform.load_transform_json(list(dbconnection2.find({"id":refid}))[0]))
+            sectionId = dbconnection.find({"z":float(z)}).distinct("layout.sectionId")[0]
+        sectionIds.append(sectionId)
 
         #make lists of IDs and transforms
         for k in np.arange(len(tspecs)):
@@ -103,7 +117,7 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
             tile_tspecs.append(tspecs[k])
 
     print('---\nloaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface']))
-    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms
+    return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms, sectionIds
 
 def write_chunk_to_file(fname,c,file_weights):
     ### data file
@@ -129,19 +143,19 @@ def write_chunk_to_file(fname,c,file_weights):
     print('wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
     return indtxt
 
-def get_matches(zi,zj,collection,dbconnection):
+def get_matches(iId,jId,collection,dbconnection):
     if collection['db_interface']=='render':
-        if zi==zj:
-            matches = renderapi.pointmatch.get_matches_within_group(collection['name'],str(float(zi)),owner=collection['owner'],render=dbconnection)
+        if iId==jId:
+            matches = renderapi.pointmatch.get_matches_within_group(collection['name'],iId,owner=collection['owner'],render=dbconnection)
         else:
-            matches = renderapi.pointmatch.get_matches_from_group_to_group(collection['name'],str(float(zi)),str(float(zj)),owner=collection['owner'],render=dbconnection)
+            matches = renderapi.pointmatch.get_matches_from_group_to_group(collection['name'],iId,jId,owner=collection['owner'],render=dbconnection)
         matches = np.array(matches)
     if collection['db_interface']=='mongo':
-        cursor = dbconnection.find({'pGroupId':str(float(zi)),'qGroupId':str(float(zj))},{'_id': False})
+        cursor = dbconnection.find({'pGroupId':iId,'qGroupId':jId},{'_id': False})
         matches = np.array(list(cursor))
-        if zi!=zj:
+        if iId!=jId:
             #in principle, this does nothing if zi < zj, but, just in case
-            cursor = dbconnection.find({'pGroupId':str(float(zj)),'qGroupId':str(float(zi))},{'_id': False})
+            cursor = dbconnection.find({'pGroupId':jId,'qGroupId':iId},{'_id': False})
             matches = np.append(matches,list(cursor))
     return matches
 
@@ -246,7 +260,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
 
 def calculate_processing_chunk(fargs):
     #set up for calling using multiprocessing pool
-    [zvals,zc,zloc,args,tile_ids,transform] = fargs
+    [zvals,sectionIds,zc,zloc,args,tile_ids,transform] = fargs
 
     dbconnection = make_dbconnection(args['pointmatch'])
     sorter = np.argsort(tile_ids)
@@ -270,7 +284,7 @@ def calculate_processing_chunk(fargs):
         for j in np.arange(i,jmax): #depth, upward looking
             #get point matches
             t0=time.time()
-            matches = get_matches(zvals[i],zvals[j],args['pointmatch'],dbconnection)
+            matches = get_matches(sectionIds[i],sectionIds[j],args['pointmatch'],dbconnection)
             if len(matches)==0:
                 print('WARNING%s%d matches for z1=%d z2=%d in pointmatch collection'%(pstr,len(matches),zvals[i],zvals[j]))
                 continue
@@ -558,7 +572,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def assemble_from_hdf5(self,zvals):
         #get the tile IDs and transforms
-        tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(self.args['input_stack'],self.args['transformation'],zvals)
+        tile_ids,tile_tforms,tile_tspecs,shared_tforms,sectionIds = get_tileids_and_tforms(self.args['input_stack'],self.args['transformation'],zvals)
         tmp = self.args['start_from_file'].split('/')
         fdir = ''
         for t in tmp[:-1]:
@@ -625,7 +639,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def assemble_from_db(self,zvals):
         #get the tile IDs and transforms
-        tile_ids,tile_tforms,tile_tspecs,shared_tforms = get_tileids_and_tforms(self.args['input_stack'],self.args['transformation'],zvals)
+        tile_ids,tile_tforms,tile_tspecs,shared_tforms,sectionIds = get_tileids_and_tforms(self.args['input_stack'],self.args['transformation'],zvals)
         if self.args['transformation']=='affine':
             #split the tforms in half by u and v
             utforms = np.hstack(np.hsplit(tile_tforms,len(tile_tforms)/3)[::2])
@@ -636,7 +650,7 @@ class EMaligner(argschema.ArgSchemaParser):
             tile_tforms = [tile_tforms]
     
         #create A matrix in compressed sparse row (CSR) format
-        A,weights,tiles_used = self.create_CSR_A(tile_ids,zvals)
+        A,weights,tiles_used = self.create_CSR_A(tile_ids,zvals,sectionIds)
 
         #some book-keeping if there were some unused tiles
         t0 = time.time()
@@ -680,7 +694,7 @@ class EMaligner(argschema.ArgSchemaParser):
             self.transform['nnz_per_row']=6
             self.transform['rows_per_ptmatch']=4
 
-    def create_CSR_A(self,tile_ids,zvals):
+    def create_CSR_A(self,tile_ids,zvals,sectionIds):
         #split up the work 
         if self.args['hdf5_options']['chunks_per_file']==-1:
             proc_chunks = [np.arange(zvals.size)]
@@ -695,7 +709,7 @@ class EMaligner(argschema.ArgSchemaParser):
    
         fargs = []
         for i in np.arange(len(proc_chunks)):
-            fargs.append([zvals,proc_chunks[i],i,self.args,tile_ids,self.transform])
+            fargs.append([zvals,sectionIds,proc_chunks[i],i,self.args,tile_ids,self.transform])
         results = pool.map(calculate_processing_chunk,fargs)
 
         tiles_used = []

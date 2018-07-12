@@ -549,6 +549,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         #solve
         message,x,results = self.solve_or_not(A,weights,reg,filt_tforms)
+        results['Ashape'] = A.shape
         print(message)
         del A
     

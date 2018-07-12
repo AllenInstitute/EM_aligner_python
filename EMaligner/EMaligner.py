@@ -829,6 +829,7 @@ class EMaligner(argschema.ArgSchemaParser):
            results['time']=time.time()-t0
            results['precision']=precision
            results['error']=error
+           results['err']=[np.abs(err).mean(),np.abs(err).std()]
    
            message = ' solved in %0.1f sec\n'%(time.time()-t0)
            message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
@@ -842,6 +843,7 @@ class EMaligner(argschema.ArgSchemaParser):
                scale += np.sqrt(np.power(x[3::self.transform['DOF_per_tile']],2.0)+np.power(x[4::self.transform['DOF_per_tile']],2.0))
                scale/=2
            scale = scale.sum()/self.ntiles_used
+           results['scale'] = scale
            message = message + '\n avg scale = %0.2f'%scale
    
        return message,x,results

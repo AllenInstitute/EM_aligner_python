@@ -46,7 +46,11 @@ class CheckPointMatches(argschema.ArgSchemaParser):
         dbconnection = make_dbconnection(collection)
     
         #use mongo to get the point matches
-        self.pm = get_matches(z1,z2,collection,dbconnection)
+        stack['db_interface']='render'
+        render = renderapi.connect(**stack)
+        iId = renderapi.stack.get_sectionId_for_z(stack['name'],z1,render=render)
+        jId = renderapi.stack.get_sectionId_for_z(stack['name'],z2,render=render)
+        self.pm = get_matches(iId,jId,collection,dbconnection)
         print('%d tile pairs for z1,z2=%d,%d in collection %s__%s'%(len(self.pm),z1,z2,collection['owner'],collection['name']))
         if not plot:
             return

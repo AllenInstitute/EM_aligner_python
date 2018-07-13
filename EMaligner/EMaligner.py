@@ -1,3 +1,4 @@
+import collections
 from pymongo import MongoClient
 import numpy as np
 import renderapi
@@ -52,12 +53,12 @@ def get_unused_tspecs(stack,tids):
         for t in tids:
             tmp = list(dbconnection.find({'tileId':t}))
             tspecs.append(renderapi.tilespec.TileSpec(json=tmp[0])) #move to renderapi object
-    return np.array(tspecs) 
+    return np.array(tspecs)
 
 def get_tileids_and_tforms(stack,tform_name,zvals):
     #connect to the database
     dbconnection = make_dbconnection(stack)
- 
+
     tile_ids = []
     tile_tforms = []
     tile_tspecs = []
@@ -77,12 +78,16 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
             tspecs = tmp.tilespecs
             for st in tmp.transforms:
                 shared_tforms.append(st)
-            sectionId = renderapi.stack.get_sectionId_for_z(
-                stack['name'],
-                float(z),
-                render=dbconnection,
-                owner=stack['owner'],
-                project=stack['project'])
+            try:
+                sectionId = renderapi.stack.get_sectionId_for_z(
+                    stack['name'],
+                    float(z),
+                    render=dbconnection,
+                    owner=stack['owner'],
+                    project=stack['project'])
+            except renderapi.errors.RenderError:
+                sectionId = collections.Counter([
+                    ts.layout.sectionId for ts in tspecs]).most_common()[0][0]
         if stack['db_interface']=='mongo':
             cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)]) #like renderapi order?
             tspecs = list(cursor)
@@ -193,10 +198,10 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
         data[5+mstep] = -1.0
         uindices = np.hstack((tile_ind1*transform['DOF_per_tile']+np.array([0,1,2]),tile_ind2*transform['DOF_per_tile']+np.array([0,1,2])))
-        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts)
         #v=dx+ey+f
         data[(npts*transform['nnz_per_row']):(2*npts*transform['nnz_per_row'])] = data[0:npts*transform['nnz_per_row']]
-        indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(uindices+3,npts) 
+        indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(uindices+3,npts)
         indptr[0:2*npts] = np.arange(1,2*npts+1)*transform['nnz_per_row']
         weights[0:2*npts] = np.tile(np.array(match['matches']['w'])[m],2)
     elif args['transformation']=='affine':
@@ -208,7 +213,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         data[4+mstep] = -1.0*np.array(match['matches']['q'][1])[m]
         data[5+mstep] = -1.0
         uindices = np.hstack((tile_ind1*transform['DOF_per_tile']/2+np.array([0,1,2]),tile_ind2*transform['DOF_per_tile']/2+np.array([0,1,2])))
-        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts)
         indptr[0:npts] = np.arange(1,npts+1)*transform['nnz_per_row']
         weights[0:npts] = np.array(match['matches']['w'])[m]
         #don't do anything for v
@@ -226,7 +231,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         data[4+mstep] = -1.0*qy
         data[5+mstep] = -1.0
         uindices = np.hstack((tile_ind1*transform['DOF_per_tile']+np.array([0,1,2]),tile_ind2*transform['DOF_per_tile']+np.array([0,1,2])))
-        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        indices[0:npts*transform['nnz_per_row']] = np.tile(uindices,npts)
         #v=-bx+ay+d
         data[0+mstep+npts*transform['nnz_per_row']] = -1.0*px
         data[1+mstep+npts*transform['nnz_per_row']] = py
@@ -235,7 +240,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         data[4+mstep+npts*transform['nnz_per_row']] = -1.0*qy
         data[5+mstep+npts*transform['nnz_per_row']] = -1.0
         vindices = np.hstack((tile_ind1*transform['DOF_per_tile']+np.array([1,0,3]),tile_ind2*transform['DOF_per_tile']+np.array([1,0,3])))
-        indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(vindices,npts) 
+        indices[npts*transform['nnz_per_row']:2*npts*transform['nnz_per_row']] = np.tile(vindices,npts)
         #du
         data[0+mstep+2*npts*transform['nnz_per_row']] = px-px.mean()
         data[1+mstep+2*npts*transform['nnz_per_row']] = py-py.mean()
@@ -243,7 +248,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         data[3+mstep+2*npts*transform['nnz_per_row']] = -1.0*(qx-qx.mean())
         data[4+mstep+2*npts*transform['nnz_per_row']] = -1.0*(qy-qy.mean())
         data[5+mstep+2*npts*transform['nnz_per_row']] = -0.0
-        indices[2*npts*transform['nnz_per_row']:3*npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        indices[2*npts*transform['nnz_per_row']:3*npts*transform['nnz_per_row']] = np.tile(uindices,npts)
         #dv
         data[0+mstep+3*npts*transform['nnz_per_row']] = -1.0*(px-px.mean())
         data[1+mstep+3*npts*transform['nnz_per_row']] = py-py.mean()
@@ -251,7 +256,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
         data[3+mstep+3*npts*transform['nnz_per_row']] = 1.0*(qx-qx.mean())
         data[4+mstep+3*npts*transform['nnz_per_row']] = -1.0*(qy-qy.mean())
         data[5+mstep+3*npts*transform['nnz_per_row']] = -0.0
-        indices[3*npts*transform['nnz_per_row']:4*npts*transform['nnz_per_row']] = np.tile(uindices,npts) 
+        indices[3*npts*transform['nnz_per_row']:4*npts*transform['nnz_per_row']] = np.tile(uindices,npts)
 
         indptr[0:transform['rows_per_ptmatch']*npts] = np.arange(1,transform['rows_per_ptmatch']*npts+1)*transform['nnz_per_row']
         weights[0:transform['rows_per_ptmatch']*npts] = np.tile(np.array(match['matches']['w'])[m],transform['rows_per_ptmatch'])
@@ -276,8 +281,8 @@ def calculate_processing_chunk(fargs):
     chunk['nchunks'] = 0
     chunk['zlist'] = []
 
-    pstr = '  proc%d: '%zloc   
- 
+    pstr = '  proc%d: '%zloc
+
     for i in zc:
         print('%supward-looking for z %d'%(pstr,zvals[i]))
         jmax = np.min([i+args['matrix_assembly']['depth']+1,len(zvals)])
@@ -309,9 +314,9 @@ def calculate_processing_chunk(fargs):
                 continue
 
             print('%sloaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(pstr,instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,args['pointmatch']['db_interface']))
-        
+
             t0 = time.time()
-            #for the given point matches, these are the indices in tile_ids 
+            #for the given point matches, these are the indices in tile_ids
             #these determine the column locations in A for each tile pair
             #this is a fast version of np.argwhere() loop
             pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
@@ -355,8 +360,8 @@ def calculate_processing_chunk(fargs):
                 indptr[global_rowind+1] = iptr+indptr[nrows]
 
                 nrows += wts.size
-           
-            del matches 
+
+            del matches
             #truncate, because we allocated conservatively
             data = data[0:nrows*transform['nnz_per_row']]
             indices = indices[0:nrows*transform['nnz_per_row']]
@@ -450,7 +455,7 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
             tspecs[m].tforms[-1].M[1,1] = x[m*4+0]
             tspecs[m].tforms[-1].M[1,2] = x[m*4+3]
     tspecs = tspecs.tolist()
-    
+
     unused_tspecs = get_unused_tspecs(input_stack,unused_tids)
     tspecs = tspecs + unused_tspecs.tolist()
     print('\ningesting results to %s:%d %s__%s__%s'%(ingestconn.DEFAULT_HOST, ingestconn.DEFAULT_PORT,ingestconn.DEFAULT_OWNER,ingestconn.DEFAULT_PROJECT,outputname))
@@ -488,7 +493,7 @@ def write_to_new_stack(input_stack,outputname,tform_type,tspecs,shared_tforms,x,
             stderr=stdeo,
             stdout=stdeo,
             use_rest=use_rest)
-    
+
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
@@ -521,7 +526,7 @@ class EMaligner(argschema.ArgSchemaParser):
         #3D
         elif self.args['solve_type']=='3D':
             self.results = self.assemble_and_solve(zvals,ingestconn)
-        
+
         if ingestconn!=None:
             if self.args['close_stack']:
                 renderapi.stack.set_stack_state(self.args['output_stack']['name'],state='COMPLETE',render=ingestconn)
@@ -542,7 +547,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         self.ntiles_used = filt_tids.size
         print('\n A created in %0.1f seconds'%(time.time()-t0))
-    
+
         if self.args['profile_data_load']:
             print('skipping solve for profile run')
             sys.exit()
@@ -551,7 +556,7 @@ class EMaligner(argschema.ArgSchemaParser):
         message,x,results = self.solve_or_not(A,weights,reg,filt_tforms)
         print(message)
         del A
-    
+
         if self.args['output_mode']=='stack':
             write_to_new_stack(
                     self.args['input_stack'],
@@ -577,7 +582,7 @@ class EMaligner(argschema.ArgSchemaParser):
         fdir = ''
         for t in tmp[:-1]:
             fdir=fdir+'/'+t
-        
+
         #get from the regularization file
         fname = fdir+'/regularization.h5'
         f = h5py.File(fname,'r')
@@ -587,7 +592,7 @@ class EMaligner(argschema.ArgSchemaParser):
         k=0
         filt_tforms=[]
         while True:
-            name = 'transforms_%d'%k 
+            name = 'transforms_%d'%k
             if name in f.keys():
                 filt_tforms.append(f.get(name)[()])
                 k+=1
@@ -599,11 +604,11 @@ class EMaligner(argschema.ArgSchemaParser):
         filt_tspecs = tile_tspecs[tile_ind]
         f.close()
         print('  %s read'%fname)
-    
+
         outr = sparse.eye(reg.size,format='csr')
         outr.data = reg
         reg = outr
-    
+
         #get from the matrix files
         indexname = fdir+'/index.txt'
         f = open(indexname,'r')
@@ -626,15 +631,15 @@ class EMaligner(argschema.ArgSchemaParser):
             weights = np.append(weights,f.get('weights')[()])
             f.close()
             print('  %s read'%fname)
-    
+
         A=csr_matrix((data,indices,indptr))
-    
+
         outw = sparse.eye(weights.size,format='csr')
         outw.data = weights
         weights = outw
-    
+
         print('csr inputs read from files listed in : %s'%indexname)
-    
+
         return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids
 
     def assemble_from_db(self,zvals):
@@ -648,7 +653,7 @@ class EMaligner(argschema.ArgSchemaParser):
             del utforms,vtforms
         else:
             tile_tforms = [tile_tforms]
-    
+
         #create A matrix in compressed sparse row (CSR) format
         A,weights,tiles_used = self.create_CSR_A(tile_ids,zvals,sectionIds)
 
@@ -658,24 +663,24 @@ class EMaligner(argschema.ArgSchemaParser):
         filt_tspecs = tile_tspecs[tile_ind]
         filt_tids = tile_ids[tile_ind]
         unused_tids = tile_ids[np.invert(tile_ind)]
-    
+
         #remove columns in A for unused tiles
         slice_ind = np.repeat(tile_ind,self.transform['DOF_per_tile']/len(tile_tforms))
         if self.args['output_mode'] != 'hdf5':
             #for large matrices, this might be expensive to perform on CSR format
             A = A[:,slice_ind]
-    
+
         filt_tforms = []
         for j in np.arange(len(tile_tforms)):
             filt_tforms.append(tile_tforms[j][slice_ind])
         del tile_ids,tiles_used,tile_tforms,tile_ind,tile_tspecs
-        
+
         #create the regularization vectors
         reg = self.create_regularization(filt_tforms)
-    
+
         #output the regularization vectors to hdf5 file
         write_reg_and_tforms(self.args['output_mode'],self.args['hdf5_options'],filt_tforms,reg,filt_tids,unused_tids)
-    
+
         return A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids
 
     def set_transform(self):
@@ -695,18 +700,18 @@ class EMaligner(argschema.ArgSchemaParser):
             self.transform['rows_per_ptmatch']=4
 
     def create_CSR_A(self,tile_ids,zvals,sectionIds):
-        #split up the work 
+        #split up the work
         if self.args['hdf5_options']['chunks_per_file']==-1:
             proc_chunks = [np.arange(zvals.size)]
         else:
             proc_chunks = np.array_split(np.arange(zvals.size),np.ceil(float(zvals.size)/self.args['hdf5_options']['chunks_per_file']))
-        
+
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
         print('processing chunked as:')
         for i in np.arange(len(proc_chunks)):
             print(i,zvals[proc_chunks[i]])
-   
+
         fargs = []
         for i in np.arange(len(proc_chunks)):
             fargs.append([zvals,sectionIds,proc_chunks[i],i,self.args,tile_ids,self.transform])
@@ -725,7 +730,7 @@ class EMaligner(argschema.ArgSchemaParser):
             f.close()
             print('wrote %s'%indexname)
             return None,None,np.array(tiles_used)
-        
+
         else:
             data = np.array([]).astype('float64')
             weights = np.array([]).astype('float64')
@@ -740,17 +745,17 @@ class EMaligner(argschema.ArgSchemaParser):
                         indptr = np.append(indptr,results[i]['indptr'])
                     else:
                         indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
-    
+
             A=csr_matrix((data,indices,indptr))
             outw = sparse.eye(weights.size,format='csr')
             outw.data = weights
             weights = outw
             return A,outw,np.array(tiles_used)
-  
+
     def create_regularization(self,tile_tforms):
         #affine (half-size) or any other transform, we only need the first one:
         tile_tforms = tile_tforms[0]
-    
+
         #create a regularization vector
         reg = np.ones_like(tile_tforms).astype('float64')*self.args['regularization']['default_lambda']
         if 'affine' in self.args['transformation']:
@@ -760,7 +765,7 @@ class EMaligner(argschema.ArgSchemaParser):
             reg[3::4] = reg[3::4]*self.args['regularization']['translation_factor']
         if self.args['regularization']['freeze_first_tile']:
             reg[0:self.transform['DOF_per_tile']] = 1e15
-    
+
         outr = sparse.eye(reg.size,format='csr')
         outr.data = reg
         return outr
@@ -791,7 +796,7 @@ class EMaligner(argschema.ArgSchemaParser):
            print(' K created in %0.1f seconds'%(time.time()-t0))
            t0=time.time()
            del weights,ATW
-       
+
            #factorize, then solve, efficient for large affine
            solve = factorized(K)
            if self.args['transformation']=='affine':
@@ -801,13 +806,13 @@ class EMaligner(argschema.ArgSchemaParser):
                xu = solve(Lm)
                erru = A.dot(xu)
                precisionu = np.linalg.norm(K.dot(xu)-Lm)/np.linalg.norm(Lm)
-   
+
                Lm = reg.dot(filt_tforms[1])
                xv = solve(Lm)
                errv = A.dot(xv)
                precisionv = np.linalg.norm(K.dot(xv)-Lm)/np.linalg.norm(Lm)
                precision = np.sqrt(precisionu**2+precisionv**2)
-              
+
                #recombine
                x = np.zeros(xu.size*2).astype('float64')
                err = np.hstack((erru,errv))
@@ -822,14 +827,14 @@ class EMaligner(argschema.ArgSchemaParser):
                err = A.dot(x)
                precision = np.linalg.norm(K.dot(x)-Lm)/np.linalg.norm(Lm)
            del K,Lm
-   
+
            error = np.linalg.norm(err)
-   
+
            results={}
            results['time']=time.time()-t0
            results['precision']=precision
            results['error']=error
-   
+
            message = ' solved in %0.1f sec\n'%(time.time()-t0)
            message = message + ' precision [norm(Kx-Lm)/norm(Lm)] = %0.1e\n'%precision
            message = message + ' error     [norm(Ax-b)] = %0.3f\n'%error
@@ -843,11 +848,10 @@ class EMaligner(argschema.ArgSchemaParser):
                scale/=2
            scale = scale.sum()/self.ntiles_used
            message = message + '\n avg scale = %0.2f'%scale
-   
+
        return message,x,results
 
- 
+
 if __name__=='__main__':
     mod = EMaligner(schema_type=EMA_Schema)
     mod.run()
-   

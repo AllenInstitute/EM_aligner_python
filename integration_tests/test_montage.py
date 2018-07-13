@@ -33,6 +33,22 @@ def raw_stack(render):
     yield test_raw_stack
     renderapi.stack.delete_stack(test_raw_stack,render=render)
 
+
+@pytest.fixture(scope='function')
+def loading_raw_stack(render):
+    test_raw_stack = 'input_raw_stack_loading'
+    #ts = []
+    #with open(FILE_RAW_TILES, 'r') as f:
+    #    ts = json.load(f)
+
+    #tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in ts]
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
+    renderapi.stack.create_stack(test_raw_stack,render=render)
+    renderapi.client.import_tilespecs(test_raw_stack,tilespecs,render=render)
+    yield test_raw_stack
+    renderapi.stack.delete_stack(test_raw_stack,render=render)
+
+
 @pytest.fixture(scope='module')
 def montage_pointmatches(render):
     test_montage_collection = 'montage_collection'
@@ -43,14 +59,17 @@ def montage_pointmatches(render):
     renderapi.pointmatch.import_matches(test_montage_collection,pms_from_json,render=render)
     yield test_montage_collection
 
-def test_first_test(render,montage_pointmatches,raw_stack):
-    montage_parameters['input_stack']['name']=raw_stack
+
+@pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
+def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state):
+    renderapi.stack.set_stack_state(loading_raw_stack, stack_state, render=render)
+    montage_parameters['input_stack']['name'] = loading_raw_stack
     montage_parameters['pointmatch']['name'] = montage_pointmatches
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
-    
+
     #try with affine_fullsize
     montage_parameters['transformation'] = 'affine_fullsize'
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
@@ -59,10 +78,10 @@ def test_first_test(render,montage_pointmatches,raw_stack):
     assert mod.results['error'] < 200
 
     #try with render interface
-    montage_parameters['input_stack']['db_interface']='render'
-    montage_parameters['pointmatch']['db_interface']='render'
-    mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
+    montage_parameters['input_stack']['db_interface'] = 'render'
+    montage_parameters['output_stack']['db_interface'] = 'render'
+    montage_parameters['pointmatch']['db_interface'] = 'render'
+    mod = EMaligner.EMaligner(input_data=montage_parameters, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
-    

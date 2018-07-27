@@ -5,15 +5,16 @@ from argschema.fields import String, Int, Boolean, Nested, Float
 import marshmallow as mm
 from marshmallow import post_load, ValidationError
 
+
 class db_params(ArgSchema):
     owner = String(
         default='',
         required=False,
-        description='owner') 
+        description='owner')
     project = String(
         default='',
         required=False,
-        description='project') 
+        description='project')
     name = String(
         required=True,
         description='stack name')
@@ -48,25 +49,34 @@ class db_params(ArgSchema):
     db_interface = String(
         default='mongo')
     client_scripts = String(
-        default='/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts',
+        default=('/allen/aibs/pipeline/image_processing/volume_assembly/'
+                 'render-jars/production/scripts'),
         required=False,
         description='render bin path')
 
     @post_load
     def validate_data(self, data):
         if data['db_interface'] is 'mongo':
-            if data['mongo_host'] is None or data['mongo_userName'] is None or data['mongo_authenticationDatabase'] is None or data['mongo_password'] is None:
+            if (
+                    data['mongo_host'] is None or
+                    data['mongo_userName'] is None or
+                    data['mongo_authenticationDatabase'] is None or
+                    data['mongo_password'] is None):
                 raise ValidationError("Need mongo DB details")
         else:
             if data['host'] is None:
-                raise ValidationError("Need render host") 
+                raise ValidationError("Need render host")
+
 
 class hdf5_options(ArgSchema):
     output_dir = String(
-        default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
+        default=('/allen/programs/celltypes/workgroups/em-connectomics/'
+                 'danielk/solver_exchange/python/'))
     chunks_per_file = Int(
         default=5,
-        description='how many sections with upward-looking cross section to write per .h5 file')
+        description=('how many sections with upward-looking cross section '
+                     'to write per .h5 file'))
+
 
 class matrix_assembly(ArgSchema):
     depth = Int(
@@ -92,7 +102,8 @@ class matrix_assembly(ArgSchema):
     choose_random = Boolean(
         default=False,
         required=False,
-        description='choose random pts to meet for npts_max vs. just first npts_max')
+        description=('choose random pts to meet for npts_max vs. '
+                     'just first npts_max'))
     inverse_dz = Boolean(
         default=True,
         required=False,
@@ -128,15 +139,15 @@ class stack(db_params):
 
 class EMA_Schema(ArgSchema):
     first_section = Int(
-        required=True, 
-        description = 'first section for matrix assembly')
+        required=True,
+        description='first section for matrix assembly')
     last_section = Int(
         required=True,
-        description = 'last section for matrix assembly')
+        description='last section for matrix assembly')
     n_parallel_jobs = Int(
         default=4,
         required=False,
-        description = 'number of parallel jobs that will run for assembly')
+        description='number of parallel jobs that will run for assembly')
     solve_type = String(
         default='montage',
         required=False,
@@ -153,15 +164,16 @@ class EMA_Schema(ArgSchema):
         default=False)
     transformation = String(
         default='affine',
-        validate=lambda x: x in ['affine','rigid','affine_fullsize'])
+        validate=lambda x: x in ['affine', 'rigid', 'affine_fullsize'])
     output_mode = String(
         default='hdf5')
     start_from_file = String(
         default='',
-        description = 'fullpath to index.txt')
+        description='fullpath to index.txt')
     render_output = String(
         default='null',
-        description = '/path/to/file, null (devnull), or stdout for where to redirect render output')
+        description=('/path/to/file, null (devnull), or stdout for '
+                     'where to redirect render output'))
     input_stack = Nested(stack)
     output_stack = Nested(stack)
     pointmatch = Nested(pointmatch)
@@ -170,7 +182,8 @@ class EMA_Schema(ArgSchema):
     regularization = Nested(regularization)
     showtiming = Int(
         default=1,
-        description = 'have the routine showhow long each process takes')
+        description='have the routine showhow long each process takes')
+
 
 class EMA_PlotSchema(EMA_Schema):
     z1 = Int(
@@ -192,5 +205,5 @@ class EMA_PlotSchema(EMA_Schema):
         description='threshold for colors in residual plot [pixels]')
     density = Boolean(
         default=True,
-        description='whether residual plot is density (for large numbers of points) or just points')
-
+        description=('whether residual plot is density '
+                     '(for large numbers of points) or just points'))

@@ -69,57 +69,64 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
     for z in zvals:
         #load tile specs from the database
         if stack['db_interface']=='render':
-            tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(
-                    stack['name'],
-                    float(z),
-                    render=dbconnection,
-                    owner=stack['owner'],
-                    project=stack['project'])
-            tspecs = tmp.tilespecs
-            for st in tmp.transforms:
-                shared_tforms.append(st)
             try:
-                sectionId = renderapi.stack.get_sectionId_for_z(
-                    stack['name'],
-                    float(z),
-                    render=dbconnection,
-                    owner=stack['owner'],
-                    project=stack['project'])
-            except renderapi.errors.RenderError:
-                sectionId = collections.Counter([
-                    ts.layout.sectionId for ts in tspecs]).most_common()[0][0]
+                tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(
+                        stack['name'],
+                        float(z),
+                        render=dbconnection,
+                        owner=stack['owner'],
+                        project=stack['project'])
+                tspecs = tmp.tilespecs
+                for st in tmp.transforms:
+                    shared_tforms.append(st)
+                try:
+                    sectionId = renderapi.stack.get_sectionId_for_z(
+                        stack['name'],
+                        float(z),
+                        render=dbconnection,
+                        owner=stack['owner'],
+                        project=stack['project'])
+                except renderapi.errors.RenderError:
+                    sectionId = collections.Counter([
+                        ts.layout.sectionId for ts in tspecs]).most_common()[0][0]
+            except:
+                sectionId = ""
         if stack['db_interface']=='mongo':
             cursor = dbconnection.find({'z':float(z)}).sort([('layout.imageRow',1),('layout.imageCol',1)]) #like renderapi order?
-            tspecs = list(cursor)
-            refids = []
-            for ts in tspecs:
-                for m in np.arange(len(ts['transforms']['specList'])):
-                    if 'refId' in ts['transforms']['specList'][m]:
-                        refids.append(ts['transforms']['specList'][m]['refId'])
-            refids = np.unique(np.array(refids))
-            #be selective of which transforms to pass on to the new stack
-            dbconnection2 = make_dbconnection(stack,which='transform')
-            for refid in refids:
-                shared_tforms.append(renderapi.transform.load_transform_json(list(dbconnection2.find({"id":refid}))[0]))
-            sectionId = dbconnection.find({"z":float(z)}).distinct("layout.sectionId")[0]
-        sectionIds.append(sectionId)
+            if cursor.count()==0:
+                sectionId = ""
+            else:
+                tspecs = list(cursor)
+                refids = []
+                for ts in tspecs:
+                    for m in np.arange(len(ts['transforms']['specList'])):
+                        if 'refId' in ts['transforms']['specList'][m]:
+                            refids.append(ts['transforms']['specList'][m]['refId'])
+                refids = np.unique(np.array(refids))
+                #be selective of which transforms to pass on to the new stack
+                dbconnection2 = make_dbconnection(stack,which='transform')
+                for refid in refids:
+                    shared_tforms.append(renderapi.transform.load_transform_json(list(dbconnection2.find({"id":refid}))[0]))
+                sectionId = dbconnection.find({"z":float(z)}).distinct("layout.sectionId")[0]
+        if sectionId != "":
+            sectionIds.append(sectionId)
 
-        #make lists of IDs and transforms
-        for k in np.arange(len(tspecs)):
-            if stack['db_interface']=='render':
-                tile_ids.append(tspecs[k].tileId)
-                if 'affine' in tform_name:
-                    tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
-                elif tform_name=='rigid':
-                    tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,2]])
-            if stack['db_interface']=='mongo':
-                tile_ids.append(tspecs[k]['tileId'])
-                if 'affine' in tform_name:
-                    tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
-                elif tform_name=='rigid':
-                    tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,5]])
-                tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
-            tile_tspecs.append(tspecs[k])
+            #make lists of IDs and transforms
+            for k in np.arange(len(tspecs)):
+                if stack['db_interface']=='render':
+                    tile_ids.append(tspecs[k].tileId)
+                    if 'affine' in tform_name:
+                        tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,0],tspecs[k].tforms[-1].M[1,1],tspecs[k].tforms[-1].M[1,2]])
+                    elif tform_name=='rigid':
+                        tile_tforms.append([tspecs[k].tforms[-1].M[0,0],tspecs[k].tforms[-1].M[0,1],tspecs[k].tforms[-1].M[0,2],tspecs[k].tforms[-1].M[1,2]])
+                if stack['db_interface']=='mongo':
+                    tile_ids.append(tspecs[k]['tileId'])
+                    if 'affine' in tform_name:
+                        tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,1,3,5]])
+                    elif tform_name=='rigid':
+                        tile_tforms.append(np.array(tspecs[k]['transforms']['specList'][-1]['dataString'].split()).astype('float')[[0,2,4,5]])
+                    tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k]) #move to renderapi object
+                tile_tspecs.append(tspecs[k])
 
     print('---\nloaded %d tile specs from %d zvalues in %0.1f sec using interface: %s'%(len(tile_ids),len(zvals),time.time()-t0,stack['db_interface']))
     return np.array(tile_ids),np.array(tile_tforms).flatten(),np.array(tile_tspecs).flatten(),shared_tforms, sectionIds
@@ -265,7 +272,7 @@ def CSR_from_tile_pair(args,match,tile_ind1,tile_ind2,transform):
 
 def calculate_processing_chunk(fargs):
     #set up for calling using multiprocessing pool
-    [zvals,sectionIds,zc,zloc,args,tile_ids,transform] = fargs
+    [zvals,sectionIds,zloc,args,tile_ids,transform] = fargs
 
     dbconnection = make_dbconnection(args['pointmatch'])
     sorter = np.argsort(tile_ids)
@@ -283,105 +290,101 @@ def calculate_processing_chunk(fargs):
 
     pstr = '  proc%d: '%zloc
 
-    for i in zc:
-        print('%supward-looking for z %d'%(pstr,zvals[i]))
-        jmax = np.min([i+args['matrix_assembly']['depth']+1,len(zvals)])
-        for j in np.arange(i,jmax): #depth, upward looking
-            #get point matches
-            t0=time.time()
-            matches = get_matches(sectionIds[i],sectionIds[j],args['pointmatch'],dbconnection)
-            if len(matches)==0:
-                print('WARNING%s%d matches for z1=%d z2=%d in pointmatch collection'%(pstr,len(matches),zvals[i],zvals[j]))
-                continue
+    #get point matches
+    t0=time.time()
+    matches = get_matches(sectionIds[0],sectionIds[1],args['pointmatch'],dbconnection)
+    if len(matches)==0:
+        print('WARNING%s%d matches for sections %s and %s in pointmatch collection'%(pstr,len(matches),sectionIds[0],sectionIds[1]))
+        return chunk
 
-            #extract IDs for fast checking
-            pids = []
-            qids = []
-            for m in matches:
-                pids.append(m['pId'])
-                qids.append(m['qId'])
-            pids = np.array(pids)
-            qids = np.array(qids)
+    #extract IDs for fast checking
+    pids = []
+    qids = []
+    for m in matches:
+        pids.append(m['pId'])
+        qids.append(m['qId'])
+    pids = np.array(pids)
+    qids = np.array(qids)
 
-            #remove matches that don't have both IDs in tile_ids
-            instack = np.in1d(pids,tile_ids)&np.in1d(qids,tile_ids)
-            matches = matches[instack]
-            pids = pids[instack]
-            qids = qids[instack]
+    #remove matches that don't have both IDs in tile_ids
+    instack = np.in1d(pids,tile_ids)&np.in1d(qids,tile_ids)
+    matches = matches[instack]
+    pids = pids[instack]
+    qids = qids[instack]
 
-            if len(matches)==0:
-                print('WARNING%sno tile pairs in stack for pointmatches in z1=%d z2=%d'%(pstr,zvals[i],zvals[j]))
-                continue
+    if len(matches)==0:
+        print('WARNING%sno tile pairs in stack for pointmatch groupIds %s and %s'%(pstr,sectionIds[0],sectionIds[1]))
+        return chunk
 
-            print('%sloaded %d matches, using %d, for z1=%d z2=%d in %0.1f sec using interface: %s'%(pstr,instack.size,len(matches),zvals[i],zvals[j],time.time()-t0,args['pointmatch']['db_interface']))
+    print('%sloaded %d matches, using %d, for groupIds %s and %s in %0.1f sec using interface: %s'%(pstr,instack.size,len(matches),sectionIds[0],sectionIds[1],time.time()-t0,args['pointmatch']['db_interface']))
 
-            t0 = time.time()
-            #for the given point matches, these are the indices in tile_ids
-            #these determine the column locations in A for each tile pair
-            #this is a fast version of np.argwhere() loop
-            pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
-            qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
+    t0 = time.time()
+    #for the given point matches, these are the indices in tile_ids
+    #these determine the column locations in A for each tile pair
+    #this is a fast version of np.argwhere() loop
+    pinds = sorter[np.searchsorted(tile_ids,pids,sorter=sorter)]
+    qinds = sorter[np.searchsorted(tile_ids,qids,sorter=sorter)]
 
-            #conservative pre-allocation of the arrays we need to populate
-            #will truncate at the end
-            nmatches = len(matches)
-            nd = transform['nnz_per_row']*transform['rows_per_ptmatch']*args['matrix_assembly']['npts_max']*nmatches
-            ni = transform['rows_per_ptmatch']*args['matrix_assembly']['npts_max']*nmatches
-            data = np.zeros(nd).astype('float64')
-            indices = np.zeros(nd).astype('int64')
-            indptr = np.zeros(ni+1).astype('int64')
-            weights = np.zeros(ni).astype('float64')
+    #conservative pre-allocation of the arrays we need to populate
+    #will truncate at the end
+    nmatches = len(matches)
+    nd = transform['nnz_per_row']*transform['rows_per_ptmatch']*args['matrix_assembly']['npts_max']*nmatches
+    ni = transform['rows_per_ptmatch']*args['matrix_assembly']['npts_max']*nmatches
+    data = np.zeros(nd).astype('float64')
+    indices = np.zeros(nd).astype('int64')
+    indptr = np.zeros(ni+1).astype('int64')
+    weights = np.zeros(ni).astype('float64')
 
-            #see definition of CSR format, wikipedia for example
-            indptr[0] = 0
+    #see definition of CSR format, wikipedia for example
+    indptr[0] = 0
 
-            #track how many rows
-            nrows = 0
+    #track how many rows
+    nrows = 0
 
-            tilepair_weightfac = tilepair_weight(i,j,args['matrix_assembly'])
+    tilepair_weightfac = tilepair_weight(float(sectionIds[0]),float(sectionIds[1]),args['matrix_assembly'])
 
-            for k in np.arange(nmatches):
-                #create the CSR sub-matrix for this tile pair
-                d,ind,iptr,wts,npts = CSR_from_tile_pair(args,matches[k],pinds[k],qinds[k],transform)
-                if d is None:
-                    continue #if npts<nmin, for example
+    for k in np.arange(nmatches):
+        #create the CSR sub-matrix for this tile pair
+        d,ind,iptr,wts,npts = CSR_from_tile_pair(args,matches[k],pinds[k],qinds[k],transform)
+        if d is None:
+            continue #if npts<nmin, for example
 
-                #add both tile ids to the list
-                chunk['tiles_used'].append(matches[k]['pId'])
-                chunk['tiles_used'].append(matches[k]['qId'])
+        #add both tile ids to the list
+        chunk['tiles_used'].append(matches[k]['pId'])
+        chunk['tiles_used'].append(matches[k]['qId'])
 
-                #add sub-matrix to global matrix
-                global_dind = np.arange(npts*transform['rows_per_ptmatch']*transform['nnz_per_row'])+nrows*transform['nnz_per_row']
-                data[global_dind] = d
-                indices[global_dind] = ind
+        #add sub-matrix to global matrix
+        global_dind = np.arange(npts*transform['rows_per_ptmatch']*transform['nnz_per_row'])+nrows*transform['nnz_per_row']
+        data[global_dind] = d
+        indices[global_dind] = ind
 
-                global_rowind = np.arange(npts*transform['rows_per_ptmatch'])+nrows
-                weights[global_rowind] = wts*tilepair_weightfac
-                indptr[global_rowind+1] = iptr+indptr[nrows]
+        global_rowind = np.arange(npts*transform['rows_per_ptmatch'])+nrows
+        weights[global_rowind] = wts*tilepair_weightfac
+        indptr[global_rowind+1] = iptr+indptr[nrows]
 
-                nrows += wts.size
+        nrows += wts.size
 
-            del matches
-            #truncate, because we allocated conservatively
-            data = data[0:nrows*transform['nnz_per_row']]
-            indices = indices[0:nrows*transform['nnz_per_row']]
-            indptr = indptr[0:nrows+1]
-            weights = weights[0:nrows]
+    del matches
+    #truncate, because we allocated conservatively
+    data = data[0:nrows*transform['nnz_per_row']]
+    indices = indices[0:nrows*transform['nnz_per_row']]
+    indptr = indptr[0:nrows+1]
+    weights = weights[0:nrows]
 
-            if chunk['nchunks']==0:
-                chunk['data'] = np.copy(data)
-                chunk['weights'] = np.copy(weights)
-                chunk['indices'] = np.copy(indices)
-                chunk['indptr'] = np.copy(indptr)
-            else:
-                chunk['data'] = np.append(chunk['data'],data)
-                chunk['weights'] = np.append(chunk['weights'],weights)
-                chunk['indices'] = np.append(chunk['indices'],indices)
-                lastptr = chunk['indptr'][-1]
-                chunk['indptr'] = np.append(chunk['indptr'],indptr[1:]+lastptr)
-            chunk['nchunks'] += 1
-            chunk['zlist'].append(zvals[i])
-            del data,indices,indptr,weights
+    if chunk['nchunks']==0:
+        chunk['data'] = np.copy(data)
+        chunk['weights'] = np.copy(weights)
+        chunk['indices'] = np.copy(indices)
+        chunk['indptr'] = np.copy(indptr)
+    else:
+        chunk['data'] = np.append(chunk['data'],data)
+        chunk['weights'] = np.append(chunk['weights'],weights)
+        chunk['indices'] = np.append(chunk['indices'],indices)
+        lastptr = chunk['indptr'][-1]
+        chunk['indptr'] = np.append(chunk['indptr'],indptr[1:]+lastptr)
+    chunk['nchunks'] += 1
+    chunk['zlist'].append(float(sectionIds[0]))
+    del data,indices,indptr,weights
 
     if chunk['data'] is not None:
         if args['output_mode']=='hdf5':
@@ -390,13 +393,13 @@ def calculate_processing_chunk(fargs):
             chunk['indextxt'] += write_chunk_to_file(fname,c,chunk['weights'])
     return chunk
 
-def tilepair_weight(i,j,matrix_assembly):
-    if i==j:
+def tilepair_weight(z1, z2, matrix_assembly):
+    if z1 == z2:
         tp_weight = matrix_assembly['montage_pt_weight']
     else:
         tp_weight = matrix_assembly['cross_pt_weight']
         if matrix_assembly['inverse_dz']:
-            tp_weight = tp_weight/np.abs(j-i+1)
+            tp_weight = tp_weight/np.abs(z2-z1+1)
     return tp_weight
 
 def write_reg_and_tforms(output_mode,hdf5_options,filt_tforms,reg,filt_tids,unused_tids):
@@ -699,6 +702,18 @@ class EMaligner(argschema.ArgSchemaParser):
             self.transform['nnz_per_row']=6
             self.transform['rows_per_ptmatch']=4
 
+    def determine_zvalue_pairs(self, zvals, sectionIds):
+        # create all possible pairs, given zvals and depth
+        zs = np.array(sectionIds).astype(float)
+        pairs = []
+        for z in zs:
+            i = 0
+            while i <= self.args['matrix_assembly']['depth']:
+                if z+i in zvals:
+                    pairs.append([str(z),str(z+i)])
+                i += 1
+        return pairs
+
     def create_CSR_A(self,tile_ids,zvals,sectionIds):
         #split up the work
         if self.args['hdf5_options']['chunks_per_file']==-1:
@@ -712,16 +727,24 @@ class EMaligner(argschema.ArgSchemaParser):
         for i in np.arange(len(proc_chunks)):
             print(i,zvals[proc_chunks[i]])
 
+        print('zzz')
+
+        pairs = self.determine_zvalue_pairs(zvals,sectionIds)
+
         fargs = []
-        for i in np.arange(len(proc_chunks)):
-            fargs.append([zvals,sectionIds,proc_chunks[i],i,self.args,tile_ids,self.transform])
+        for i in np.arange(len(pairs)):
+            fargs.append([zvals,pairs[i],i,self.args,tile_ids,self.transform])
         results = pool.map(calculate_processing_chunk,fargs)
+
+        print('aaa')
 
         tiles_used = []
         indextxt = ""
         for i in np.arange(len(results)):
             indextxt += results[i]['indextxt']
             tiles_used += results[i]['tiles_used']
+
+        print('bbb')
 
         if self.args['output_mode']=='hdf5':
             indexname = self.args['hdf5_options']['output_dir']+'/index.txt'
@@ -737,11 +760,13 @@ class EMaligner(argschema.ArgSchemaParser):
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
             for i in np.arange(len(results)):
+                print('result: %d' % i)
                 if results[i]['data'] is not None:
+                    print('result yes: %d' % i)
                     data = np.append(data,results[i]['data'])
                     indices = np.append(indices,results[i]['indices'])
                     weights = np.append(weights,results[i]['weights'])
-                    if i==0:
+                    if indptr.size == 0:
                         indptr = np.append(indptr,results[i]['indptr'])
                     else:
                         indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])

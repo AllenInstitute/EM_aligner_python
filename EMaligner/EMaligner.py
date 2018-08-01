@@ -727,8 +727,6 @@ class EMaligner(argschema.ArgSchemaParser):
         for i in np.arange(len(proc_chunks)):
             print(i,zvals[proc_chunks[i]])
 
-        print('zzz')
-
         pairs = self.determine_zvalue_pairs(zvals,sectionIds)
 
         fargs = []
@@ -739,15 +737,11 @@ class EMaligner(argschema.ArgSchemaParser):
         pool.close()
         pool.join()
 
-        print('aaa')
-
         tiles_used = []
         indextxt = ""
         for i in np.arange(len(results)):
             indextxt += results[i]['indextxt']
             tiles_used += results[i]['tiles_used']
-
-        print('bbb')
 
         if self.args['output_mode']=='hdf5':
             indexname = self.args['hdf5_options']['output_dir']+'/index.txt'
@@ -763,9 +757,7 @@ class EMaligner(argschema.ArgSchemaParser):
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
             for i in np.arange(len(results)):
-                print('result: %d' % i)
                 if results[i]['data'] is not None:
-                    print('result yes: %d' % i)
                     data = np.append(data,results[i]['data'])
                     indices = np.append(indices,results[i]['indices'])
                     weights = np.append(weights,results[i]['weights'])

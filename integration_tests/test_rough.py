@@ -25,6 +25,19 @@ def rough_input_stack(render):
     yield test_rough_stack
     renderapi.stack.delete_stack(test_rough_stack,render=render)
 
+# raw stack tiles with one z removed
+@pytest.fixture(scope='module')
+def rough_input_stack_2(render):
+    test_rough_stack = 'rough_input_stack_2'
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in json.load(open(FILE_ROUGH_TILES,'r'))]
+    renderapi.stack.create_stack(test_rough_stack,render=render)
+    renderapi.client.import_tilespecs(test_rough_stack,tilespecs,render=render)
+    z_values = renderapi.stack.get_z_values_for_stack(test_rough_stack, render=render)
+    renderapi.stack.delete_section(test_rough_stack, z_values[3], render=render)
+    renderapi.stack.set_stack_state(test_rough_stack,'COMPLETE',render=render)
+    yield test_rough_stack
+    renderapi.stack.delete_stack(test_rough_stack,render=render)
+
 @pytest.fixture(scope='module')
 def rough_pointmatches(render):
     test_rough_collection = 'rough_collection'
@@ -48,6 +61,21 @@ def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
     assert mod.results['error'] < 1e6
     assert len(tin)==len(tout)
     yield rigid_out
+
+def test_rough_rigid_2(render,rough_pointmatches,rough_input_stack_2):
+    #do a rough rigid alignment
+    rough_parameters['input_stack']['name']=rough_input_stack_2
+    rough_parameters['pointmatch']['name'] = rough_pointmatches
+    rough_parameters['transformation'] = 'rigid'
+    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    mod.args['transformation'] = 'rigid'
+    mod.run()
+    rigid_out_2=rough_parameters['output_stack']['name']
+    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['input_stack']['name'],render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['output_stack']['name'],render=render)
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 1e6
+    assert len(tin)==len(tout)
 
 def test_affine_on_rigid(render,rough_pointmatches,rough_input_stack,test_rough_rigid):
     #add an affine on top of that

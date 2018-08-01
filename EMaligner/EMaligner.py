@@ -736,6 +736,9 @@ class EMaligner(argschema.ArgSchemaParser):
             fargs.append([zvals,pairs[i],i,self.args,tile_ids,self.transform])
         results = pool.map(calculate_processing_chunk,fargs)
 
+        pool.close()
+        pool.join()
+
         print('aaa')
 
         tiles_used = []

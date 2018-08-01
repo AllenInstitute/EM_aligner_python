@@ -371,18 +371,10 @@ def calculate_processing_chunk(fargs):
     indptr = indptr[0:nrows+1]
     weights = weights[0:nrows]
 
-    if chunk['nchunks']==0:
-        chunk['data'] = np.copy(data)
-        chunk['weights'] = np.copy(weights)
-        chunk['indices'] = np.copy(indices)
-        chunk['indptr'] = np.copy(indptr)
-    else:
-        chunk['data'] = np.append(chunk['data'],data)
-        chunk['weights'] = np.append(chunk['weights'],weights)
-        chunk['indices'] = np.append(chunk['indices'],indices)
-        lastptr = chunk['indptr'][-1]
-        chunk['indptr'] = np.append(chunk['indptr'],indptr[1:]+lastptr)
-    chunk['nchunks'] += 1
+    chunk['data'] = np.copy(data)
+    chunk['weights'] = np.copy(weights)
+    chunk['indices'] = np.copy(indices)
+    chunk['indptr'] = np.copy(indptr)
     chunk['zlist'].append(float(sectionIds[0]))
     del data,indices,indptr,weights
 

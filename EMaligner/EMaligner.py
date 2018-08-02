@@ -133,7 +133,6 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
 
 def write_chunk_to_file(fname,c,file_weights):
     ### data file
-    print(' writing to file: %s'%fname)
     fcsr = h5py.File(fname,"w")
     #indptr
     indptr_dset = fcsr.create_dataset("indptr",(c.indptr.size,1),dtype='int64')
@@ -152,7 +151,7 @@ def write_chunk_to_file(fname,c,file_weights):
     indtxt =  'file %s '%tmp[-1]
     indtxt += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
     fcsr.close()
-    print('wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
+    print('wrote %s %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
     return indtxt
 
 def get_matches(iId,jId,collection,dbconnection):
@@ -294,7 +293,7 @@ def calculate_processing_chunk(fargs):
     t0=time.time()
     matches = get_matches(sectionIds[0],sectionIds[1],args['pointmatch'],dbconnection)
     if len(matches)==0:
-        print('WARNING%s%d matches for sections %s and %s in pointmatch collection'%(pstr,len(matches),sectionIds[0],sectionIds[1]))
+        #print('WARNING%s%d matches for sections %s and %s in pointmatch collection'%(pstr,len(matches),sectionIds[0],sectionIds[1]))
         return chunk
 
     #extract IDs for fast checking
@@ -376,13 +375,10 @@ def calculate_processing_chunk(fargs):
     chunk['indices'] = np.copy(indices)
     chunk['indptr'] = np.copy(indptr)
     chunk['zlist'].append(float(sectionIds[0]))
+    chunk['zlist'].append(float(sectionIds[1]))
+    chunk['zlist'] = np.array(chunk['zlist'])
     del data,indices,indptr,weights
 
-    if chunk['data'] is not None:
-        if args['output_mode']=='hdf5':
-            c = csr_matrix((chunk['data'],chunk['indices'],chunk['indptr']))
-            fname = args['hdf5_options']['output_dir']+'/%d_%d.h5'%(chunk['zlist'][0],chunk['zlist'][-1])
-            chunk['indextxt'] += write_chunk_to_file(fname,c,chunk['weights'])
     return chunk
 
 def tilepair_weight(z1, z2, matrix_assembly):
@@ -540,6 +536,9 @@ class EMaligner(argschema.ArgSchemaParser):
         else:
             A,weights,reg,filt_tspecs,filt_tforms,filt_tids,shared_tforms,unused_tids = self.assemble_from_db(zvals)
 
+        if A is not None:
+            mat_stats(A, 'A')
+
         self.ntiles_used = filt_tids.size
         print('\n A created in %0.1f seconds'%(time.time()-t0))
 
@@ -573,26 +572,23 @@ class EMaligner(argschema.ArgSchemaParser):
     def assemble_from_hdf5(self,zvals):
         #get the tile IDs and transforms
         tile_ids,tile_tforms,tile_tspecs,shared_tforms,sectionIds = get_tileids_and_tforms(self.args['input_stack'],self.args['transformation'],zvals)
-        tmp = self.args['start_from_file'].split('/')
-        fdir = ''
-        for t in tmp[:-1]:
-            fdir=fdir+'/'+t
+        fdir = os.path.dirname(self.args['start_from_file'])
 
         #get from the regularization file
-        fname = fdir+'/regularization.h5'
-        f = h5py.File(fname,'r')
-        reg = f.get('lambda')[()]
-        filt_tids = np.array(f.get('tile_ids')[()]).astype('U')
-        unused_tids = np.array(f.get('unused_tile_ids')[()]).astype('U')
-        k=0
-        filt_tforms=[]
-        while True:
-            name = 'transforms_%d'%k
-            if name in f.keys():
-                filt_tforms.append(f.get(name)[()])
-                k+=1
-            else:
-               break
+        fname = os.path.join(fdir+'/regularization.h5')
+        with h5py.File(fname,'r') as f:
+            reg = f.get('lambda')[()]
+            filt_tids = np.array(f.get('tile_ids')[()]).astype('U')
+            unused_tids = np.array(f.get('unused_tile_ids')[()]).astype('U')
+            k=0
+            filt_tforms=[]
+            while True:
+                name = 'transforms_%d'%k
+                if name in f.keys():
+                    filt_tforms.append(f.get(name)[()])
+                    k+=1
+                else:
+                   break
 
         #get the tile IDs and transforms
         tile_ind = np.in1d(tile_ids,filt_tids)
@@ -605,10 +601,9 @@ class EMaligner(argschema.ArgSchemaParser):
         reg = outr
 
         #get from the matrix files
-        indexname = fdir+'/index.txt'
-        f = open(indexname,'r')
-        lines = f.readlines()
-        f.close()
+        indexname = os.path.join(fdir,'index.txt')
+        with open(indexname,'r') as f:
+            lines = f.readlines()
         data = np.array([]).astype('float64')
         weights = np.array([]).astype('float64')
         indices = np.array([]).astype('int64')
@@ -616,16 +611,15 @@ class EMaligner(argschema.ArgSchemaParser):
         for i in np.arange(len(lines)):
             line = lines [i]
             fname = fdir+'/'+line.split(' ')[1]
-            f = h5py.File(fname,'r')
-            data = np.append(data,f.get('data')[()])
-            indices = np.append(indices,f.get('indices')[()])
-            if i==0:
-                indptr = np.append(indptr,f.get('indptr')[()])
-            else:
-                indptr = np.append(indptr,f.get('indptr')[()][1:]+indptr[-1])
-            weights = np.append(weights,f.get('weights')[()])
-            f.close()
-            print('  %s read'%fname)
+            with h5py.File(fname,'r') as f:
+                data = np.append(data,f.get('data')[()])
+                indices = np.append(indices,f.get('indices')[()])
+                if i==0:
+                    indptr = np.append(indptr,f.get('indptr')[()])
+                else:
+                    indptr = np.append(indptr,f.get('indptr')[()][1:]+indptr[-1])
+                weights = np.append(weights,f.get('weights')[()])
+                print('  %s read'%fname)
 
         A=csr_matrix((data,indices,indptr))
 
@@ -704,38 +698,80 @@ class EMaligner(argschema.ArgSchemaParser):
                 if z+i in zvals:
                     pairs.append([str(z),str(z+i)])
                 i += 1
-        return pairs
+        return np.array(pairs)
+
+    def concatenate_chunks(self, chunks):
+        i=0
+        while chunks[i]['data'] is None:
+            if i == len(chunks)-1:
+                break
+            i += 1
+        c0 = chunks[i]
+        for c in chunks[(i+1):]:
+            if c['data'] is not None:
+                for ckey in ['data', 'weights', 'indices','zlist']:
+                    c0[ckey] = np.append(c0[ckey], c[ckey])
+                ckey = 'indptr'
+                lastptr = c0[ckey][-1]
+                c0[ckey] = np.append(c0[ckey], c[ckey][1:] + lastptr)
+        return c0
 
     def create_CSR_A(self,tile_ids,zvals,sectionIds):
-        #split up the work
-        if self.args['hdf5_options']['chunks_per_file']==-1:
-            proc_chunks = [np.arange(zvals.size)]
-        else:
-            proc_chunks = np.array_split(np.arange(zvals.size),np.ceil(float(zvals.size)/self.args['hdf5_options']['chunks_per_file']))
-
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
-        print('processing chunked as:')
-        for i in np.arange(len(proc_chunks)):
-            print(i,zvals[proc_chunks[i]])
+        pairs = self.determine_zvalue_pairs(zvals, sectionIds)
+        npairs = pairs.shape[0]
 
-        pairs = self.determine_zvalue_pairs(zvals,sectionIds)
+        #split up the work
+        if self.args['hdf5_options']['chunks_per_file']==-1:
+            proc_chunks = [np.arange(npairs)]
+        else:
+            proc_chunks = np.array_split(
+                    np.arange(npairs),
+                    np.ceil(
+                        float(npairs)/ \
+                        self.args['hdf5_options']['chunks_per_file']))
+
+        #print('processing chunked as:')
+        #for i in np.arange(len(proc_chunks)):
+        #    print(i, pairs[proc_chunks[i], :])
 
         fargs = []
-        for i in np.arange(len(pairs)):
-            fargs.append([zvals,pairs[i],i,self.args,tile_ids,self.transform])
-        results = pool.map(calculate_processing_chunk,fargs)
-
+        for i in np.arange(npairs):
+            fargs.append([
+                zvals,
+                pairs[i,:],
+                i,
+                self.args,
+                tile_ids,
+                self.transform])
+        results = pool.map(calculate_processing_chunk, fargs)
         pool.close()
         pool.join()
 
         tiles_used = []
-        indextxt = ""
         for i in np.arange(len(results)):
-            indextxt += results[i]['indextxt']
             tiles_used += results[i]['tiles_used']
 
         if self.args['output_mode']=='hdf5':
+            indextxt = ""
+            results = np.array(results)
+            for pchunk in proc_chunks:
+                cat_chunk = self.concatenate_chunks(results[pchunk])
+                if cat_chunk['data'] is not None:
+                    c = csr_matrix((
+                        cat_chunk['data'],
+                        cat_chunk['indices'],
+                        cat_chunk['indptr']))
+                    fname = self.args['hdf5_options']['output_dir'] + \
+                            '/%d_%d.h5' % (
+                                    cat_chunk['zlist'].min(),
+                                    cat_chunk['zlist'].max())
+                    indextxt += write_chunk_to_file(
+                            fname,
+                            c,
+                            cat_chunk['weights'])
+
             indexname = self.args['hdf5_options']['output_dir']+'/index.txt'
             f=open(indexname,'w')
             f.write(indextxt)
@@ -757,7 +793,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         indptr = np.append(indptr,results[i]['indptr'])
                     else:
                         indptr = np.append(indptr,results[i]['indptr'][1:]+indptr[-1])
-
+                results[i] = None
             A=csr_matrix((data,indices,indptr))
             outw = sparse.eye(weights.size,format='csr')
             outw.data = weights

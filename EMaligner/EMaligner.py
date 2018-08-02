@@ -133,7 +133,6 @@ def get_tileids_and_tforms(stack,tform_name,zvals):
 
 def write_chunk_to_file(fname,c,file_weights):
     ### data file
-    print(' writing to file: %s'%fname)
     fcsr = h5py.File(fname,"w")
     #indptr
     indptr_dset = fcsr.create_dataset("indptr",(c.indptr.size,1),dtype='int64')
@@ -152,7 +151,7 @@ def write_chunk_to_file(fname,c,file_weights):
     indtxt =  'file %s '%tmp[-1]
     indtxt += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n'%(indptr_dset.size-1,c.indices.min(),c.indices.max(),c.indices.size)
     fcsr.close()
-    print('wrote %s\n %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
+    print('wrote %s %0.2fGB on disk'%(fname,os.path.getsize(fname)/(2.**30)))
     return indtxt
 
 def get_matches(iId,jId,collection,dbconnection):
@@ -294,7 +293,7 @@ def calculate_processing_chunk(fargs):
     t0=time.time()
     matches = get_matches(sectionIds[0],sectionIds[1],args['pointmatch'],dbconnection)
     if len(matches)==0:
-        print('WARNING%s%d matches for sections %s and %s in pointmatch collection'%(pstr,len(matches),sectionIds[0],sectionIds[1]))
+        #print('WARNING%s%d matches for sections %s and %s in pointmatch collection'%(pstr,len(matches),sectionIds[0],sectionIds[1]))
         return chunk
 
     #extract IDs for fast checking
@@ -376,6 +375,7 @@ def calculate_processing_chunk(fargs):
     chunk['indices'] = np.copy(indices)
     chunk['indptr'] = np.copy(indptr)
     chunk['zlist'].append(float(sectionIds[0]))
+    chunk['zlist'].append(float(sectionIds[1]))
     chunk['zlist'] = np.array(chunk['zlist'])
     del data,indices,indptr,weights
 
@@ -712,7 +712,6 @@ class EMaligner(argschema.ArgSchemaParser):
                 for ckey in ['data', 'weights', 'indices','zlist']:
                     c0[ckey] = np.append(c0[ckey], c[ckey])
                 ckey = 'indptr'
-                print(c0[ckey].shape)
                 lastptr = c0[ckey][-1]
                 c0[ckey] = np.append(c0[ckey], c[ckey][1:] + lastptr)
         return c0
@@ -733,9 +732,9 @@ class EMaligner(argschema.ArgSchemaParser):
                         float(npairs)/ \
                         self.args['hdf5_options']['chunks_per_file']))
 
-        print('processing chunked as:')
-        for i in np.arange(len(proc_chunks)):
-            print(i, pairs[proc_chunks[i], :])
+        #print('processing chunked as:')
+        #for i in np.arange(len(proc_chunks)):
+        #    print(i, pairs[proc_chunks[i], :])
 
         fargs = []
         for i in np.arange(npairs):
@@ -760,7 +759,6 @@ class EMaligner(argschema.ArgSchemaParser):
             for pchunk in proc_chunks:
                 cat_chunk = self.concatenate_chunks(results[pchunk])
                 if cat_chunk['data'] is not None:
-                    print('chunk_shape', cat_chunk['data'].shape)
                     c = csr_matrix((
                         cat_chunk['data'],
                         cat_chunk['indices'],

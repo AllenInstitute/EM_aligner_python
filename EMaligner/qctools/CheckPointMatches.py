@@ -1,3 +1,4 @@
+import collections
 from pymongo import MongoClient
 import numpy as np
 import renderapi
@@ -38,6 +39,23 @@ class CheckPointMatches(argschema.ArgSchemaParser):
             yc.append(0.5*tspecs[k].bbox[1]+tspecs[k].bbox[3])
             tid.append(tspecs[k].tileId)
         return np.array(xc),np.array(yc),np.array(tid)
+
+    def get_sectionId(self, stack, z, render):
+        try:
+            sectionId = renderapi.stack.get_sectionId_for_z(
+                    stack,
+                    z,
+                    render=render)
+        except renderapi.errors.RenderError:
+            tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(
+                        stack,
+                        z,
+                        render=render)
+            tspecs = tmp.tilespecs
+            sectionId = collections.Counter(
+                    [ts.layout.sectionId for ts in tspecs]).most_common()[0][0]
+        return sectionId
+        
     
     def make_plot(self,z1,z2,stack,collection,plot):
         cmap = plt.cm.plasma_r
@@ -48,8 +66,14 @@ class CheckPointMatches(argschema.ArgSchemaParser):
         #use mongo to get the point matches
         stack['db_interface']='render'
         render = renderapi.connect(**stack)
-        iId = renderapi.stack.get_sectionId_for_z(stack['name'],z1,render=render)
-        jId = renderapi.stack.get_sectionId_for_z(stack['name'],z2,render=render)
+        iId = self.get_sectionId(
+                stack['name'],
+                z1,
+                render)
+        jId = self.get_sectionId(
+                stack['name'],
+                z2,
+                render)
         self.pm = get_matches(iId,jId,collection,dbconnection)
         print('%d tile pairs for z1,z2=%d,%d in collection %s__%s'%(len(self.pm),z1,z2,collection['owner'],collection['name']))
         if not plot:

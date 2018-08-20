@@ -179,6 +179,9 @@ class EMA_PlotSchema(EMA_Schema):
     z2 = Int(
         default=1000,
         description='second z for plot')
+    zoff = Int(
+        default=0,
+        description='z offset betwene pointmatches and tilespecs')
     plot = Boolean(
         default=True,
         description='make a plot, otherwise, just text output')

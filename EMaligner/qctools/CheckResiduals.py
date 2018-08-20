@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import mpl_scatter_density
 
 
-def transform_pq(tspecs,matches):
+def transform_pq(tspecs, matches):
     p = []
     q = []
     p_transf = []
@@ -57,13 +57,22 @@ class CheckResiduals(argschema.ArgSchemaParser):
         match_dbconnection = renderapi.connect(**self.args['pointmatch'])
        
         #get the tilespecs and pointmatches
-        tspecs = [renderapi.tilespec.get_tile_specs_from_z(self.args['output_stack']['name'],float(self.args['z1']),render=stack_dbconnection)]
+        tspecs = [
+                renderapi.tilespec.get_tile_specs_from_z(
+                    self.args['output_stack']['name'],
+                    float(self.args['z1']),
+                    render=stack_dbconnection)]
         if self.args['z1']!=self.args['z2']:
-            tspecs.append(renderapi.tilespec.get_tile_specs_from_z(self.args['output_stack']['name'],float(self.args['z2']),render=stack_dbconnection))
-        matches = renderapi.pointmatch.get_matches_from_group_to_group(self.args['pointmatch']['name'],
-                                                                     str(float(self.args['z1'])),
-                                                                     str(float(self.args['z2'])),
-                                                                     render=match_dbconnection)
+            tspecs.append(
+                    renderapi.tilespec.get_tile_specs_from_z(
+                        self.args['output_stack']['name'],
+                        float(self.args['z2']),
+                        render=stack_dbconnection))
+        matches = renderapi.pointmatch.get_matches_from_group_to_group(
+                self.args['pointmatch']['name'],
+                str(float(self.args['z1'] + self.args['zoff'])),
+                str(float(self.args['z2'] + self.args['zoff'])),
+                render=match_dbconnection)
 
         self.p,self.q,self.p_transf,self.q_transf = transform_pq(tspecs,matches) 
         self.xy_ave = [0.5*(p+q) for p,q in zip(self.p_transf,self.q_transf)]

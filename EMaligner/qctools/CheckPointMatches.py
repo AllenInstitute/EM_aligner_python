@@ -2,7 +2,7 @@ import collections
 from pymongo import MongoClient
 import numpy as np
 import renderapi
-from .. EM_aligner_python_schema import *
+from .. schemas import *
 from .. EMaligner import make_dbconnection,get_matches
 import time
 import matplotlib

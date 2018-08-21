@@ -5,7 +5,7 @@ from test_data import (render_params,
                        example_env,
                        montage_raw_tilespecs_json,
                        montage_parameters)
-from EMaligner.EM_aligner_python_schema import *
+from EMaligner.schemas import *
 from EMaligner.qctools.CheckPointMatches import CheckPointMatches
 from EMaligner.qctools.CheckResiduals import CheckResiduals
 from EMaligner.qctools.CheckTransforms import CheckTransforms

@@ -3,7 +3,7 @@ import matplotlib
 import numpy as np
 import renderapi
 import argschema
-from .. EM_aligner_python_schema import *
+from ..schemas import *
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 

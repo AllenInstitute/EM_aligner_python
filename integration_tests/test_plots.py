@@ -11,6 +11,7 @@ from EMaligner.qctools.CheckResiduals import CheckResiduals
 from EMaligner.qctools.CheckTransforms import CheckTransforms
 import json
 import os
+import matplotlib.pyplot as plt
 
 #FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
 FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
@@ -79,6 +80,10 @@ def test_resplot(render,montage_pointmatches,raw_stack,tmpdir):
     mod.args['savefig'] = "True"
     mod.run()
     assert os.path.exists(mod.outputname)
+    fig = plt.figure(12)
+    print(len(mod.p))
+    print(len(mod.q))
+    mod.make_lc_plots(fig)
 
 def test_trplot(render,montage_pointmatches,raw_stack,tmpdir):
     montage_parameters['input_stack']['name']=raw_stack

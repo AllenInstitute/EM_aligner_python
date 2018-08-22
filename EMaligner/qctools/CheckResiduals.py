@@ -6,6 +6,7 @@ import argschema
 from ..schemas import *
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import mpl_scatter_density
 
 
 def transform_pq(tspecs, matches):

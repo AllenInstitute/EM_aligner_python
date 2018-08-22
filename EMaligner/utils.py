@@ -316,6 +316,25 @@ def write_reg_and_tforms(
         f.close()
         print('wrote %s' % fname)
 
+def get_stderr_stdout(outarg):
+    if outarg == 'null':
+        stdeo = open(os.devnull, 'wb')
+        logger2.info('render output is going to /dev/null')
+    elif outarg == 'stdout':
+        stdeo = sys.stdout
+        logger2.info('render output is going to stdout')
+    else:
+        i = 0
+        odir, oname = os.path.split(outarg)
+        while os.path.exists(outarg):
+            t = oname.split('.')
+            outarg = odir + '/'
+            for it in t[:-1]:
+                outarg += it
+            outarg += '%d.%s' % (i, t[-1])
+            i += 1
+        stdeo = open(outarg, 'a')
+    return stdeo
 
 def write_to_new_stack(
         input_stack,
@@ -358,24 +377,7 @@ def write_to_new_stack(
             ingestconn.DEFAULT_PROJECT,
             outputname))
 
-    if outarg == 'null':
-        stdeo = open(os.devnull, 'wb')
-        logger2.info('render output is going to /dev/null')
-    elif outarg == 'stdout':
-        stdeo = sys.stdout
-        logger2.info('render output is going to stdout')
-    else:
-        i = 0
-        odir, oname = os.path.split(outarg)
-        while os.path.exists(outarg):
-            t = oname.split('.')
-            outarg = odir + '/'
-            for it in t[:-1]:
-                outarg += it
-            outarg += '%d.%s' % (i, t[-1])
-            i += 1
-        stdeo = open(outarg, 'a')
-        logger2.info('render output is going to %s' % outarg)
+    stdeo = get_stderr_stdout(outarg)
 
     if overwrite_zlayer:
         zvalues = np.unique(np.array([t.z for t in tspecs]))

@@ -322,6 +322,8 @@ def get_stderr_stdout(outarg):
         logger2.info('render output is going to /dev/null')
     elif outarg == 'stdout':
         stdeo = sys.stdout
+        if sys.version_info[0] >= 3:
+            stdeo = sys.stdout.buffer
         logger2.info('render output is going to stdout')
     else:
         i = 0

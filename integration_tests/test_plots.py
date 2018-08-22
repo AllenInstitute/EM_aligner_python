@@ -12,6 +12,7 @@ from EMaligner.qctools.CheckTransforms import CheckTransforms, fixpi
 import json
 import os
 import matplotlib.pyplot as plt
+import numpy as np
 
 #FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
 FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'

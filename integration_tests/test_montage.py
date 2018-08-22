@@ -21,11 +21,6 @@ def render():
 @pytest.fixture(scope='module')
 def raw_stack(render):
     test_raw_stack = 'input_raw_stack'
-    #ts = []
-    #with open(FILE_RAW_TILES, 'r') as f:
-    #    ts = json.load(f)
-
-    #tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in ts]
     tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack,render=render)
     renderapi.client.import_tilespecs(test_raw_stack,tilespecs,render=render)
@@ -37,11 +32,6 @@ def raw_stack(render):
 @pytest.fixture(scope='function')
 def loading_raw_stack(render):
     test_raw_stack = 'input_raw_stack_loading'
-    #ts = []
-    #with open(FILE_RAW_TILES, 'r') as f:
-    #    ts = json.load(f)
-
-    #tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in ts]
     tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack,render=render)
     renderapi.client.import_tilespecs(test_raw_stack,tilespecs,render=render)
@@ -61,7 +51,7 @@ def montage_pointmatches(render):
 
 
 @pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
-def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state):
+def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state, tmpdir):
     renderapi.stack.set_stack_state(loading_raw_stack, stack_state, render=render)
     montage_parameters['input_stack']['name'] = loading_raw_stack
     montage_parameters['pointmatch']['name'] = montage_pointmatches
@@ -85,3 +75,10 @@ def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state):
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
+
+    # try different render output settings
+    mod.args['render_output'] = 'stdout'
+    mod.run()
+    fout = tmpdir.mkdir("mydir").join("myfile")
+    mod.args['render_output'] = str(fout)
+    mod.run()

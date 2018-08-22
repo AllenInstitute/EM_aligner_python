@@ -79,6 +79,6 @@ def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state, 
     # try different render output settings
     mod.args['render_output'] = 'stdout'
     mod.run()
-    #fout = tmpdir.join("myfile")
-    #mod.args['render_output'] = str(fout)
-    #mod.run()
+    fout = tmpdir.join("myfile")
+    mod.args['render_output'] = str(fout)
+    mod.run()

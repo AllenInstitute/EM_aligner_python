@@ -178,7 +178,5 @@ class CheckPointMatches(argschema.ArgSchemaParser):
 
 
 if __name__ == '__main__':
-    t0 = time.time()
     mod = CheckPointMatches(schema_type=EMA_PlotSchema)
     mod.run()
-    print('total time: %0.1f' % (time.time() - t0))

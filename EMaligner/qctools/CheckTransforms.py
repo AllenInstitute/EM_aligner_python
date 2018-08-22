@@ -172,7 +172,5 @@ class CheckTransforms(argschema.ArgSchemaParser):
 
 
 if __name__ == '__main__':
-    t0 = time.time()
     mod = CheckTransforms(schema_type=EMA_PlotSchema)
     mod.run()
-    print('total time: %0.1f' % (time.time() - t0))

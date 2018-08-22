@@ -22,6 +22,7 @@ import sys
 import multiprocessing
 import logging
 
+logger = logging.getLogger(__name__)
 
 def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
     # determine number of points
@@ -205,13 +206,13 @@ def calculate_processing_chunk(fargs):
     qids = qids[instack]
 
     if len(matches) == 0:
-        logging.info(
+        logger.info(
                 "%sno tile pairs in "
                 "stack for pointmatch groupIds %s and %s" % (
                     pstr, sectionIds[0], sectionIds[1]))
         return chunk
 
-    logging.info(
+    logger.info(
             "%sloaded %d matches, using %d, "
             "for groupIds %s and %s in %0.1f sec "
             "using interface: %s" % (
@@ -333,6 +334,7 @@ class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
     def run(self):
+        logger.setLevel(self.args['log_level'])
         t0 = time.time()
         zvals = np.arange(
                 self.args['first_section'],
@@ -375,7 +377,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         self.args['output_stack']['name'],
                         state='COMPLETE',
                         render=ingestconn)
-        logging.info('total time: %0.1f' % (time.time() - t0))
+        logger.info('total time: %0.1f' % (time.time() - t0))
 
     def assemble_and_solve(self, zvals, ingestconn):
         t0 = time.time()
@@ -396,7 +398,7 @@ class EMaligner(argschema.ArgSchemaParser):
             mat_stats(A, 'A')
 
         self.ntiles_used = filt_tids.size
-        logging.info('\n A created in %0.1f seconds' % (time.time() - t0))
+        logger.info('\n A created in %0.1f seconds' % (time.time() - t0))
 
         if self.args['profile_data_load']:
             print('skipping solve for profile run')
@@ -409,7 +411,7 @@ class EMaligner(argschema.ArgSchemaParser):
                    weights,
                    reg,
                    filt_tforms)
-        logging.info(message)
+        logger.info(message)
         del A
 
         if self.args['output_mode'] == 'stack':
@@ -426,7 +428,7 @@ class EMaligner(argschema.ArgSchemaParser):
                     self.args['output_stack']['use_rest'],
                     self.args['overwrite_zlayer'])
             if self.args['render_output'] == 'stdout':
-                logging.info(message)
+                logger.info(message)
         del shared_tforms, x, filt_tspecs
         return results
 
@@ -459,7 +461,7 @@ class EMaligner(argschema.ArgSchemaParser):
         tile_ind = np.in1d(tile_ids, filt_tids)
         filt_tspecs = tile_tspecs[tile_ind]
         f.close()
-        logging.info('  %s read' % fname)
+        logger.info('  %s read' % fname)
 
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
@@ -486,7 +488,7 @@ class EMaligner(argschema.ArgSchemaParser):
                             indptr,
                             f.get('indptr')[()][1:] + indptr[-1])
                 weights = np.append(weights, f.get('weights')[()])
-                logging.info('  %s read' % fname)
+                logger.info('  %s read' % fname)
 
         A = csr_matrix((data, indices, indptr))
 
@@ -494,7 +496,7 @@ class EMaligner(argschema.ArgSchemaParser):
         outw.data = weights
         weights = outw
 
-        logging.info('csr inputs read from files listed in : %s' % indexname)
+        logger.info('csr inputs read from files listed in : %s' % indexname)
 
         return (A, weights, reg,
                 filt_tspecs, filt_tforms,
@@ -661,7 +663,7 @@ class EMaligner(argschema.ArgSchemaParser):
             f = open(indexname, 'w')
             f.write(indextxt)
             f.close()
-            logging.info('wrote %s' % indexname)
+            logger.info('wrote %s' % indexname)
             return None, None, np.array(tiles_used)
 
         else:
@@ -734,7 +736,7 @@ class EMaligner(argschema.ArgSchemaParser):
             ATW = A.transpose().dot(weights)
             K = ATW.dot(A) + reg
 
-            logging.info(' K created in %0.1f seconds' % (time.time() - t0))
+            logger.info(' K created in %0.1f seconds' % (time.time() - t0))
             t0 = time.time()
             del weights, ATW
 

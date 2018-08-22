@@ -8,7 +8,8 @@ from .utils import (
         get_matches,
         write_chunk_to_file,
         write_reg_and_tforms,
-        write_to_new_stack)
+        write_to_new_stack,
+        logger2)
 import time
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
@@ -206,13 +207,13 @@ def calculate_processing_chunk(fargs):
     qids = qids[instack]
 
     if len(matches) == 0:
-        logger.info(
+        logger.debug(
                 "%sno tile pairs in "
                 "stack for pointmatch groupIds %s and %s" % (
                     pstr, sectionIds[0], sectionIds[1]))
         return chunk
 
-    logger.info(
+    logger.debug(
             "%sloaded %d matches, using %d, "
             "for groupIds %s and %s in %0.1f sec "
             "using interface: %s" % (
@@ -320,7 +321,7 @@ def tilepair_weight(z1, z2, matrix_assembly):
 
 
 def mat_stats(m, name):
-    print(
+    logger.debug(
             ' matrix %s: ' % name +
             ' format: ', m.getformat(),
             ', shape: ', m.shape,
@@ -335,6 +336,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def run(self):
         logger.setLevel(self.args['log_level'])
+        logger2.setLevel(self.args['log_level'])
         t0 = time.time()
         zvals = np.arange(
                 self.args['first_section'],

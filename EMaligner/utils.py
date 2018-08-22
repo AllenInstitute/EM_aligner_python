@@ -5,10 +5,14 @@ from renderapi.external.processpools import pool_pathos
 import collections
 import logging
 import time
+import warnings
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
 import os
 import sys
 
+logger2 = logging.getLogger(__name__)
 
 class EMalignerException(Exception):
     """Exception raised when there is a \
@@ -169,7 +173,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                     tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k])
                 tile_tspecs.append(tspecs[k])
 
-    logging.info(
+    logger2.info(
             "---\nloaded %d tile specs from %d zvalues in "
             "%0.1f sec using interface: %s" % (
                 len(tile_ids),
@@ -251,7 +255,7 @@ def write_chunk_to_file(fname, c, file_weights):
             c.indices.max(),
             c.indices.size)
     fcsr.close()
-    logging.info(
+    logger2.info(
         "wrote %s %0.2fGB on disk" % (
             fname,
             os.path.getsize(fname)/(2.**30)))
@@ -346,7 +350,7 @@ def write_to_new_stack(
 
     unused_tspecs = get_unused_tspecs(input_stack, unused_tids)
     tspecs = tspecs + unused_tspecs.tolist()
-    logging.info(
+    logger2.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
             ingestconn.DEFAULT_HOST,
             ingestconn.DEFAULT_PORT,
@@ -356,10 +360,10 @@ def write_to_new_stack(
 
     if outarg == 'null':
         stdeo = open(os.devnull, 'wb')
-        logging.info('render output is going to /dev/null')
+        logger2.info('render output is going to /dev/null')
     elif outarg == 'stdout':
         stdeo = sys.stdout
-        logging.info('render output is going to stdout')
+        logger2.info('render output is going to stdout')
     else:
         i = 0
         odir, oname = os.path.split(outarg)
@@ -371,7 +375,7 @@ def write_to_new_stack(
             outarg += '%d.%s' % (i, t[-1])
             i += 1
         stdeo = open(outarg, 'a')
-        logging.info('render output is going to %s' % outarg)
+        logger2.info('render output is going to %s' % outarg)
 
     if overwrite_zlayer:
         zvalues = np.unique(np.array([t.z for t in tspecs]))

@@ -3,9 +3,10 @@ import matplotlib
 import numpy as np
 import renderapi
 import argschema
-from .. EM_aligner_python_schema import *
+from ..schemas import *
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import mpl_scatter_density
 
 
 def transform_pq(tspecs, matches):
@@ -208,7 +209,7 @@ class CheckResiduals(argschema.ArgSchemaParser):
         ax3 = fig.add_subplot(133, projection='scatter_density')
         self.make_plot(
                 ax3,
-                coord_choice='xya', 
+                coord_choice='xya',
                 color_choice='rss',
                 projection='scatter_density')
 

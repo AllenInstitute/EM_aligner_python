@@ -5,13 +5,14 @@ from test_data import (render_params,
                        example_env,
                        montage_raw_tilespecs_json,
                        montage_parameters)
-from EMaligner.EM_aligner_python_schema import *
+from EMaligner.schemas import *
 from EMaligner.qctools.CheckPointMatches import CheckPointMatches
 from EMaligner.qctools.CheckResiduals import CheckResiduals
-from EMaligner.qctools.CheckTransforms import CheckTransforms
+from EMaligner.qctools.CheckTransforms import CheckTransforms, fixpi
 import json
 import os
 import matplotlib.pyplot as plt
+import numpy as np
 
 #FILE_RAW_TILES = './integration_tests/test_files/raw_tiles_for_montage.json'
 FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
@@ -50,6 +51,12 @@ def montage_pointmatches(render):
     renderapi.pointmatch.import_matches(test_montage_collection,pms_from_json,render=render)
     yield test_montage_collection
 
+def test_fixpi():
+    arr = np.arange(0, 10.0 * np.pi, 0.1)
+    narr = fixpi(arr)
+    assert(narr.size == arr.size)
+    assert(np.abs(narr).max() <= np.pi)
+
 def test_pmplot(render,montage_pointmatches,raw_stack,tmpdir):
     montage_parameters['input_stack']['name']=raw_stack
     montage_parameters['pointmatch']['name'] = montage_pointmatches
@@ -59,6 +66,8 @@ def test_pmplot(render,montage_pointmatches,raw_stack,tmpdir):
     mod.args['plot_dir'] = str(tmpdir.mkdir('plotoutput'))
     mod.run()
     assert os.path.exists(mod.outputname)
+    mod.args['plot'] = False
+    mod.run()
 
 def test_pmplot_loading(render,montage_pointmatches,raw_stack_loading,tmpdir):
     montage_parameters['input_stack']['name']=raw_stack_loading

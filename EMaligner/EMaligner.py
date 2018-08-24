@@ -176,7 +176,6 @@ def calculate_processing_chunk(fargs):
     chunk['indices'] = None
     chunk['indptr'] = None
     chunk['weights'] = None
-    chunk['indextxt'] = ""
     chunk['nchunks'] = 0
     chunk['zlist'] = []
 
@@ -558,13 +557,14 @@ class EMaligner(argschema.ArgSchemaParser):
                 assemble_result['tforms'])
 
         # output the regularization vectors to hdf5 file
-        write_reg_and_tforms(
-                self.args['output_mode'],
-                self.args['hdf5_options'],
-                assemble_result['tforms'],
-                assemble_result['reg'],
-                assemble_result['tids'],
-                assemble_result['unused_tids'])
+        if self.args['output_mode'] == 'hdf5':
+            write_reg_and_tforms(
+                    dict(self.args),
+                    CSR_A['metadata'],
+                    assemble_result['tforms'],
+                    assemble_result['reg'],
+                    assemble_result['tids'],
+                    assemble_result['unused_tids'])
 
         return assemble_result
 
@@ -616,7 +616,8 @@ class EMaligner(argschema.ArgSchemaParser):
         func_result = {
                 'A': None,
                 'weights': None,
-                'tiles_used': None}
+                'tiles_used': None,
+                'metadata': None}
 
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
@@ -651,8 +652,8 @@ class EMaligner(argschema.ArgSchemaParser):
             tiles_used += results[i]['tiles_used']
         func_result['tiles_used'] = np.array(tiles_used)
 
+        func_result['metadata'] = []
         if self.args['output_mode'] == 'hdf5':
-            indextxt = ""
             results = np.array(results)
             for pchunk in proc_chunks:
                 cat_chunk = self.concatenate_chunks(results[pchunk])
@@ -665,16 +666,11 @@ class EMaligner(argschema.ArgSchemaParser):
                         '/%d_%d.h5' % (
                                 cat_chunk['zlist'].min(),
                                 cat_chunk['zlist'].max())
-                    indextxt += write_chunk_to_file(
-                            fname,
-                            c,
-                            cat_chunk['weights'])
-
-            indexname = self.args['hdf5_options']['output_dir'] + '/index.txt'
-            f = open(indexname, 'w')
-            f.write(indextxt)
-            f.close()
-            logger.info('wrote %s' % indexname)
+                    func_result['metadata'].append(
+                            write_chunk_to_file(
+                                fname,
+                                c,
+                                cat_chunk['weights']))
 
         else:
             data = np.array([]).astype('float64')

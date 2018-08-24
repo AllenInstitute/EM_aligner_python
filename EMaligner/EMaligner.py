@@ -25,6 +25,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
     # determine number of points
     npts = len(match['matches']['q'][0])
@@ -392,14 +393,12 @@ class EMaligner(argschema.ArgSchemaParser):
                     filt_tids, shared_tforms, unused_tids = \
                     self.assemble_from_hdf5(zvals)
         else:
-            A, weights, reg, filt_tspecs, filt_tforms, \
-                    filt_tids, shared_tforms, unused_tids = \
-                    self.assemble_from_db(zvals)
+            assemble_result = self.assemble_from_db(zvals)
 
-        if A is not None:
-            mat_stats(A, 'A')
+        if assemble_result['A'] is not None:
+            mat_stats(assemble_result['A'], 'A')
 
-        self.ntiles_used = filt_tids.size
+        self.ntiles_used = assemble_result['tids'].size
         logger.info('\n A created in %0.1f seconds' % (time.time() - t0))
 
         if self.args['profile_data_load']:
@@ -409,29 +408,29 @@ class EMaligner(argschema.ArgSchemaParser):
         # solve
         message, x, results = \
             self.solve_or_not(
-                   A,
-                   weights,
-                   reg,
-                   filt_tforms)
+                   assemble_result['A'],
+                   assemble_result['weights'],
+                   assemble_result['reg'],
+                   assemble_result['tforms'])
         logger.info(message)
-        del A
+        del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':
             write_to_new_stack(
                     self.args['input_stack'],
                     self.args['output_stack']['name'],
                     self.args['transformation'],
-                    filt_tspecs,
-                    shared_tforms,
+                    assemble_result['tspecs'],
+                    assemble_result['shared_tforms'],
                     x,
                     ingestconn,
-                    unused_tids,
+                    assemble_result['unused_tids'],
                     self.args['render_output'],
                     self.args['output_stack']['use_rest'],
                     self.args['overwrite_zlayer'])
             if self.args['render_output'] == 'stdout':
                 logger.info(message)
-        del shared_tforms, x, filt_tspecs
+        del assemble_result['shared_tforms'], assemble_result['tspecs'], x
         return results
 
     def assemble_from_hdf5(self, zvals):
@@ -506,64 +505,68 @@ class EMaligner(argschema.ArgSchemaParser):
                 unused_tids)
 
     def assemble_from_db(self, zvals):
-        # get the tile IDs and transforms
-        tile_ids, tile_tforms, tile_tspecs, shared_tforms, \
-                sectionIds = get_tileids_and_tforms(
+        assemble_result = {
+                'A': None,
+                'weights': None,
+                'reg': None,
+                'tspecs': None,
+                'tforms': None,
+                'tids': None,
+                'shared_tforms': None,
+                'unused_tids': None
+                }
+
+        from_stack = get_tileids_and_tforms(
                         self.args['input_stack'],
                         self.args['transformation'],
                         zvals)
-        if self.args['transformation'] == 'affine':
-            # split the tforms in half by u and v
-            utforms = np.hstack(
-                    np.hsplit(tile_tforms, len(tile_tforms) / 3)[::2])
-            vtforms = np.hstack(
-                    np.hsplit(tile_tforms, len(tile_tforms) / 3)[1::2])
-            tile_tforms = [utforms, vtforms]
-            del utforms, vtforms
-        else:
-            tile_tforms = [tile_tforms]
+        assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
         # create A matrix in compressed sparse row (CSR) format
-        A, weights, tiles_used = self.create_CSR_A(
-                tile_ids,
+        CSR_A = self.create_CSR_A(
+                from_stack['tids'],
                 zvals,
-                sectionIds)
+                from_stack['sectionIds'])
+        assemble_result['A'] = CSR_A.pop('A')
+        assemble_result['weights'] = CSR_A.pop('weights')
 
         # some book-keeping if there were some unused tiles
-        tile_ind = np.in1d(tile_ids, tiles_used)
-        filt_tspecs = tile_tspecs[tile_ind]
-        filt_tids = tile_ids[tile_ind]
-        unused_tids = tile_ids[np.invert(tile_ind)]
+        tile_ind = np.in1d(from_stack['tids'], CSR_A['tiles_used'])
+        assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
+        assemble_result['tids'] = \
+            from_stack['tids'][tile_ind]
+        assemble_result['unused_tids'] = \
+            from_stack['tids'][np.invert(tile_ind)]
 
         # remove columns in A for unused tiles
         slice_ind = np.repeat(
                 tile_ind,
-                self.transform['DOF_per_tile'] / len(tile_tforms))
+                self.transform['DOF_per_tile'] / len(from_stack['tforms']))
         if self.args['output_mode'] != 'hdf5':
             # for large matrices,
             # this might be expensive to perform on CSR format
-            A = A[:, slice_ind]
+            assemble_result['A'] = assemble_result['A'][:, slice_ind]
 
-        filt_tforms = []
-        for j in np.arange(len(tile_tforms)):
-            filt_tforms.append(tile_tforms[j][slice_ind])
-        del tile_ids, tiles_used, tile_tforms, tile_ind, tile_tspecs
+        assemble_result['tforms'] = []
+        for j in np.arange(len(from_stack['tforms'])):
+            assemble_result['tforms'].append(
+                    from_stack['tforms'][j][slice_ind])
+        del from_stack, CSR_A['tiles_used'], tile_ind
 
         # create the regularization vectors
-        reg = self.create_regularization(filt_tforms)
+        assemble_result['reg'] = self.create_regularization(
+                assemble_result['tforms'])
 
         # output the regularization vectors to hdf5 file
         write_reg_and_tforms(
                 self.args['output_mode'],
                 self.args['hdf5_options'],
-                filt_tforms,
-                reg,
-                filt_tids,
-                unused_tids)
+                assemble_result['tforms'],
+                assemble_result['reg'],
+                assemble_result['tids'],
+                assemble_result['unused_tids'])
 
-        return (A, weights, reg, filt_tspecs,
-                filt_tforms, filt_tids, shared_tforms,
-                unused_tids)
+        return assemble_result
 
     def set_transform(self):
         self.transform = {}
@@ -610,6 +613,11 @@ class EMaligner(argschema.ArgSchemaParser):
         return c0
 
     def create_CSR_A(self, tile_ids, zvals, sectionIds):
+        func_result = {
+                'A': None,
+                'weights': None,
+                'tiles_used': None}
+
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
         pairs = self.determine_zvalue_pairs(zvals, sectionIds)
@@ -641,6 +649,7 @@ class EMaligner(argschema.ArgSchemaParser):
         tiles_used = []
         for i in np.arange(len(results)):
             tiles_used += results[i]['tiles_used']
+        func_result['tiles_used'] = np.array(tiles_used)
 
         if self.args['output_mode'] == 'hdf5':
             indextxt = ""
@@ -666,7 +675,6 @@ class EMaligner(argschema.ArgSchemaParser):
             f.write(indextxt)
             f.close()
             logger.info('wrote %s' % indexname)
-            return None, None, np.array(tiles_used)
 
         else:
             data = np.array([]).astype('float64')
@@ -688,8 +696,10 @@ class EMaligner(argschema.ArgSchemaParser):
             A = csr_matrix((data, indices, indptr))
             outw = sparse.eye(weights.size, format='csr')
             outw.data = weights
-            weights = outw
-            return A, outw, np.array(tiles_used)
+            func_result['A'] = A
+            func_result['weights'] = outw
+
+        return func_result
 
     def create_regularization(self, tile_tforms):
         # affine (half-size) or any

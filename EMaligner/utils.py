@@ -14,6 +14,7 @@ import sys
 
 logger2 = logging.getLogger(__name__)
 
+
 class EMalignerException(Exception):
     """Exception raised when there is a \
             problem creating a mesh lens correction"""
@@ -116,13 +117,13 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                 pass
 
         if stack['db_interface'] == 'mongo':
-            cursor = dbconnection.find(
-                {'z': float(z)}).sort([
-                    ('layout.imageRow', 1),
-                    ('layout.imageCol', 1)])
-            if cursor.count() == 0:
+            filt = {'z': float(z)}
+            if dbconnection.count_documents(filt) == 0:
                 sectionId = None
             else:
+                cursor = dbconnection.find(filt).sort([
+                        ('layout.imageRow', 1),
+                        ('layout.imageCol', 1)])
                 tspecs = list(cursor)
                 refids = []
                 for ts in tspecs:
@@ -180,12 +181,26 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                 len(zvals),
                 time.time() - t0,
                 stack['db_interface']))
-    return (
-            np.array(tile_ids),
-            np.array(tile_tforms).flatten(),
-            np.array(tile_tspecs).flatten(),
-            shared_tforms,
-            sectionIds)
+
+    tile_tforms = np.array(tile_tforms).flatten()
+    if tform_name == 'affine':
+        # split the tforms in half by u and v
+        spl3 = np.hsplit(
+                tile_tforms,
+                len(tile_tforms) / 3)
+        tile_tforms = [
+                np.hstack(spl3[::2]),
+                np.hstack(spl3[1::2])]
+    else:
+        tile_tforms = [tile_tforms]
+
+    return {
+            'tids': np.array(tile_ids),
+            'tforms': tile_tforms,
+            'tspecs': np.array(tile_tspecs).flatten(),
+            'shared_tforms': shared_tforms,
+            'sectionIds': sectionIds
+            }
 
 
 def get_matches(iId, jId, collection, dbconnection):
@@ -316,6 +331,7 @@ def write_reg_and_tforms(
         f.close()
         print('wrote %s' % fname)
 
+
 def get_stderr_stdout(outarg):
     if outarg == 'null':
         stdeo = open(os.devnull, 'wb')
@@ -337,6 +353,7 @@ def get_stderr_stdout(outarg):
             i += 1
         stdeo = open(outarg, 'a')
     return stdeo
+
 
 def write_to_new_stack(
         input_stack,

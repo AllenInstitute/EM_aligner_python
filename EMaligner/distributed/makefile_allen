@@ -1,0 +1,8 @@
+include ${PETSC_DIR}/install/lib/petsc/conf/variables
+include ${PETSC_DIR}/install/lib/petsc/conf/rules
+
+em_dist_solve: src/ema.o src/em_dist_solve.o chkopts
+	${CLINKER} -o bin/em_dist_solve src/ema.o src/em_dist_solve.o  ${PETSC_KSP_LIB}
+	${RM} src/em_dist_solve.o src/ema.o
+
+

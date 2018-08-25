@@ -1,0 +1,23 @@
+#/bin/bash
+
+#PBS -N solver
+#PBS -q celltypes
+#PBS -l nodes=2:ppn=1
+#PBS -l walltime=0:05:00
+#PBS -r n
+#PBS -j oe
+#PBS -o /allen/programs/celltypes/workgroups/em-connectomics/danielk/log/
+#PBS -m a
+#PBS -M danielk@alleninstitute.org
+
+module load mpi/mpich-3.2-x86_64
+
+mynfs=/allen/programs/celltypes/workgroups/em-connectomics/danielk/
+
+input=${mynfs}/solver_data/test/solution_input.h5 
+output=${mynfs}/solver_data/test/solution_output.h5 
+
+mpiexec ${mynfs}/EM_aligner_python/EMaligner/distributed/bin/em_dist_solve \
+-input ${input} -output ${output} \
+-ksp_type preonly -pc_type lu -pc_factor_mat_solver_package superlu_dist \
+-log_view

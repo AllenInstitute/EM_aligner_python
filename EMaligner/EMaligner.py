@@ -458,7 +458,6 @@ class EMaligner(argschema.ArgSchemaParser):
                 'shared_tforms': None,
                 'unused_tids': None}
 
-
     def assemble_from_hdf5(self, filename, zvals, read_data=True):
         assemble_result = dict(self.assemble_struct)
 

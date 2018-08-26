@@ -387,8 +387,11 @@ class EMaligner(argschema.ArgSchemaParser):
 
         self.set_transform()
 
+        #if self.args['ingest_from_file'] != '':
+        #    x = 
+
         # assembly
-        if self.args['start_from_file'] != '':
+        if self.args['assemble_from_file'] != '':
             assemble_result = self.assemble_from_hdf5(zvals)
         else:
             assemble_result = self.assemble_from_db(zvals)
@@ -431,8 +434,7 @@ class EMaligner(argschema.ArgSchemaParser):
         del assemble_result['shared_tforms'], assemble_result['tspecs'], x
         return results
 
-    def assemble_from_hdf5(self, zvals):
-        assemble_result = {
+    assemble_struct = {
                 'A': None,
                 'weights': None,
                 'reg': None,
@@ -440,8 +442,14 @@ class EMaligner(argschema.ArgSchemaParser):
                 'tforms': None,
                 'tids': None,
                 'shared_tforms': None,
-                'unused_tids': None
-                }
+                'unused_tids': None}
+
+    def assemble_from_hdf5_solution(self):
+        assemble_result = dict(self.assemble_struct)
+
+
+    def assemble_from_hdf5(self, zvals):
+        assemble_result = dict(self.assemble_struct)
 
         from_stack = get_tileids_and_tforms(
                         self.args['input_stack'],
@@ -450,7 +458,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
-        with h5py.File(self.args['start_from_file'], 'r') as f:
+        with h5py.File(self.args['assemble_from_file'], 'r') as f:
             assemble_result['tids'] = np.array(
                     f.get('used_tile_ids')[()]).astype('U')
             assemble_result['unused_tids'] = np.array(
@@ -482,7 +490,7 @@ class EMaligner(argschema.ArgSchemaParser):
         indices = np.array([]).astype('int64')
         indptr = np.array([]).astype('int64')
 
-        fdir = os.path.dirname(self.args['start_from_file'])
+        fdir = os.path.dirname(self.args['assemble_from_file'])
         i = 0
         for fname in datafile_names:
             with h5py.File(os.path.join(fdir, fname), 'r') as f:
@@ -517,21 +525,12 @@ class EMaligner(argschema.ArgSchemaParser):
                 logger.warning("  this call: not specified")
 
         logger.info("csr inputs read from files listed in : "
-                    "%s" % self.args['start_from_file'])
+                    "%s" % self.args['assemble_from_file'])
 
         return assemble_result
 
     def assemble_from_db(self, zvals):
-        assemble_result = {
-                'A': None,
-                'weights': None,
-                'reg': None,
-                'tspecs': None,
-                'tforms': None,
-                'tids': None,
-                'shared_tforms': None,
-                'unused_tids': None
-                }
+        assemble_result = dict(self.assemble_struct)
 
         from_stack = get_tileids_and_tforms(
                         self.args['input_stack'],
@@ -747,7 +746,7 @@ class EMaligner(argschema.ArgSchemaParser):
             message += 'python '
             for arg in sys.argv:
                 message += arg+' '
-            message = message + '--start_from_file ' + \
+            message = message + '--assemble_from_file ' + \
                 self.args['hdf5_options']['output_dir']
             message = message + ' --output_mode none'
             message += '\n\nor, run it again to solve with no output:\n\n'

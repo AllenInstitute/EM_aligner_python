@@ -387,34 +387,47 @@ class EMaligner(argschema.ArgSchemaParser):
 
         self.set_transform()
 
-        #if self.args['ingest_from_file'] != '':
-        #    x = 
+        if self.args['ingest_from_file'] != '':
+            assemble_result = self.assemble_from_hdf5(
+                    self.args['ingest_from_file'],
+                    zvals,
+                    read_data=False)
+            if self.args['transformation'] == 'affine':
+                x = self.combine_x_affine(
+                        assemble_result['tforms'][0],
+                        assemble_result['tforms'][1])
+            else:
+                x = assemble_result['tforms'][0]
+            results = {}
 
-        # assembly
-        if self.args['assemble_from_file'] != '':
-            assemble_result = self.assemble_from_hdf5(zvals)
         else:
-            assemble_result = self.assemble_from_db(zvals)
+            # assembly
+            if self.args['assemble_from_file'] != '':
+                assemble_result = self.assemble_from_hdf5(
+                        self.args['assemble_from_file'],
+                        zvals)
+            else:
+                assemble_result = self.assemble_from_db(zvals)
 
-        if assemble_result['A'] is not None:
-            mat_stats(assemble_result['A'], 'A')
+            if assemble_result['A'] is not None:
+                mat_stats(assemble_result['A'], 'A')
 
-        self.ntiles_used = assemble_result['tids'].size
-        logger.info(' A created in %0.1f seconds' % (time.time() - t0))
+            self.ntiles_used = assemble_result['tids'].size
+            logger.info(' A created in %0.1f seconds' % (time.time() - t0))
 
-        if self.args['profile_data_load']:
-            print('skipping solve for profile run')
-            sys.exit()
+            if self.args['profile_data_load']:
+                print('skipping solve for profile run')
+                sys.exit()
 
-        # solve
-        message, x, results = \
-            self.solve_or_not(
-                   assemble_result['A'],
-                   assemble_result['weights'],
-                   assemble_result['reg'],
-                   assemble_result['tforms'])
-        logger.info('\n' + message)
-        del assemble_result['A']
+            # solve
+            message, x, results = \
+                self.solve_or_not(
+                       assemble_result['A'],
+                       assemble_result['weights'],
+                       assemble_result['reg'],
+                       assemble_result['tforms'])
+            logger.info('\n' + message)
+            del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':
             write_to_new_stack(
@@ -432,6 +445,7 @@ class EMaligner(argschema.ArgSchemaParser):
             if self.args['render_output'] == 'stdout':
                 logger.info(message)
         del assemble_result['shared_tforms'], assemble_result['tspecs'], x
+
         return results
 
     assemble_struct = {
@@ -444,11 +458,8 @@ class EMaligner(argschema.ArgSchemaParser):
                 'shared_tforms': None,
                 'unused_tids': None}
 
-    def assemble_from_hdf5_solution(self):
-        assemble_result = dict(self.assemble_struct)
 
-
-    def assemble_from_hdf5(self, zvals):
+    def assemble_from_hdf5(self, filename, zvals, read_data=True):
         assemble_result = dict(self.assemble_struct)
 
         from_stack = get_tileids_and_tforms(
@@ -458,7 +469,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
-        with h5py.File(self.args['assemble_from_file'], 'r') as f:
+        with h5py.File(filename, 'r') as f:
             assemble_result['tids'] = np.array(
                     f.get('used_tile_ids')[()]).astype('U')
             assemble_result['unused_tids'] = np.array(
@@ -485,32 +496,33 @@ class EMaligner(argschema.ArgSchemaParser):
         outr.data = reg
         assemble_result['reg'] = outr
 
-        data = np.array([]).astype('float64')
-        weights = np.array([]).astype('float64')
-        indices = np.array([]).astype('int64')
-        indptr = np.array([]).astype('int64')
+        if read_data:
+            data = np.array([]).astype('float64')
+            weights = np.array([]).astype('float64')
+            indices = np.array([]).astype('int64')
+            indptr = np.array([]).astype('int64')
 
-        fdir = os.path.dirname(self.args['assemble_from_file'])
-        i = 0
-        for fname in datafile_names:
-            with h5py.File(os.path.join(fdir, fname), 'r') as f:
-                data = np.append(data, f.get('data')[()])
-                indices = np.append(indices, f.get('indices')[()])
-                if i == 0:
-                    indptr = np.append(indptr, f.get('indptr')[()])
-                    i += 1
-                else:
-                    indptr = np.append(
-                            indptr,
-                            f.get('indptr')[()][1:] + indptr[-1])
-                weights = np.append(weights, f.get('weights')[()])
-                logger.info('  %s read' % fname)
+            fdir = os.path.dirname(filename)
+            i = 0
+            for fname in datafile_names:
+                with h5py.File(os.path.join(fdir, fname), 'r') as f:
+                    data = np.append(data, f.get('data')[()])
+                    indices = np.append(indices, f.get('indices')[()])
+                    if i == 0:
+                        indptr = np.append(indptr, f.get('indptr')[()])
+                        i += 1
+                    else:
+                        indptr = np.append(
+                                indptr,
+                                f.get('indptr')[()][1:] + indptr[-1])
+                    weights = np.append(weights, f.get('weights')[()])
+                    logger.info('  %s read' % fname)
 
-        assemble_result['A'] = csr_matrix((data, indices, indptr))
+            assemble_result['A'] = csr_matrix((data, indices, indptr))
 
-        outw = sparse.eye(weights.size, format='csr')
-        outw.data = weights
-        assemble_result['weights'] = outw
+            outw = sparse.eye(weights.size, format='csr')
+            outw.data = weights
+            assemble_result['weights'] = outw
 
         # alert about differences between this call and the original
         for k in file_args.keys():
@@ -737,6 +749,13 @@ class EMaligner(argschema.ArgSchemaParser):
         outr.data = reg
         return outr
 
+    def combine_x_affine(self, xu, xv):
+        x = np.zeros(xu.size * 2).astype('float64')
+        for i in np.arange(3):
+            x[i::6] = xu[i::3]
+            x[i + 3::6] = xv[i::3]
+        return x
+
     def solve_or_not(self, A, weights, reg, filt_tforms):
         t0 = time.time()
         # not
@@ -785,11 +804,8 @@ class EMaligner(argschema.ArgSchemaParser):
                 precision = np.sqrt(precisionu ** 2 + precisionv ** 2)
 
                 # recombine
-                x = np.zeros(xu.size * 2).astype('float64')
+                x = self.combine_x_affine(xu, xv)
                 err = np.hstack((erru, errv))
-                for i in np.arange(3):
-                    x[i::6] = xu[i::3]
-                    x[i + 3::6] = xv[i::3]
                 del xu, xv, erru, errv, precisionu, precisionv
             else:
                 # simpler case for rigid, or

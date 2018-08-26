@@ -156,9 +156,12 @@ class EMA_Schema(ArgSchema):
         validate=lambda x: x in ['affine','rigid','affine_fullsize'])
     output_mode = String(
         default='hdf5')
-    start_from_file = String(
+    assemble_from_file = String(
         default='',
-        description = 'fullpath to index.txt')
+        description = 'fullpath to solution_input.h5')
+    ingest_from_file = String(
+        default='',
+        description = 'fullpath to solution_output.h5')
     render_output = String(
         default='null',
         description = '/path/to/file, null (devnull), or stdout for where to redirect render output')

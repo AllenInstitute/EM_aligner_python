@@ -9,6 +9,7 @@ from .utils import (
         write_chunk_to_file,
         write_reg_and_tforms,
         write_to_new_stack,
+        EMalignerException,
         logger2)
 import time
 import scipy.sparse as sparse
@@ -22,8 +23,10 @@ import os
 import sys
 import multiprocessing
 import logging
+import json
 
 logger = logging.getLogger(__name__)
+
 
 def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
     # determine number of points
@@ -175,7 +178,6 @@ def calculate_processing_chunk(fargs):
     chunk['indices'] = None
     chunk['indptr'] = None
     chunk['weights'] = None
-    chunk['indextxt'] = ""
     chunk['nchunks'] = 0
     chunk['zlist'] = []
 
@@ -379,191 +381,221 @@ class EMaligner(argschema.ArgSchemaParser):
                         self.args['output_stack']['name'],
                         state='COMPLETE',
                         render=ingestconn)
-        logger.info('total time: %0.1f' % (time.time() - t0))
+        logger.info(' total time: %0.1f' % (time.time() - t0))
 
     def assemble_and_solve(self, zvals, ingestconn):
         t0 = time.time()
 
         self.set_transform()
 
-        # assembly
-        if self.args['start_from_file'] != '':
-            A, weights, reg, filt_tspecs, filt_tforms, \
-                    filt_tids, shared_tforms, unused_tids = \
-                    self.assemble_from_hdf5(zvals)
+        if self.args['ingest_from_file'] != '':
+            assemble_result = self.assemble_from_hdf5(
+                    self.args['ingest_from_file'],
+                    zvals,
+                    read_data=False)
+            if self.args['transformation'] == 'affine':
+                x = self.combine_x_affine(
+                        assemble_result['tforms'][0],
+                        assemble_result['tforms'][1])
+            else:
+                x = assemble_result['tforms'][0]
+            results = {}
+
         else:
-            A, weights, reg, filt_tspecs, filt_tforms, \
-                    filt_tids, shared_tforms, unused_tids = \
-                    self.assemble_from_db(zvals)
+            # assembly
+            if self.args['assemble_from_file'] != '':
+                assemble_result = self.assemble_from_hdf5(
+                        self.args['assemble_from_file'],
+                        zvals)
+            else:
+                assemble_result = self.assemble_from_db(zvals)
 
-        if A is not None:
-            mat_stats(A, 'A')
+            if assemble_result['A'] is not None:
+                mat_stats(assemble_result['A'], 'A')
 
-        self.ntiles_used = filt_tids.size
-        logger.info('\n A created in %0.1f seconds' % (time.time() - t0))
+            self.ntiles_used = assemble_result['tids'].size
+            logger.info(' A created in %0.1f seconds' % (time.time() - t0))
 
-        if self.args['profile_data_load']:
-            print('skipping solve for profile run')
-            sys.exit()
+            if self.args['profile_data_load']:
+                raise EMalignerException(
+                        "exiting after timing profile")
 
-        # solve
-        message, x, results = \
-            self.solve_or_not(
-                   A,
-                   weights,
-                   reg,
-                   filt_tforms)
-        logger.info(message)
-        del A
+            # solve
+            message, x, results = \
+                self.solve_or_not(
+                       assemble_result['A'],
+                       assemble_result['weights'],
+                       assemble_result['reg'],
+                       assemble_result['tforms'])
+            logger.info('\n' + message)
+            del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':
             write_to_new_stack(
                     self.args['input_stack'],
                     self.args['output_stack']['name'],
                     self.args['transformation'],
-                    filt_tspecs,
-                    shared_tforms,
+                    assemble_result['tspecs'],
+                    assemble_result['shared_tforms'],
                     x,
                     ingestconn,
-                    unused_tids,
+                    assemble_result['unused_tids'],
                     self.args['render_output'],
                     self.args['output_stack']['use_rest'],
                     self.args['overwrite_zlayer'])
             if self.args['render_output'] == 'stdout':
                 logger.info(message)
-        del shared_tforms, x, filt_tspecs
+        del assemble_result['shared_tforms'], assemble_result['tspecs'], x
+
         return results
 
-    def assemble_from_hdf5(self, zvals):
-        # get the tile IDs and transforms
-        tile_ids, tile_tforms, tile_tspecs, shared_tforms, sectionIds = \
-                get_tileids_and_tforms(
+    assemble_struct = {
+                'A': None,
+                'weights': None,
+                'reg': None,
+                'tspecs': None,
+                'tforms': None,
+                'tids': None,
+                'shared_tforms': None,
+                'unused_tids': None}
+
+    def assemble_from_hdf5(self, filename, zvals, read_data=True):
+        assemble_result = dict(self.assemble_struct)
+
+        from_stack = get_tileids_and_tforms(
                         self.args['input_stack'],
                         self.args['transformation'],
                         zvals)
-        fdir = os.path.dirname(self.args['start_from_file'])
 
-        # get from the regularization file
-        fname = os.path.join(fdir + '/regularization.h5')
-        with h5py.File(fname, 'r') as f:
-            reg = f.get('lambda')[()]
-            filt_tids = np.array(f.get('tile_ids')[()]).astype('U')
-            unused_tids = np.array(f.get('unused_tile_ids')[()]).astype('U')
+        assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
+
+        with h5py.File(filename, 'r') as f:
+            assemble_result['tids'] = np.array(
+                    f.get('used_tile_ids')[()]).astype('U')
+            assemble_result['unused_tids'] = np.array(
+                    f.get('unused_tile_ids')[()]).astype('U')
             k = 0
-            filt_tforms = []
+            assemble_result['tforms'] = []
             while True:
                 name = 'transforms_%d' % k
                 if name in f.keys():
-                    filt_tforms.append(f.get(name)[()])
+                    assemble_result['tforms'].append(f.get(name)[()])
                     k += 1
                 else:
                     break
 
+            reg = f.get('lambda')[()]
+            datafile_names = f.get('datafile_names')[()]
+            file_args = json.loads(f.get('input_args')[()][0])
+
         # get the tile IDs and transforms
-        tile_ind = np.in1d(tile_ids, filt_tids)
-        filt_tspecs = tile_tspecs[tile_ind]
-        f.close()
-        logger.info('  %s read' % fname)
+        tile_ind = np.in1d(from_stack['tids'], assemble_result['tids'])
+        assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
 
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
-        reg = outr
+        assemble_result['reg'] = outr
 
-        # get from the matrix files
-        indexname = os.path.join(fdir, 'index.txt')
-        with open(indexname, 'r') as f:
-            lines = f.readlines()
-        data = np.array([]).astype('float64')
-        weights = np.array([]).astype('float64')
-        indices = np.array([]).astype('int64')
-        indptr = np.array([]).astype('int64')
-        for i in np.arange(len(lines)):
-            line = lines[i]
-            fname = fdir + '/' + line.split(' ')[1]
-            with h5py.File(fname, 'r') as f:
-                data = np.append(data, f.get('data')[()])
-                indices = np.append(indices, f.get('indices')[()])
-                if i == 0:
-                    indptr = np.append(indptr, f.get('indptr')[()])
-                else:
-                    indptr = np.append(
-                            indptr,
-                            f.get('indptr')[()][1:] + indptr[-1])
-                weights = np.append(weights, f.get('weights')[()])
-                logger.info('  %s read' % fname)
+        if read_data:
+            data = np.array([]).astype('float64')
+            weights = np.array([]).astype('float64')
+            indices = np.array([]).astype('int64')
+            indptr = np.array([]).astype('int64')
 
-        A = csr_matrix((data, indices, indptr))
+            fdir = os.path.dirname(filename)
+            i = 0
+            for fname in datafile_names:
+                with h5py.File(os.path.join(fdir, fname), 'r') as f:
+                    data = np.append(data, f.get('data')[()])
+                    indices = np.append(indices, f.get('indices')[()])
+                    if i == 0:
+                        indptr = np.append(indptr, f.get('indptr')[()])
+                        i += 1
+                    else:
+                        indptr = np.append(
+                                indptr,
+                                f.get('indptr')[()][1:] + indptr[-1])
+                    weights = np.append(weights, f.get('weights')[()])
+                    logger.info('  %s read' % fname)
 
-        outw = sparse.eye(weights.size, format='csr')
-        outw.data = weights
-        weights = outw
+            assemble_result['A'] = csr_matrix((data, indices, indptr))
 
-        logger.info('csr inputs read from files listed in : %s' % indexname)
+            outw = sparse.eye(weights.size, format='csr')
+            outw.data = weights
+            assemble_result['weights'] = outw
 
-        return (A, weights, reg,
-                filt_tspecs, filt_tforms,
-                filt_tids, shared_tforms,
-                unused_tids)
+        # alert about differences between this call and the original
+        for k in file_args.keys():
+            if k in self.args.keys():
+                if file_args[k] != self.args[k]:
+                    logger.warning("for key \"%s\" " % k)
+                    logger.warning("  from file: " + str(file_args[k]))
+                    logger.warning("  this call: " + str(self.args[k]))
+            else:
+                logger.warning("for key \"%s\" " % k)
+                logger.warning("  file     : " + str(file_args[k]))
+                logger.warning("  this call: not specified")
+
+        logger.info("csr inputs read from files listed in : "
+                    "%s" % self.args['assemble_from_file'])
+
+        return assemble_result
 
     def assemble_from_db(self, zvals):
-        # get the tile IDs and transforms
-        tile_ids, tile_tforms, tile_tspecs, shared_tforms, \
-                sectionIds = get_tileids_and_tforms(
+        assemble_result = dict(self.assemble_struct)
+
+        from_stack = get_tileids_and_tforms(
                         self.args['input_stack'],
                         self.args['transformation'],
                         zvals)
-        if self.args['transformation'] == 'affine':
-            # split the tforms in half by u and v
-            utforms = np.hstack(
-                    np.hsplit(tile_tforms, len(tile_tforms) / 3)[::2])
-            vtforms = np.hstack(
-                    np.hsplit(tile_tforms, len(tile_tforms) / 3)[1::2])
-            tile_tforms = [utforms, vtforms]
-            del utforms, vtforms
-        else:
-            tile_tforms = [tile_tforms]
+        assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
         # create A matrix in compressed sparse row (CSR) format
-        A, weights, tiles_used = self.create_CSR_A(
-                tile_ids,
+        CSR_A = self.create_CSR_A(
+                from_stack['tids'],
                 zvals,
-                sectionIds)
+                from_stack['sectionIds'])
+        assemble_result['A'] = CSR_A.pop('A')
+        assemble_result['weights'] = CSR_A.pop('weights')
 
         # some book-keeping if there were some unused tiles
-        tile_ind = np.in1d(tile_ids, tiles_used)
-        filt_tspecs = tile_tspecs[tile_ind]
-        filt_tids = tile_ids[tile_ind]
-        unused_tids = tile_ids[np.invert(tile_ind)]
+        tile_ind = np.in1d(from_stack['tids'], CSR_A['tiles_used'])
+        assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
+        assemble_result['tids'] = \
+            from_stack['tids'][tile_ind]
+        assemble_result['unused_tids'] = \
+            from_stack['tids'][np.invert(tile_ind)]
 
         # remove columns in A for unused tiles
         slice_ind = np.repeat(
                 tile_ind,
-                self.transform['DOF_per_tile'] / len(tile_tforms))
+                self.transform['DOF_per_tile'] / len(from_stack['tforms']))
         if self.args['output_mode'] != 'hdf5':
             # for large matrices,
             # this might be expensive to perform on CSR format
-            A = A[:, slice_ind]
+            assemble_result['A'] = assemble_result['A'][:, slice_ind]
 
-        filt_tforms = []
-        for j in np.arange(len(tile_tforms)):
-            filt_tforms.append(tile_tforms[j][slice_ind])
-        del tile_ids, tiles_used, tile_tforms, tile_ind, tile_tspecs
+        assemble_result['tforms'] = []
+        for j in np.arange(len(from_stack['tforms'])):
+            assemble_result['tforms'].append(
+                    from_stack['tforms'][j][slice_ind])
+        del from_stack, CSR_A['tiles_used'], tile_ind
 
         # create the regularization vectors
-        reg = self.create_regularization(filt_tforms)
+        assemble_result['reg'] = self.create_regularization(
+                assemble_result['tforms'])
 
         # output the regularization vectors to hdf5 file
-        write_reg_and_tforms(
-                self.args['output_mode'],
-                self.args['hdf5_options'],
-                filt_tforms,
-                reg,
-                filt_tids,
-                unused_tids)
+        if self.args['output_mode'] == 'hdf5':
+            write_reg_and_tforms(
+                    dict(self.args),
+                    CSR_A['metadata'],
+                    assemble_result['tforms'],
+                    assemble_result['reg'],
+                    assemble_result['tids'],
+                    assemble_result['unused_tids'])
 
-        return (A, weights, reg, filt_tspecs,
-                filt_tforms, filt_tids, shared_tforms,
-                unused_tids)
+        return assemble_result
 
     def set_transform(self):
         self.transform = {}
@@ -610,6 +642,12 @@ class EMaligner(argschema.ArgSchemaParser):
         return c0
 
     def create_CSR_A(self, tile_ids, zvals, sectionIds):
+        func_result = {
+                'A': None,
+                'weights': None,
+                'tiles_used': None,
+                'metadata': None}
+
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
         pairs = self.determine_zvalue_pairs(zvals, sectionIds)
@@ -641,9 +679,10 @@ class EMaligner(argschema.ArgSchemaParser):
         tiles_used = []
         for i in np.arange(len(results)):
             tiles_used += results[i]['tiles_used']
+        func_result['tiles_used'] = np.array(tiles_used)
 
+        func_result['metadata'] = []
         if self.args['output_mode'] == 'hdf5':
-            indextxt = ""
             results = np.array(results)
             for pchunk in proc_chunks:
                 cat_chunk = self.concatenate_chunks(results[pchunk])
@@ -656,17 +695,11 @@ class EMaligner(argschema.ArgSchemaParser):
                         '/%d_%d.h5' % (
                                 cat_chunk['zlist'].min(),
                                 cat_chunk['zlist'].max())
-                    indextxt += write_chunk_to_file(
-                            fname,
-                            c,
-                            cat_chunk['weights'])
-
-            indexname = self.args['hdf5_options']['output_dir'] + '/index.txt'
-            f = open(indexname, 'w')
-            f.write(indextxt)
-            f.close()
-            logger.info('wrote %s' % indexname)
-            return None, None, np.array(tiles_used)
+                    func_result['metadata'].append(
+                            write_chunk_to_file(
+                                fname,
+                                c,
+                                cat_chunk['weights']))
 
         else:
             data = np.array([]).astype('float64')
@@ -688,8 +721,10 @@ class EMaligner(argschema.ArgSchemaParser):
             A = csr_matrix((data, indices, indptr))
             outw = sparse.eye(weights.size, format='csr')
             outw.data = weights
-            weights = outw
-            return A, outw, np.array(tiles_used)
+            func_result['A'] = A
+            func_result['weights'] = outw
+
+        return func_result
 
     def create_regularization(self, tile_tforms):
         # affine (half-size) or any
@@ -714,6 +749,13 @@ class EMaligner(argschema.ArgSchemaParser):
         outr.data = reg
         return outr
 
+    def combine_x_affine(self, xu, xv):
+        x = np.zeros(xu.size * 2).astype('float64')
+        for i in np.arange(3):
+            x[i::6] = xu[i::3]
+            x[i + 3::6] = xv[i::3]
+        return x
+
     def solve_or_not(self, A, weights, reg, filt_tforms):
         t0 = time.time()
         # not
@@ -723,7 +765,7 @@ class EMaligner(argschema.ArgSchemaParser):
             message += 'python '
             for arg in sys.argv:
                 message += arg+' '
-            message = message + '--start_from_file ' + \
+            message = message + '--assemble_from_file ' + \
                 self.args['hdf5_options']['output_dir']
             message = message + ' --output_mode none'
             message += '\n\nor, run it again to solve with no output:\n\n'
@@ -762,11 +804,8 @@ class EMaligner(argschema.ArgSchemaParser):
                 precision = np.sqrt(precisionu ** 2 + precisionv ** 2)
 
                 # recombine
-                x = np.zeros(xu.size * 2).astype('float64')
+                x = self.combine_x_affine(xu, xv)
                 err = np.hstack((erru, errv))
-                for i in np.arange(3):
-                    x[i::6] = xu[i::3]
-                    x[i + 3::6] = xv[i::3]
                 del xu, xv, erru, errv, precisionu, precisionv
             else:
                 # simpler case for rigid, or
@@ -793,8 +832,7 @@ class EMaligner(argschema.ArgSchemaParser):
                     " error     [norm(Ax-b)] "
                     "= %0.3f\n" % error)
             message += (
-                    "avg cartesian projection displacement "
-                    "per point [mean(|Ax|)+/-std(|Ax|)] : "
+                    " [mean(|Ax|)+/-std(|Ax|)] : "
                     "%0.1f +/- %0.1f pixels" % (
                         np.abs(err).mean(),
                         np.abs(err).std()))

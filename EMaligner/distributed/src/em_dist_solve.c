@@ -189,7 +189,7 @@ int main(int argc,char **args)
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-  char xname[10];
+  char xname[20];
   PetscViewer viewer;
   if (rank==0){
       ierr = CopyDataSetstoSolutionOut(PETSC_COMM_SELF,sln_input,sln_output); CHKERRQ(ierr);
@@ -203,7 +203,7 @@ int main(int argc,char **args)
     if (rank==0){
       printf("solve %d: %0.1f sec\n",i,t1-t0);
     }
-    sprintf(xname,"x%d",i);
+    sprintf(xname,"transforms_%d",i);
     ierr = PetscObjectSetName((PetscObject)x[i],xname);CHKERRQ(ierr);
     ierr = VecView(x[i],viewer);CHKERRQ(ierr);
   }

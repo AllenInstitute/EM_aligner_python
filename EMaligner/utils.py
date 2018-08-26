@@ -11,8 +11,10 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
 import os
 import sys
+import json
 
 logger2 = logging.getLogger(__name__)
+
 
 class EMalignerException(Exception):
     """Exception raised when there is a \
@@ -116,13 +118,13 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                 pass
 
         if stack['db_interface'] == 'mongo':
-            cursor = dbconnection.find(
-                {'z': float(z)}).sort([
-                    ('layout.imageRow', 1),
-                    ('layout.imageCol', 1)])
-            if cursor.count() == 0:
+            filt = {'z': float(z)}
+            if dbconnection.count_documents(filt) == 0:
                 sectionId = None
             else:
+                cursor = dbconnection.find(filt).sort([
+                        ('layout.imageRow', 1),
+                        ('layout.imageCol', 1)])
                 tspecs = list(cursor)
                 refids = []
                 for ts in tspecs:
@@ -180,12 +182,26 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                 len(zvals),
                 time.time() - t0,
                 stack['db_interface']))
-    return (
-            np.array(tile_ids),
-            np.array(tile_tforms).flatten(),
-            np.array(tile_tspecs).flatten(),
-            shared_tforms,
-            sectionIds)
+
+    tile_tforms = np.array(tile_tforms).flatten()
+    if tform_name == 'affine':
+        # split the tforms in half by u and v
+        spl3 = np.hsplit(
+                tile_tforms,
+                len(tile_tforms) / 3)
+        tile_tforms = [
+                np.hstack(spl3[::2]),
+                np.hstack(spl3[1::2])]
+    else:
+        tile_tforms = [tile_tforms]
+
+    return {
+            'tids': np.array(tile_ids),
+            'tforms': tile_tforms,
+            'tspecs': np.array(tile_tspecs).flatten(),
+            'shared_tforms': shared_tforms,
+            'sectionIds': sectionIds
+            }
 
 
 def get_matches(iId, jId, collection, dbconnection):
@@ -234,6 +250,7 @@ def write_chunk_to_file(fname, c, file_weights):
             (c.indices.size, 1),
             dtype='int64')
     indices_dset[:] = c.indices.reshape(c.indices.size, 1)
+    nrows = indptr_dset.size-1
 
     data_dset = fcsr.create_dataset(
             "data",
@@ -246,45 +263,43 @@ def write_chunk_to_file(fname, c, file_weights):
             (file_weights.size,),
             dtype='float64')
     weights_dset[:] = file_weights
-
-    tmp = fname.split('/')
-    indtxt = 'file %s ' % tmp[-1]
-    indtxt += 'nrow %ld mincol %ld maxcol %ld nnz %ld\n' % (
-            indptr_dset.size-1,
-            c.indices.min(),
-            c.indices.max(),
-            c.indices.size)
     fcsr.close()
+
     logger2.info(
         "wrote %s %0.2fGB on disk" % (
             fname,
             os.path.getsize(fname)/(2.**30)))
-    return indtxt
+    return {
+            "name": os.path.basename(fname),
+            "nnz": c.indices.size,
+            "mincol": c.indices.min(),
+            "maxcol": c.indices.max(),
+            "nrows": nrows
+            }
 
 
 def write_reg_and_tforms(
-        output_mode,
-        hdf5_options,
-        filt_tforms,
+        args,
+        metadata,
+        tforms,
         reg,
-        filt_tids,
+        tids,
         unused_tids):
 
-    if output_mode == 'hdf5':
-        fname = hdf5_options['output_dir'] + '/regularization.h5'
-        f = h5py.File(fname, "w")
-        tlist = []
-        for j in np.arange(len(filt_tforms)):
+    fname = os.path.join(
+            args['hdf5_options']['output_dir'],
+            'solution_input.h5')
+    with h5py.File(fname, "w") as f:
+        for j in np.arange(len(tforms)):
             dsetname = 'transforms_%d' % j
             dset = f.create_dataset(
                     dsetname,
-                    (filt_tforms[j].size,),
+                    (tforms[j].size,),
                     dtype='float64')
-            dset[:] = filt_tforms[j]
-            tlist.append(j)
+            dset[:] = tforms[j]
 
         # a list of transform indices (clunky, but works for PETSc to count)
-        tlist = np.array(tlist).astype('int32')
+        tlist = np.arange(len(tforms)).astype('int32')
         dset = f.create_dataset(
                 "transform_list",
                 (tlist.size, 1),
@@ -300,21 +315,45 @@ def write_reg_and_tforms(
         dset[:] = vec
 
         # keep track here what tile_ids were used
-        dt = h5py.special_dtype(vlen=str)
+        str_type = h5py.special_dtype(vlen=str)
         dset = f.create_dataset(
-                "tile_ids",
-                (filt_tids.size,),
-                dtype=dt)
-        dset[:] = filt_tids
+                "used_tile_ids",
+                (tids.size,),
+                dtype=str_type)
+        dset[:] = tids
+
         # keep track here what tile_ids were not used
-        dt = h5py.special_dtype(vlen=str)
         dset = f.create_dataset(
                 "unused_tile_ids",
                 (unused_tids.size,),
-                dtype=dt)
+                dtype=str_type)
         dset[:] = unused_tids
-        f.close()
+
+        # keep track of input args
+        dset = f.create_dataset(
+                "input_args",
+                (1,),
+                dtype=str_type)
+        dset[:] = json.dumps(args, indent=2)
+
+        # metadata
+        names = [m['name'] for m in metadata]
+        dset = f.create_dataset(
+                "datafile_names",
+                (len(names),),
+                dtype=str_type)
+        dset[:] = names
+
+        for key in ['nrows', 'nnz', 'mincol', 'maxcol']:
+            vals = np.array([m[key] for m in metadata])
+            dset = f.create_dataset(
+                    "datafile_" + key,
+                    (vals.size, 1),
+                    dtype='int64')
+            dset[:] = vals.reshape(vals.size, 1)
+
         print('wrote %s' % fname)
+
 
 def get_stderr_stdout(outarg):
     if outarg == 'null':
@@ -337,6 +376,7 @@ def get_stderr_stdout(outarg):
             i += 1
         stdeo = open(outarg, 'a')
     return stdeo
+
 
 def write_to_new_stack(
         input_stack,

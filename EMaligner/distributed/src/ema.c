@@ -116,8 +116,10 @@ PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char o
   hid_t       filein, fileout, filetype, memtype, space, dset,dsetout;
   herr_t      status;
   hsize_t     dims[1];
-  int nds = 3;
-  char *copyds[3] = {"input_args", "used_tile_ids", "unused_tile_ids"};
+  int nds = 10;
+  char *copyds[10] = {"input_args", "used_tile_ids", "unused_tile_ids", 
+	  "datafile_maxcol", "datafile_mincol", "datafile_names",
+	  "datafile_nnz", "datafile_nrows", "lambda", "transform_list"};
   char **rdata;
   int ndims,i;
 

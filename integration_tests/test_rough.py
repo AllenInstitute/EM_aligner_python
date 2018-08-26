@@ -108,23 +108,33 @@ def test_hdf5_mode(render,rough_input_stack,rough_pointmatches,tmpdir):
     rough_parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
     mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
     mod.run()
-    indexfile = rough_parameters['hdf5_options']['output_dir']+'/index.txt'
+    indexfile = os.path.join(
+            rough_parameters['hdf5_options']['output_dir'],
+            'solution_input.h5')
     assert os.path.exists(indexfile)
 
     #check assemble from file
     rough_parameters['output_mode'] = 'none'
-    rough_parameters['start_from_file']=indexfile
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters['start_from_file'] = indexfile
+    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
+    os.remove(indexfile)
 
     #check again with multiple hdf5 files
     rough_parameters['output_mode'] = 'hdf5'
     rough_parameters['hdf5_options']['chunks_per_file'] = 2
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters['start_from_file'] = ''
+    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
     mod.run()
-    indexfile = rough_parameters['hdf5_options']['output_dir']+'/index.txt'
     assert os.path.exists(indexfile)
 
+    #check assemble from file
+    rough_parameters['output_mode'] = 'none'
+    rough_parameters['start_from_file'] = indexfile
+    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
+    mod.run()
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 1e6
 

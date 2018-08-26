@@ -115,24 +115,38 @@ def test_hdf5_mode(render,rough_input_stack,rough_pointmatches,tmpdir):
 
     #check assemble from file
     rough_parameters['output_mode'] = 'none'
-    rough_parameters['start_from_file'] = indexfile
+    rough_parameters['assemble_from_file'] = indexfile
     mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
+
+    #check ingest from file
+    try:
+        renderapi.stack.delete_stack(rough_parameters['output_stack']['name'], render=render)
+    except renderapi.errors.RenderError:
+        pass
+    rough_parameters['ingest_from_file'] = indexfile
+    rough_parameters['output_mode'] = 'stack'
+    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['input_stack']['name'],render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['output_stack']['name'],render=render)
+    assert len(tin)==len(tout)
     os.remove(indexfile)
 
     #check again with multiple hdf5 files
+    rough_parameters['ingest_from_file'] = ''
     rough_parameters['output_mode'] = 'hdf5'
     rough_parameters['hdf5_options']['chunks_per_file'] = 2
-    rough_parameters['start_from_file'] = ''
+    rough_parameters['assemble_from_file'] = ''
     mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
     mod.run()
     assert os.path.exists(indexfile)
 
     #check assemble from file
     rough_parameters['output_mode'] = 'none'
-    rough_parameters['start_from_file'] = indexfile
+    rough_parameters['assemble_from_file'] = indexfile
     mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7

@@ -2,6 +2,7 @@ import pytest
 import renderapi
 from test_data import (render_params,render_json_template,example_env,rough_parameters)
 from EMaligner import EMaligner
+from EMaligner.utils import EMalignerException
 import json
 import os
 import numpy as np
@@ -47,108 +48,179 @@ def rough_pointmatches(render):
 
 @pytest.fixture(scope='module')
 def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
+    rough_parameters2 = dict(rough_parameters)
     #do a rough rigid alignment
-    rough_parameters['input_stack']['name']=rough_input_stack
-    rough_parameters['pointmatch']['name'] = rough_pointmatches
-    rough_parameters['transformation'] = 'rigid'
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters2['input_stack']['name']=rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'rigid'
+    mod = EMaligner.EMaligner(input_data = rough_parameters2,args=[])
     mod.args['transformation'] = 'rigid'
     mod.run()
-    rigid_out=rough_parameters['output_stack']['name']
-    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['input_stack']['name'],render=render)
-    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['output_stack']['name'],render=render)
+    rigid_out=rough_parameters2['output_stack']['name']
+    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
     assert len(tin)==len(tout)
     yield rigid_out
 
+    with pytest.raises(EMalignerException):
+        mod.args['profile_data_load'] = True
+        mod.run()
+
 def test_rough_rigid_2(render,rough_pointmatches,rough_input_stack_2):
     #do a rough rigid alignment
-    rough_parameters['input_stack']['name']=rough_input_stack_2
-    rough_parameters['pointmatch']['name'] = rough_pointmatches
-    rough_parameters['transformation'] = 'rigid'
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters2 = dict(rough_parameters)
+    rough_parameters2['input_stack']['name']=rough_input_stack_2
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'rigid'
+    mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
     mod.args['transformation'] = 'rigid'
     mod.run()
-    rigid_out_2=rough_parameters['output_stack']['name']
-    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['input_stack']['name'],render=render)
-    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['output_stack']['name'],render=render)
+    rigid_out_2=rough_parameters2['output_stack']['name']
+    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
     assert len(tin)==len(tout)
 
 def test_affine_on_rigid(render,rough_pointmatches,rough_input_stack,test_rough_rigid):
+    rough_parameters2 = dict(rough_parameters)
     #add an affine on top of that
-    rough_parameters['input_stack']['name']=rough_input_stack
-    rough_parameters['pointmatch']['name'] = rough_pointmatches
-    rough_parameters['input_stack']['name']=test_rough_rigid
-    rough_parameters['output_stack']['name']='rough_affine'
-    rough_parameters['transformation'] = 'affine'
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['input_stack']['name'] = test_rough_rigid
+    rough_parameters2['output_stack']['name'] = 'rough_affine'
+    rough_parameters2['transformation'] = 'affine'
+    mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
 
 def test_output_mode_none(render,rough_pointmatches,rough_input_stack,test_rough_rigid):
+    rough_parameters2 = dict(rough_parameters)
     #check output mode none
-    rough_parameters['input_stack']['name']=rough_input_stack
-    rough_parameters['pointmatch']['name'] = rough_pointmatches
-    rough_parameters['transformation'] = 'affine'
-    rough_parameters['output_mode'] = 'none'
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'affine'
+    rough_parameters2['output_mode'] = 'none'
+    mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
 
-def test_hdf5_mode(render,rough_input_stack,rough_pointmatches,tmpdir):
+def test_hdf5_mode_rigid(render,rough_input_stack,rough_pointmatches,tmpdir):
+    rough_parameters2 = dict(rough_parameters)
     #check output mode HDF5
-    rough_parameters['input_stack']['name']=rough_input_stack
-    rough_parameters['pointmatch']['name'] = rough_pointmatches
-    rough_parameters['output_mode'] = 'hdf5'
-    rough_parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
-    mod = EMaligner.EMaligner(input_data = rough_parameters,args=[])
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['output_mode'] = 'hdf5'
+    rough_parameters2['hdf5_options']['output_dir'] = \
+            str(tmpdir.mkdir('hdf5output'))
+    rough_parameters2['transformation'] = 'rigid'
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
     mod.run()
     indexfile = os.path.join(
-            rough_parameters['hdf5_options']['output_dir'],
+            rough_parameters2['hdf5_options']['output_dir'],
             'solution_input.h5')
     assert os.path.exists(indexfile)
 
     #check assemble from file
-    rough_parameters['output_mode'] = 'none'
-    rough_parameters['assemble_from_file'] = indexfile
-    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
+    rough_parameters2['output_mode'] = 'none'
+    rough_parameters2['assemble_from_file'] = indexfile
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
 
     #check ingest from file
     try:
-        renderapi.stack.delete_stack(rough_parameters['output_stack']['name'], render=render)
+        renderapi.stack.delete_stack(
+                rough_parameters2['output_stack']['name'],
+                render=render)
     except renderapi.errors.RenderError:
         pass
-    rough_parameters['ingest_from_file'] = indexfile
-    rough_parameters['output_mode'] = 'stack'
-    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
+    rough_parameters2['ingest_from_file'] = indexfile
+    rough_parameters2['output_mode'] = 'stack'
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
     mod.run()
-    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['input_stack']['name'],render=render)
-    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters['output_stack']['name'],render=render)
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'],
+            render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'],
+            render=render)
     assert len(tin)==len(tout)
     os.remove(indexfile)
 
-    #check again with multiple hdf5 files
-    rough_parameters['ingest_from_file'] = ''
-    rough_parameters['output_mode'] = 'hdf5'
-    rough_parameters['hdf5_options']['chunks_per_file'] = 2
-    rough_parameters['assemble_from_file'] = ''
-    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
+
+def test_hdf5_mode(render,rough_input_stack,rough_pointmatches,tmpdir):
+    rough_parameters2 = dict(rough_parameters)
+    #check output mode HDF5
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['output_mode'] = 'hdf5'
+    rough_parameters2['hdf5_options']['output_dir'] = \
+            str(tmpdir.mkdir('hdf5output'))
+    rough_parameters2['transformation'] = 'affine'
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
     mod.run()
+    indexfile = os.path.join(
+            rough_parameters2['hdf5_options']['output_dir'],
+            'solution_input.h5')
     assert os.path.exists(indexfile)
 
     #check assemble from file
-    rough_parameters['output_mode'] = 'none'
-    rough_parameters['assemble_from_file'] = indexfile
-    mod = EMaligner.EMaligner(input_data = rough_parameters, args=[])
+    rough_parameters2['output_mode'] = 'none'
+    rough_parameters2['assemble_from_file'] = indexfile
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
+
+    #check ingest from file
+    try:
+        renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
+    except renderapi.errors.RenderError:
+        pass
+    rough_parameters2['ingest_from_file'] = indexfile
+    rough_parameters2['output_mode'] = 'stack'
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'],
+            render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'],
+            render=render)
+    assert len(tin)==len(tout)
+    os.remove(indexfile)
+
+
+def test_hdf5_mode_chunk(render,rough_input_stack,rough_pointmatches,tmpdir):
+    rough_parameters2 = dict(rough_parameters)
+    #check output mode HDF5
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['hdf5_options']['chunks_per_file'] = 2
+    rough_parameters2['output_mode'] = 'hdf5'
+    rough_parameters2['hdf5_options']['output_dir'] = \
+            str(tmpdir.mkdir('hdf5output'))
+    rough_parameters2['transformation'] = 'affine'
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
+    mod.run()
+    indexfile = os.path.join(
+            rough_parameters2['hdf5_options']['output_dir'],
+            'solution_input.h5')
+    assert os.path.exists(indexfile)
+
+    #check assemble from file
+    rough_parameters2['output_mode'] = 'none'
+    rough_parameters2['assemble_from_file'] = indexfile
+    mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
+    mod.run()
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 1e6
+    os.remove(indexfile)
+
 

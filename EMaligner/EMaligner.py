@@ -9,6 +9,7 @@ from .utils import (
         write_chunk_to_file,
         write_reg_and_tforms,
         write_to_new_stack,
+        EMalignerException,
         logger2)
 import time
 import scipy.sparse as sparse
@@ -416,8 +417,8 @@ class EMaligner(argschema.ArgSchemaParser):
             logger.info(' A created in %0.1f seconds' % (time.time() - t0))
 
             if self.args['profile_data_load']:
-                print('skipping solve for profile run')
-                sys.exit()
+                raise EMalignerException(
+                        "exiting after timing profile")
 
             # solve
             message, x, results = \

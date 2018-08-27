@@ -234,7 +234,7 @@ def get_matches(iId, jId, collection, dbconnection):
                     {'_id': False})
             matches = np.append(matches, list(cursor))
     message = ("\n %d matches for section1=%s section2=%s "
-            "in pointmatch collectionr" % (len(matches),iId, jId))
+            "in pointmatch collection" % (len(matches),iId, jId))
     if len(matches) == 0:
         logger2.warning(message)
     else:

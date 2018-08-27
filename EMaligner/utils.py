@@ -176,7 +176,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                 tile_tspecs.append(tspecs[k])
 
     logger2.info(
-            "---\nloaded %d tile specs from %d zvalues in "
+            "\n loaded %d tile specs from %d zvalues in "
             "%0.1f sec using interface: %s" % (
                 len(tile_ids),
                 len(zvals),
@@ -233,6 +233,12 @@ def get_matches(iId, jId, collection, dbconnection):
                         'qGroupId': iId},
                     {'_id': False})
             matches = np.append(matches, list(cursor))
+    message = ("\n %d matches for section1=%s section2=%s "
+            "in pointmatch collectionr" % (len(matches),iId, jId))
+    if len(matches) == 0:
+        logger2.warning(message)
+    else:
+        logger2.info(message)
     return matches
 
 

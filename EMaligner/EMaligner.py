@@ -777,12 +777,14 @@ class EMaligner(argschema.ArgSchemaParser):
             results = None
         else:
             # regularized least squares
-            ATW = A.transpose().dot(weights)
-            K = ATW.dot(A) + reg
+            # ensure symmetry of K
+            weights.data = np.sqrt(weights.data)
+            rtWA = weights.dot(A)
+            K = rtWA.transpose().dot(rtWA) + reg
 
             logger.info(' K created in %0.1f seconds' % (time.time() - t0))
             t0 = time.time()
-            del weights, ATW
+            del weights, rtWA
 
             # factorize, then solve, efficient for large affine
             solve = factorized(K)

@@ -428,7 +428,8 @@ class EMaligner(argschema.ArgSchemaParser):
                        assemble_result['reg'],
                        assemble_result['tforms'])
             logger.info('\n' + message)
-            results['Ashape'] = assemble_result['A'].shape
+            if assemble_result['A'] is not None:
+                results['Ashape'] = assemble_result['A'].shape
             del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':

@@ -428,6 +428,7 @@ class EMaligner(argschema.ArgSchemaParser):
                        assemble_result['reg'],
                        assemble_result['tforms'])
             logger.info('\n' + message)
+            results['Ashape'] = assemble_result['A'].shape
             del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':
@@ -825,6 +826,7 @@ class EMaligner(argschema.ArgSchemaParser):
             results['time'] = time.time()-t0
             results['precision'] = precision
             results['error'] = error
+            results['err'] = [np.abs(err).mean(),np.abs(err).std()]
 
             message = ' solved in %0.1f sec\n' % (time.time() - t0)
             message += (
@@ -852,6 +854,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         np.power(x[4::self.transform['DOF_per_tile']], 2.0))
                 scale /= 2
             scale = scale.sum() / self.ntiles_used
+            results['scale'] = scale
             message += '\n avg scale = %0.2f' % scale
 
         return message, x, results

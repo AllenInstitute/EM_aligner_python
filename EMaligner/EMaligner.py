@@ -36,6 +36,10 @@ def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
     if npts < args['matrix_assembly']['npts_min']:
         return None, None, None, None, None
 
+    if np.all(np.array(match['matches']['w']) == 0):
+        # ignore zero-weighted tile pairs
+        return None, None, None, None, None
+
     # create arrays
     nd = npts * transform['rows_per_ptmatch'] * transform['nnz_per_row']
     ni = npts * transform['rows_per_ptmatch']

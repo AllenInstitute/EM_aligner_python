@@ -49,6 +49,29 @@ def montage_pointmatches(render):
     renderapi.pointmatch.import_matches(test_montage_collection,pms_from_json,render=render)
     yield test_montage_collection
 
+@pytest.fixture(scope='module')
+def montage_pointmatches_weighted(render):
+    test_montage_collection2 = 'montage_collection2'
+    pms_from_json = []
+    with open(FILE_PMS, 'r') as f:
+        pms_from_json = json.load(f)
+    n = len(pms_from_json[0]['matches']['w'])
+    pms_from_json[0]['matches']['w'] = [0.0 for i in range(n)]
+
+    renderapi.pointmatch.import_matches(test_montage_collection2,pms_from_json,render=render)
+    yield test_montage_collection2
+
+
+@pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
+def test_weighted(render,montage_pointmatches_weighted,loading_raw_stack, stack_state, tmpdir):
+    renderapi.stack.set_stack_state(loading_raw_stack, stack_state, render=render)
+    montage_parameters['input_stack']['name'] = loading_raw_stack
+    montage_parameters['pointmatch']['name'] = montage_pointmatches_weighted
+    mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
+    mod.run()
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 200
+
 
 @pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
 def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state, tmpdir):

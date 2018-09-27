@@ -66,10 +66,25 @@ class CheckResiduals(argschema.ArgSchemaParser):
                         self.args['output_stack']['name'],
                         float(self.args['z2']),
                         render=stack_dbconnection))
+        sectionIds = []
+        for t in tspecs:
+            sectionIds.append(t[0].layout.sectionId)
+        if len(sectionIds) == 1:
+            sectionIds.append(sectionIds[0])
+
+        if self.args['zoff'] != 0:
+            tmp = []
+            for sid in sectionIds:
+                try:
+                    tmp.append(str(int(sid) + self.args['zoff']))
+                except ValueError:
+                    tmp.append(sid)
+            sectionIds = tmp
+
         matches = renderapi.pointmatch.get_matches_from_group_to_group(
                 self.args['pointmatch']['name'],
-                str(float(self.args['z1'] + self.args['zoff'])),
-                str(float(self.args['z2'] + self.args['zoff'])),
+                sectionIds[0],
+                sectionIds[1],
                 render=match_dbconnection)
 
         self.p, self.q, self.p_transf, self.q_transf = \

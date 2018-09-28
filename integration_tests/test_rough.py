@@ -84,6 +84,53 @@ def test_rough_rigid_2(render,rough_pointmatches,rough_input_stack_2):
     assert mod.results['error'] < 1e6
     assert len(tin)==len(tout)
 
+def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
+    rough_parameters2 = dict(rough_parameters)
+    rough_parameters2['input_stack']['name']=rough_input_stack_2
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'rigid'
+
+    # delete a section
+    groups = renderapi.stack.get_z_values_for_stack(
+            rough_input_stack_2,
+            render=render)
+    n = int(len(groups)/2)
+    renderapi.stack.set_stack_state(
+            rough_input_stack_2,
+            state='LOADING',
+            render=render)
+    renderapi.stack.delete_section(
+            rough_input_stack_2,
+            groups[n],
+            render=render)
+    renderapi.stack.set_stack_state(
+            rough_input_stack_2,
+            state='COMPLETE',
+            render=render)
+
+    rough_parameters2['input_stack']['db_interface'] = 'render'
+    mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
+    mod.args['transformation'] = 'rigid'
+    mod.run()
+    rigid_out_2=rough_parameters2['output_stack']['name']
+    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 1e6
+    assert len(tin) == (len(tout) - 1) # did not delete the tilespec
+
+    rough_parameters2['input_stack']['db_interface'] = 'mongo'
+    mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
+    mod.args['transformation'] = 'rigid'
+    mod.run()
+    rigid_out_2=rough_parameters2['output_stack']['name']
+    tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
+    assert mod.results['precision'] < 1e-7
+    assert mod.results['error'] < 1e6
+    assert len(tin) == (len(tout) - 1)
+
+
 def test_affine_on_rigid(render,rough_pointmatches,rough_input_stack,test_rough_rigid):
     rough_parameters2 = dict(rough_parameters)
     #add an affine on top of that

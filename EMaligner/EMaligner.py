@@ -27,143 +27,186 @@ import json
 
 logger = logging.getLogger(__name__)
 
+def create_arrays_for_tilepair(npts, rows_per_ptmatch, nnz_per_row):
+    nd = npts * rows_per_ptmatch * nnz_per_row
+    ni = npts * rows_per_ptmatch
+    data = np.zeros(nd).astype('float64')
+    indices = np.zeros(nd).astype('int64')
+    indptr = np.zeros(ni)
+    weights = np.zeros(ni)
+    return data, indices, indptr, weights
+
+
+def affine_fullsize(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
+    # empty arrays
+    data, indices, indptr, weights = \
+            create_arrays_for_tilepair(
+                    npts,
+                    transform['rows_per_ptmatch'],
+                    transform['nnz_per_row'])
+
+    # u=ax+by+c
+    data[0 + mstep] = np.array(match['matches']['p'][0])[m]
+    data[1 + mstep] = np.array(match['matches']['p'][1])[m]
+    data[2 + mstep] = 1.0
+    data[3 + mstep] = -1.0 * np.array(match['matches']['q'][0])[m]
+    data[4 + mstep] = -1.0 * np.array(match['matches']['q'][1])[m]
+    data[5 + mstep] = -1.0
+    uindices = np.hstack((
+        tile_ind1 * transform['DOF_per_tile']+np.array([0, 1, 2]),
+        tile_ind2 * transform['DOF_per_tile']+np.array([0, 1, 2])))
+    indices[0:npts * transform['nnz_per_row']] = np.tile(uindices, npts)
+    # v=dx+ey+f
+    data[
+            (npts * transform['nnz_per_row']):
+            (2 * npts * transform['nnz_per_row'])] = \
+        data[0: npts * transform['nnz_per_row']]
+    indices[npts * transform['nnz_per_row']:
+            2 * npts * transform['nnz_per_row']] = \
+        np.tile(uindices + 3, npts)
+
+    # indptr and weights
+    indptr[0: 2 * npts] = \
+        np.arange(1, 2 * npts + 1) * transform['nnz_per_row']
+    weights[0: 2 * npts] = \
+        np.tile(np.array(match['matches']['w'])[m], 2)
+
+    return data, indices, indptr, weights
+
+
+def affine(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
+    # empty arrays
+    data, indices, indptr, weights = \
+            create_arrays_for_tilepair(
+                    npts,
+                    transform['rows_per_ptmatch'],
+                    transform['nnz_per_row'])
+
+    # u=ax+by+c
+    data[0 + mstep] = np.array(match['matches']['p'][0])[m]
+    data[1 + mstep] = np.array(match['matches']['p'][1])[m]
+    data[2 + mstep] = 1.0
+    data[3 + mstep] = -1.0 * np.array(match['matches']['q'][0])[m]
+    data[4 + mstep] = -1.0 * np.array(match['matches']['q'][1])[m]
+    data[5 + mstep] = -1.0
+    uindices = np.hstack((
+        tile_ind1 * transform['DOF_per_tile'] / 2 + np.array([0, 1, 2]),
+        tile_ind2 * transform['DOF_per_tile'] / 2 + np.array([0, 1, 2])))
+    indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
+    indptr[0: npts] = np.arange(1, npts + 1) * transform['nnz_per_row']
+    weights[0: npts] = np.array(match['matches']['w'])[m]
+    # don't do anything for v
+    return data, indices, indptr, weights
+
+
+def similarity(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
+    # empty arrays
+    data, indices, indptr, weights = \
+            create_arrays_for_tilepair(
+                    npts,
+                    transform['rows_per_ptmatch'],
+                    transform['nnz_per_row'])
+
+    px = np.array(match['matches']['p'][0])[m]
+    py = np.array(match['matches']['p'][1])[m]
+    qx = np.array(match['matches']['q'][0])[m]
+    qy = np.array(match['matches']['q'][1])[m]
+    # u=ax+by+c
+    data[0 + mstep] = px
+    data[1 + mstep] = py
+    data[2 + mstep] = 1.0
+    data[3 + mstep] = -1.0 * qx
+    data[4 + mstep] = -1.0 * qy
+    data[5 + mstep] = -1.0
+    uindices = np.hstack((
+        tile_ind1 * transform['DOF_per_tile'] + np.array([0, 1, 2]),
+        tile_ind2 * transform['DOF_per_tile'] + np.array([0, 1, 2])))
+    indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
+    # v=-bx+ay+d
+    data[0 + mstep + npts * transform['nnz_per_row']] = -1.0 * px
+    data[1 + mstep + npts * transform['nnz_per_row']] = py
+    data[2 + mstep + npts * transform['nnz_per_row']] = 1.0
+    data[3 + mstep + npts * transform['nnz_per_row']] = 1.0 * qx
+    data[4 + mstep + npts * transform['nnz_per_row']] = -1.0 * qy
+    data[5 + mstep + npts * transform['nnz_per_row']] = -1.0
+    vindices = np.hstack((
+        tile_ind1 * transform['DOF_per_tile'] + np.array([1, 0, 3]),
+        tile_ind2 * transform['DOF_per_tile'] + np.array([1, 0, 3])))
+    indices[
+            npts*transform['nnz_per_row']:
+            2 * npts * transform['nnz_per_row']] = np.tile(vindices, npts)
+    # du
+    data[0 + mstep + 2 * npts * transform['nnz_per_row']] = \
+        px - px.mean()
+    data[1 + mstep + 2 * npts * transform['nnz_per_row']] = \
+        py - py.mean()
+    data[2 + mstep + 2 * npts * transform['nnz_per_row']] = \
+        0.0
+    data[3 + mstep + 2 * npts * transform['nnz_per_row']] = \
+        -1.0 * (qx - qx.mean())
+    data[4 + mstep + 2 * npts * transform['nnz_per_row']] = \
+        -1.0 * (qy - qy.mean())
+    data[5 + mstep + 2 * npts * transform['nnz_per_row']] = \
+        -0.0
+    indices[2 * npts * transform['nnz_per_row']:
+            3 * npts * transform['nnz_per_row']] = np.tile(uindices, npts)
+    # dv
+    data[0 + mstep + 3 * npts * transform['nnz_per_row']] = \
+        -1.0 * (px - px.mean())
+    data[1 + mstep + 3 * npts * transform['nnz_per_row']] = \
+        py - py.mean()
+    data[2 + mstep + 3 * npts * transform['nnz_per_row']] = \
+        0.0
+    data[3 + mstep + 3 * npts * transform['nnz_per_row']] = \
+        1.0 * (qx - qx.mean())
+    data[4 + mstep + 3 * npts * transform['nnz_per_row']] = \
+        -1.0 * (qy - qy.mean())
+    data[5 + mstep + 3 * npts * transform['nnz_per_row']] = \
+        -0.0
+    indices[3 * npts * transform['nnz_per_row']:
+            4 * npts * transform['nnz_per_row']] = np.tile(uindices, npts)
+
+    indptr[0: transform['rows_per_ptmatch'] * npts] = \
+        np.arange(1, transform['rows_per_ptmatch'] * npts + 1) * \
+        transform['nnz_per_row']
+    weights[0: transform['rows_per_ptmatch'] * npts] = \
+        np.tile(np.array(
+            match['matches']['w'])[m],
+            transform['rows_per_ptmatch'])
+    return data, indices, indptr, weights
+
 
 def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
     # determine number of points
     npts = len(match['matches']['q'][0])
     if npts > args['matrix_assembly']['npts_max']:
         npts = args['matrix_assembly']['npts_max']
-    if npts < args['matrix_assembly']['npts_min']:
+
+    # some criteria for returning nothing
+    if (npts < args['matrix_assembly']['npts_min']) | \
+       np.all(np.array(match['matches']['w']) == 0):
         return None, None, None, None, None
 
-    if np.all(np.array(match['matches']['w']) == 0):
-        # ignore zero-weighted tile pairs
-        return None, None, None, None, None
-
-    # create arrays
-    nd = npts * transform['rows_per_ptmatch'] * transform['nnz_per_row']
-    ni = npts * transform['rows_per_ptmatch']
-    data = np.zeros(nd).astype('float64')
-    indices = np.zeros(nd).astype('int64')
-    indptr = np.zeros(ni)
-    weights = np.zeros(ni)
-
+    # random subset
     if args['matrix_assembly']['choose_random']:
         a = np.arange(len(match['matches']['q'][0]))
         np.random.shuffle(a)
         m = a[0:npts]
     else:
         m = np.arange(npts)
-
     mstep = np.arange(npts) * transform['nnz_per_row']
 
     if args['transformation'] == 'affine_fullsize':
-        # u=ax+by+c
-        data[0 + mstep] = np.array(match['matches']['p'][0])[m]
-        data[1 + mstep] = np.array(match['matches']['p'][1])[m]
-        data[2 + mstep] = 1.0
-        data[3 + mstep] = -1.0 * np.array(match['matches']['q'][0])[m]
-        data[4 + mstep] = -1.0 * np.array(match['matches']['q'][1])[m]
-        data[5 + mstep] = -1.0
-        uindices = np.hstack((
-            tile_ind1 * transform['DOF_per_tile']+np.array([0, 1, 2]),
-            tile_ind2 * transform['DOF_per_tile']+np.array([0, 1, 2])))
-        indices[0:npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-        # v=dx+ey+f
-        data[
-                (npts * transform['nnz_per_row']):
-                (2 * npts * transform['nnz_per_row'])] = \
-            data[0: npts * transform['nnz_per_row']]
-        indices[npts * transform['nnz_per_row']:
-                2 * npts * transform['nnz_per_row']] = \
-            np.tile(uindices + 3, npts)
-        indptr[0: 2 * npts] = \
-            np.arange(1, 2 * npts + 1) * transform['nnz_per_row']
-        weights[0: 2 * npts] = \
-            np.tile(np.array(match['matches']['w'])[m], 2)
+        data, indices, indptr, weights = affine_fullsize(
+                npts, match, transform, tile_ind1, tile_ind2, m, mstep)
+
     elif args['transformation'] == 'affine':
-        # u=ax+by+c
-        data[0 + mstep] = np.array(match['matches']['p'][0])[m]
-        data[1 + mstep] = np.array(match['matches']['p'][1])[m]
-        data[2 + mstep] = 1.0
-        data[3 + mstep] = -1.0 * np.array(match['matches']['q'][0])[m]
-        data[4 + mstep] = -1.0 * np.array(match['matches']['q'][1])[m]
-        data[5 + mstep] = -1.0
-        uindices = np.hstack((
-            tile_ind1 * transform['DOF_per_tile'] / 2 + np.array([0, 1, 2]),
-            tile_ind2 * transform['DOF_per_tile'] / 2 + np.array([0, 1, 2])))
-        indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-        indptr[0: npts] = np.arange(1, npts + 1) * transform['nnz_per_row']
-        weights[0: npts] = np.array(match['matches']['w'])[m]
-        # don't do anything for v
+        data, indices, indptr, weights = affine(
+                npts, match, transform, tile_ind1, tile_ind2, m, mstep)
 
-    elif args['transformation'] == 'rigid':
-        px = np.array(match['matches']['p'][0])[m]
-        py = np.array(match['matches']['p'][1])[m]
-        qx = np.array(match['matches']['q'][0])[m]
-        qy = np.array(match['matches']['q'][1])[m]
-        # u=ax+by+c
-        data[0 + mstep] = px
-        data[1 + mstep] = py
-        data[2 + mstep] = 1.0
-        data[3 + mstep] = -1.0 * qx
-        data[4 + mstep] = -1.0 * qy
-        data[5 + mstep] = -1.0
-        uindices = np.hstack((
-            tile_ind1 * transform['DOF_per_tile'] + np.array([0, 1, 2]),
-            tile_ind2 * transform['DOF_per_tile'] + np.array([0, 1, 2])))
-        indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-        # v=-bx+ay+d
-        data[0 + mstep + npts * transform['nnz_per_row']] = -1.0 * px
-        data[1 + mstep + npts * transform['nnz_per_row']] = py
-        data[2 + mstep + npts * transform['nnz_per_row']] = 1.0
-        data[3 + mstep + npts * transform['nnz_per_row']] = 1.0 * qx
-        data[4 + mstep + npts * transform['nnz_per_row']] = -1.0 * qy
-        data[5 + mstep + npts * transform['nnz_per_row']] = -1.0
-        vindices = np.hstack((
-            tile_ind1 * transform['DOF_per_tile'] + np.array([1, 0, 3]),
-            tile_ind2 * transform['DOF_per_tile'] + np.array([1, 0, 3])))
-        indices[
-                npts*transform['nnz_per_row']:
-                2 * npts * transform['nnz_per_row']] = np.tile(vindices, npts)
-        # du
-        data[0 + mstep + 2 * npts * transform['nnz_per_row']] = \
-            px - px.mean()
-        data[1 + mstep + 2 * npts * transform['nnz_per_row']] = \
-            py - py.mean()
-        data[2 + mstep + 2 * npts * transform['nnz_per_row']] = \
-            0.0
-        data[3 + mstep + 2 * npts * transform['nnz_per_row']] = \
-            -1.0 * (qx - qx.mean())
-        data[4 + mstep + 2 * npts * transform['nnz_per_row']] = \
-            -1.0 * (qy - qy.mean())
-        data[5 + mstep + 2 * npts * transform['nnz_per_row']] = \
-            -0.0
-        indices[2 * npts * transform['nnz_per_row']:
-                3 * npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-        # dv
-        data[0 + mstep + 3 * npts * transform['nnz_per_row']] = \
-            -1.0 * (px - px.mean())
-        data[1 + mstep + 3 * npts * transform['nnz_per_row']] = \
-            py - py.mean()
-        data[2 + mstep + 3 * npts * transform['nnz_per_row']] = \
-            0.0
-        data[3 + mstep + 3 * npts * transform['nnz_per_row']] = \
-            1.0 * (qx - qx.mean())
-        data[4 + mstep + 3 * npts * transform['nnz_per_row']] = \
-            -1.0 * (qy - qy.mean())
-        data[5 + mstep + 3 * npts * transform['nnz_per_row']] = \
-            -0.0
-        indices[3 * npts * transform['nnz_per_row']:
-                4 * npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-
-        indptr[0: transform['rows_per_ptmatch'] * npts] = \
-            np.arange(1, transform['rows_per_ptmatch'] * npts + 1) * \
-            transform['nnz_per_row']
-        weights[0: transform['rows_per_ptmatch'] * npts] = \
-            np.tile(np.array(
-                match['matches']['w'])[m],
-                transform['rows_per_ptmatch'])
+    elif args['transformation'] == 'similarity':
+        data, indices, indptr, weights = similarity(
+                npts, match, transform, tile_ind1, tile_ind2, m, mstep)
 
     return data, indices, indptr, weights, npts
 
@@ -614,7 +657,7 @@ class EMaligner(argschema.ArgSchemaParser):
             self.transform['DOF_per_tile'] = 6
             self.transform['nnz_per_row'] = 6
             self.transform['rows_per_ptmatch'] = 2
-        if self.args['transformation'] == 'rigid':
+        if self.args['transformation'] == 'similarity':
             self.transform['DOF_per_tile'] = 4
             self.transform['nnz_per_row'] = 6
             self.transform['rows_per_ptmatch'] = 4
@@ -743,7 +786,7 @@ class EMaligner(argschema.ArgSchemaParser):
         if 'affine' in self.args['transformation']:
             reg[2::3] = reg[2::3] * \
                 self.args['regularization']['translation_factor']
-        elif self.args['transformation'] == 'rigid':
+        elif self.args['transformation'] == 'similarity':
             reg[2::4] = reg[2::4] * \
                 self.args['regularization']['translation_factor']
             reg[3::4] = reg[3::4] * \
@@ -816,7 +859,7 @@ class EMaligner(argschema.ArgSchemaParser):
                 err = np.hstack((erru, errv))
                 del xu, xv, erru, errv, precisionu, precisionv
             else:
-                # simpler case for rigid, or
+                # simpler case for similarity, or
                 # affine_fullsize, but 2x larger than affine
                 Lm = reg.dot(filt_tforms[0])
                 x = solve(Lm)
@@ -846,7 +889,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         np.abs(err).mean(),
                         np.abs(err).std()))
 
-            if self.args['transformation'] == 'rigid':
+            if self.args['transformation'] == 'similarity':
                 scale = np.sqrt(
                         np.power(x[0::self.transform['DOF_per_tile']], 2.0) +
                         np.power(x[1::self.transform['DOF_per_tile']], 2.0))

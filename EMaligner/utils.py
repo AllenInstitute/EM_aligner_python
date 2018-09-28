@@ -157,7 +157,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                             tspecs[k].tforms[-1].M[1, 0],
                             tspecs[k].tforms[-1].M[1, 1],
                             tspecs[k].tforms[-1].M[1, 2]])
-                    elif tform_name == 'rigid':
+                    elif tform_name == 'similarity':
                         tile_tforms.append([
                             tspecs[k].tforms[-1].M[0, 0],
                             tspecs[k].tforms[-1].M[0, 1],
@@ -170,7 +170,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                     dfloat = np.array(dstring.split()).astype('float')
                     if 'affine' in tform_name:
                         tile_tforms.append(dfloat[[0, 2, 4, 1, 3, 5]])
-                    elif tform_name == 'rigid':
+                    elif tform_name == 'similarity':
                         tile_tforms.append(dfloat[[0, 2, 4, 5]])
                     tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k])
                 tile_tspecs.append(tspecs[k])
@@ -406,7 +406,7 @@ def write_to_new_stack(
             tspecs[m].tforms[-1].M[1, 0] = x[m * 6 + 3]
             tspecs[m].tforms[-1].M[1, 1] = x[m * 6 + 4]
             tspecs[m].tforms[-1].M[1, 2] = x[m * 6 + 5]
-        elif tform_type == 'rigid':
+        elif tform_type == 'similarity':
             tspecs[m].tforms[-1].M[0, 0] = x[m * 4 + 0]
             tspecs[m].tforms[-1].M[0, 1] = x[m * 4 + 1]
             tspecs[m].tforms[-1].M[0, 2] = x[m * 4 + 2]

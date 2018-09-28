@@ -47,37 +47,37 @@ def rough_pointmatches(render):
     yield test_rough_collection
 
 @pytest.fixture(scope='module')
-def test_rough_rigid(render,rough_pointmatches,rough_input_stack):
+def test_rough_similarity(render,rough_pointmatches,rough_input_stack):
     rough_parameters2 = dict(rough_parameters)
-    #do a rough rigid alignment
+    #do a rough similarity alignment
     rough_parameters2['input_stack']['name']=rough_input_stack
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['transformation'] = 'rigid'
+    rough_parameters2['transformation'] = 'similarity'
     mod = EMaligner.EMaligner(input_data = rough_parameters2,args=[])
-    mod.args['transformation'] = 'rigid'
+    mod.args['transformation'] = 'similarity'
     mod.run()
-    rigid_out=rough_parameters2['output_stack']['name']
+    similarity_out=rough_parameters2['output_stack']['name']
     tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
     assert len(tin)==len(tout)
-    yield rigid_out
+    yield similarity_out
 
     with pytest.raises(EMalignerException):
         mod.args['profile_data_load'] = True
         mod.run()
 
-def test_rough_rigid_2(render,rough_pointmatches,rough_input_stack_2):
-    #do a rough rigid alignment
+def test_rough_similarity_2(render,rough_pointmatches,rough_input_stack_2):
+    #do a rough similarity alignment
     rough_parameters2 = dict(rough_parameters)
     rough_parameters2['input_stack']['name']=rough_input_stack_2
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['transformation'] = 'rigid'
+    rough_parameters2['transformation'] = 'similarity'
     mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
-    mod.args['transformation'] = 'rigid'
+    mod.args['transformation'] = 'similarity'
     mod.run()
-    rigid_out_2=rough_parameters2['output_stack']['name']
+    similarity_out_2=rough_parameters2['output_stack']['name']
     tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
     assert mod.results['precision'] < 1e-7
@@ -88,7 +88,7 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
     rough_parameters2 = dict(rough_parameters)
     rough_parameters2['input_stack']['name']=rough_input_stack_2
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['transformation'] = 'rigid'
+    rough_parameters2['transformation'] = 'similarity'
 
     # delete a section
     groups = renderapi.stack.get_z_values_for_stack(
@@ -110,9 +110,9 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
 
     rough_parameters2['input_stack']['db_interface'] = 'render'
     mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
-    mod.args['transformation'] = 'rigid'
+    mod.args['transformation'] = 'similarity'
     mod.run()
-    rigid_out_2=rough_parameters2['output_stack']['name']
+    similarity_out_2=rough_parameters2['output_stack']['name']
     tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
     assert mod.results['precision'] < 1e-7
@@ -121,9 +121,9 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
 
     rough_parameters2['input_stack']['db_interface'] = 'mongo'
     mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
-    mod.args['transformation'] = 'rigid'
+    mod.args['transformation'] = 'similarity'
     mod.run()
-    rigid_out_2=rough_parameters2['output_stack']['name']
+    similarity_out_2=rough_parameters2['output_stack']['name']
     tin = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['input_stack']['name'],render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(rough_parameters2['output_stack']['name'],render=render)
     assert mod.results['precision'] < 1e-7
@@ -131,12 +131,12 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
     assert len(tin) == (len(tout) - 1)
 
 
-def test_affine_on_rigid(render,rough_pointmatches,rough_input_stack,test_rough_rigid):
+def test_affine_on_similarity(render,rough_pointmatches,rough_input_stack,test_rough_similarity):
     rough_parameters2 = dict(rough_parameters)
     #add an affine on top of that
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['input_stack']['name'] = test_rough_rigid
+    rough_parameters2['input_stack']['name'] = test_rough_similarity
     rough_parameters2['output_stack']['name'] = 'rough_affine'
     rough_parameters2['transformation'] = 'affine'
     mod = EMaligner.EMaligner(input_data = rough_parameters2, args=[])
@@ -144,7 +144,7 @@ def test_affine_on_rigid(render,rough_pointmatches,rough_input_stack,test_rough_
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
 
-def test_output_mode_none(render,rough_pointmatches,rough_input_stack,test_rough_rigid):
+def test_output_mode_none(render,rough_pointmatches,rough_input_stack,test_rough_similarity):
     rough_parameters2 = dict(rough_parameters)
     #check output mode none
     rough_parameters2['input_stack']['name'] = rough_input_stack
@@ -156,7 +156,7 @@ def test_output_mode_none(render,rough_pointmatches,rough_input_stack,test_rough
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 1e6
 
-def test_hdf5_mode_rigid(render,rough_input_stack,rough_pointmatches,tmpdir):
+def test_hdf5_mode_similarity(render,rough_input_stack,rough_pointmatches,tmpdir):
     rough_parameters2 = dict(rough_parameters)
     #check output mode HDF5
     rough_parameters2['input_stack']['name'] = rough_input_stack
@@ -164,7 +164,7 @@ def test_hdf5_mode_rigid(render,rough_input_stack,rough_pointmatches,tmpdir):
     rough_parameters2['output_mode'] = 'hdf5'
     rough_parameters2['hdf5_options']['output_dir'] = \
             str(tmpdir.mkdir('hdf5output'))
-    rough_parameters2['transformation'] = 'rigid'
+    rough_parameters2['transformation'] = 'similarity'
     mod = EMaligner.EMaligner(input_data=rough_parameters2, args=[])
     mod.run()
     indexfile = os.path.join(

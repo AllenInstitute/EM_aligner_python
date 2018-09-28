@@ -153,7 +153,7 @@ class EMA_Schema(ArgSchema):
         default=False)
     transformation = String(
         default='affine',
-        validate=lambda x: x in ['affine','rigid','affine_fullsize'])
+        validate=lambda x: x in ['affine','similarity','affine_fullsize'])
     output_mode = String(
         default='hdf5')
     assemble_from_file = String(

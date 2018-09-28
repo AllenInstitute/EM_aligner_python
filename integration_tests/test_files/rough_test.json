@@ -3,7 +3,7 @@
     "last_section": 250,
     "solve_type": "3D",
     "close_stack": "True",
-    "transformation": "rigid",
+    "transformation": "similarity",
     "output_mode": "stack",
     "start_from_file": "",
     "input_stack": {

@@ -114,7 +114,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                         ).most_common()[0][0]
             except renderapi.errors.RenderError:
                 # missing section
-                sectionId = ""
+                sectionId = None
                 pass
 
         if stack['db_interface'] == 'mongo':

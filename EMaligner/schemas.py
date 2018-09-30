@@ -153,7 +153,14 @@ class EMA_Schema(ArgSchema):
         default=False)
     transformation = String(
         default='affine',
-        validate=lambda x: x in ['affine','similarity','affine_fullsize'])
+        validate=lambda x: x in ['AffineModel','SimilarityModel','Polynomial2DTransform'])
+    fullsize_transform = Bool(
+        default=False,
+        description='use fullsize affine transform')
+    poly_order = Int(
+        default=3,
+        required=False,
+        description='order of polynomial transform')
     output_mode = String(
         default='hdf5')
     assemble_from_file = String(

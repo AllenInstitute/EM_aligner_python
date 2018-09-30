@@ -176,6 +176,38 @@ def similarity(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
     return data, indices, indptr, weights
 
 
+def poly2D(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
+    # empty arrays
+    data, indices, indptr, weights = \
+            create_arrays_for_tilepair(
+                    npts,
+                    transform['rows_per_ptmatch'],
+                    transform['nnz_per_row'])
+
+    px = np.array(match['matches']['p'][0])[m]
+    py = np.array(match['matches']['p'][1])[m]
+    qx = np.array(match['matches']['q'][0])[m]
+    qy = np.array(match['matches']['q'][1])[m]
+
+    k = 0
+    qoff = transform['nnz_per_row'] / 2
+    for j in range(transform['order'] + 1):
+        for i in range(j + 1):
+             data[k + mstep] = px ** (j - i) * py ** i
+             data[k + mstep + qoff] = -qx ** (j - i) * qy ** i
+             k += 1
+
+    ir = np.arange(transform['nnz_per_row']/2)
+    uindices = np.hstack((
+        tile_ind1 * transform['DOF_per_tile'] / 2 + ir,
+        tile_ind2 * transform['DOF_per_tile'] / 2 + ir))
+    indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
+    indptr[0: npts] = np.arange(1, npts + 1) * transform['nnz_per_row']
+    weights[0: npts] = np.array(match['matches']['w'])[m]
+
+    return data, indices, indptr, weights
+
+
 def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
     # determine number of points
     npts = len(match['matches']['q'][0])
@@ -206,6 +238,10 @@ def CSR_from_tile_pair(args, match, tile_ind1, tile_ind2, transform):
 
     elif args['transformation'] == 'similarity':
         data, indices, indptr, weights = similarity(
+                npts, match, transform, tile_ind1, tile_ind2, m, mstep)
+
+    elif args['transformation'] == 'poly2D':
+        data, indices, indptr, weights = poly2D(
                 npts, match, transform, tile_ind1, tile_ind2, m, mstep)
 
     return data, indices, indptr, weights, npts
@@ -661,6 +697,12 @@ class EMaligner(argschema.ArgSchemaParser):
             self.transform['DOF_per_tile'] = 4
             self.transform['nnz_per_row'] = 6
             self.transform['rows_per_ptmatch'] = 4
+        if self.args['transformation'] == 'poly2D':
+            o = self.args['poly_order']
+            self.transform['order'] = o
+            self.transform['DOF_per_tile'] = (o + 1) * (o + 2)
+            self.transform['nnz_per_row'] = (o + 1) * (o + 2)
+            self.transform['rows_per_ptmatch'] = 1
 
     def determine_zvalue_pairs(self, zvals, sectionIds):
         # create all possible pairs, given zvals and depth

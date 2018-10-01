@@ -84,7 +84,8 @@ def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state, 
     assert mod.results['error'] < 200
 
     #try with affine_fullsize
-    montage_parameters['transformation'] = 'affine_fullsize'
+    montage_parameters['transformation'] = 'AffineModel'
+    montage_parameters['fullsze_transform'] = True
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7

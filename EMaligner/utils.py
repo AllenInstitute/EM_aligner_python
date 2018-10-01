@@ -12,6 +12,7 @@ import h5py
 import os
 import sys
 import json
+from .transform.transform import AlignerTransform
 
 logger2 = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def get_unused_tspecs(stack, tids):
     return np.array(tspecs)
 
 
-def get_tileids_and_tforms(stack, tform_name, zvals):
+def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
     dbconnection = make_dbconnection(stack)
 
     tile_ids = []
@@ -146,34 +147,17 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
             sectionIds.append(sectionId)
 
             # make lists of IDs and transforms
+            solve_tf = AlignerTransform(name=tform_name, fullsize=fullsize, order=order)
             for k in np.arange(len(tspecs)):
-                if stack['db_interface'] == 'render':
-                    tile_ids.append(tspecs[k].tileId)
-                    if 'affine' in tform_name:
-                        tile_tforms.append([
-                            tspecs[k].tforms[-1].M[0, 0],
-                            tspecs[k].tforms[-1].M[0, 1],
-                            tspecs[k].tforms[-1].M[0, 2],
-                            tspecs[k].tforms[-1].M[1, 0],
-                            tspecs[k].tforms[-1].M[1, 1],
-                            tspecs[k].tforms[-1].M[1, 2]])
-                    elif tform_name == 'similarity':
-                        tile_tforms.append([
-                            tspecs[k].tforms[-1].M[0, 0],
-                            tspecs[k].tforms[-1].M[0, 1],
-                            tspecs[k].tforms[-1].M[0, 2],
-                            tspecs[k].tforms[-1].M[1, 2]])
                 if stack['db_interface'] == 'mongo':
-                    tile_ids.append(tspecs[k]['tileId'])
-                    last_tf = tspecs[k]['transforms']['specList'][-1]
-                    dstring = last_tf['dataString']
-                    dfloat = np.array(dstring.split()).astype('float')
-                    if 'affine' in tform_name:
-                        tile_tforms.append(dfloat[[0, 2, 4, 1, 3, 5]])
-                    elif tform_name == 'similarity':
-                        tile_tforms.append(dfloat[[0, 2, 4, 5]])
                     tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k])
+                tile_ids.append(tspecs[k].tileId)
                 tile_tspecs.append(tspecs[k])
+                # make space in the solve vector
+                # for a solve-type transform
+                # with input transform as values (constraints)
+                tile_tforms.append(
+                        solve_tf.to_solve_vec(tspecs[k].tforms[-1]))
 
     logger2.info(
             "\n loaded %d tile specs from %d zvalues in "
@@ -183,17 +167,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals):
                 time.time() - t0,
                 stack['db_interface']))
 
-    tile_tforms = np.array(tile_tforms).flatten()
-    if tform_name == 'affine':
-        # split the tforms in half by u and v
-        spl3 = np.hsplit(
-                tile_tforms,
-                len(tile_tforms) / 3)
-        tile_tforms = [
-                np.hstack(spl3[::2]),
-                np.hstack(spl3[1::2])]
-    else:
-        tile_tforms = [tile_tforms]
+    tile_tforms = np.concatenate(tile_tforms, axis=0)
 
     return {
             'tids': np.array(tile_ids),
@@ -236,9 +210,9 @@ def get_matches(iId, jId, collection, dbconnection):
     message = ("\n %d matches for section1=%s section2=%s "
             "in pointmatch collection" % (len(matches),iId, jId))
     if len(matches) == 0:
-        logger2.warning(message)
+        logger2.debug(message)
     else:
-        logger2.info(message)
+        logger2.debug(message)
     return matches
 
 

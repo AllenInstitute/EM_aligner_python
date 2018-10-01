@@ -28,12 +28,12 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
     def to_solve_vec(self, input_tform):
         if isinstance(input_tform, renderapi.transform.AffineModel):
             vec = np.array([
-                self.M[0, 0],
-                self.M[0, 1],
-                self.M[0, 2],
-                self.M[1, 0],
-                self.M[1, 1],
-                self.M[1, 2]])
+                input_tform.M[0, 0],
+                input_tform.M[0, 1],
+                input_tform.M[0, 2],
+                input_tform.M[1, 0],
+                input_tform.M[1, 1],
+                input_tform.M[1, 2]])
         elif isinstance(input_tform, renderapi.transform.Polynomial2DTransform):
             vec = np.array([
                 input_tform.params[0, 1],

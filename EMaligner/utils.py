@@ -147,7 +147,8 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
             sectionIds.append(sectionId)
 
             # make lists of IDs and transforms
-            solve_tf = AlignerTransform(name=tform_name, fullsize=fullsize, order=order)
+            solve_tf = AlignerTransform(
+                    name=tform_name, fullsize=fullsize, order=order)
             for k in np.arange(len(tspecs)):
                 if stack['db_interface'] == 'mongo':
                     tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k])
@@ -208,7 +209,7 @@ def get_matches(iId, jId, collection, dbconnection):
                     {'_id': False})
             matches = np.append(matches, list(cursor))
     message = ("\n %d matches for section1=%s section2=%s "
-            "in pointmatch collection" % (len(matches),iId, jId))
+               "in pointmatch collection" % (len(matches), iId, jId))
     if len(matches) == 0:
         logger2.debug(message)
     else:
@@ -270,16 +271,16 @@ def write_reg_and_tforms(
             args['hdf5_options']['output_dir'],
             'solution_input.h5')
     with h5py.File(fname, "w") as f:
-        for j in np.arange(len(tforms)):
+        for j in np.arange(tforms.shape[1]):
             dsetname = 'transforms_%d' % j
             dset = f.create_dataset(
                     dsetname,
-                    (tforms[j].size,),
+                    (tforms[:, j].size,),
                     dtype='float64')
-            dset[:] = tforms[j]
+            dset[:] = tforms[:, j]
 
         # a list of transform indices (clunky, but works for PETSc to count)
-        tlist = np.arange(len(tforms)).astype('int32')
+        tlist = np.arange(tforms.shape[1]).astype('int32')
         dset = f.create_dataset(
                 "transform_list",
                 (tlist.size, 1),
@@ -361,7 +362,9 @@ def get_stderr_stdout(outarg):
 def write_to_new_stack(
         input_stack,
         outputname,
-        tform_type,
+        tform_name,
+        fullsize,
+        order,
         tspecs,
         shared_tforms,
         x,
@@ -372,23 +375,13 @@ def write_to_new_stack(
         overwrite_zlayer):
 
     # replace the last transform in the tilespec with the new one
+    solve_tf = AlignerTransform(
+            name=tform_name, fullsize=fullsize, order=order)
+    render_tforms = solve_tf.from_solve_vec(x)
     for m in np.arange(len(tspecs)):
-        if 'affine' in tform_type:
-            tspecs[m].tforms[-1].M[0, 0] = x[m * 6 + 0]
-            tspecs[m].tforms[-1].M[0, 1] = x[m * 6 + 1]
-            tspecs[m].tforms[-1].M[0, 2] = x[m * 6 + 2]
-            tspecs[m].tforms[-1].M[1, 0] = x[m * 6 + 3]
-            tspecs[m].tforms[-1].M[1, 1] = x[m * 6 + 4]
-            tspecs[m].tforms[-1].M[1, 2] = x[m * 6 + 5]
-        elif tform_type == 'similarity':
-            tspecs[m].tforms[-1].M[0, 0] = x[m * 4 + 0]
-            tspecs[m].tforms[-1].M[0, 1] = x[m * 4 + 1]
-            tspecs[m].tforms[-1].M[0, 2] = x[m * 4 + 2]
-            tspecs[m].tforms[-1].M[1, 0] = -x[m * 4 + 1]
-            tspecs[m].tforms[-1].M[1, 1] = x[m * 4 + 0]
-            tspecs[m].tforms[-1].M[1, 2] = x[m * 4 + 3]
-    tspecs = tspecs.tolist()
+        tspecs[m].tforms[-1] = render_tforms[m]
 
+    tspecs = tspecs.tolist()
     unused_tspecs = get_unused_tspecs(input_stack, unused_tids)
     tspecs = tspecs + unused_tspecs.tolist()
     logger2.info(

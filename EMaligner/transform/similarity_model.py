@@ -4,17 +4,20 @@ from .utils import (
         ptpair_indices,
         arrays_for_tilepair)
 import numpy as np
+import scipy.sparse as sparse
+
 
 class AlignerSimilarityModel(renderapi.transform.AffineModel):
-    
+
     def __init__(self, transform=None):
 
         if transform is not None:
             if isinstance(transform, renderapi.transform.AffineModel):
                 self.from_dict(transform.to_dict())
             else:
-                raise AlignerTransformException("can't initialize %s with %s" % (
-                    self.__class__, transform.__class__))
+                raise AlignerTransformException(
+                        "can't initialize %s with %s" % (
+                            self.__class__, transform.__class__))
         else:
             self.from_dict(renderapi.transform.AffineModel().to_dict())
 
@@ -29,7 +32,8 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
                 input_tform.M[0, 1],
                 input_tform.M[0, 2],
                 input_tform.M[1, 2]])
-        elif isinstance(input_tform, renderapi.transform.Polynomial2DTransform):
+        elif isinstance(
+                input_tform, renderapi.transform.Polynomial2DTransform):
             vec = np.array([
                 input_tform.params[0, 1],
                 input_tform.params[0, 2],
@@ -43,8 +47,32 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         vec = vec.reshape((vec.size, 1))
         return vec
 
+    def from_solve_vec(self, vec):
+        tforms = []
+        n = vec.shape[0] / 4
+        for i in range(n):
+            self.M[0, 0] = vec[i * 4 + 0]
+            self.M[0, 1] = vec[i * 4 + 1]
+            self.M[0, 2] = vec[i * 4 + 2]
+            self.M[1, 0] = -vec[i * 4 + 1]
+            self.M[1, 1] = vec[i * 4 + 0]
+            self.M[1, 2] = vec[i * 4 + 3]
+            tforms.append(
+                    renderapi.transform.AffineModel(
+                        json=self.to_dict()))
+        return tforms
 
-    def CSR_from_tilepair(self, match, tile_ind1, tile_ind2, nmin, nmax, choose_random):
+    def create_regularization(self, sz, default, transfac):
+        reg = np.ones(sz).astype('float64') * default
+        reg[2::4] *= transfac
+        reg[3::4] *= transfac
+        outr = sparse.eye(reg.size, format='csr')
+        outr.data = reg
+        return outr
+
+    def CSR_from_tilepair(
+            self, match, tile_ind1, tile_ind2,
+            nmin, nmax, choose_random):
         if np.all(np.array(match['matches']['w']) == 0):
             # zero weights
             return None, None, None, None, None
@@ -62,11 +90,11 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         npts = match_index.size
 
         # empty arrays
-        data, indices, indptr, weights = \
+        data, indices, indptr, weights = (
                 arrays_for_tilepair(
                         npts,
                         self.rows_per_ptmatch,
-                        self.nnz_per_row)
+                        self.nnz_per_row))
 
         px = np.array(match['matches']['p'][0])[match_index]
         py = np.array(match['matches']['p'][1])[match_index]
@@ -137,5 +165,3 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
                 self.rows_per_ptmatch)
 
         return data, indices, indptr, weights, npts
-
-

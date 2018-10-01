@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class AlignerTransformException(Exception):
     """Exception raised when there is a \
             problem creating a mesh lens correction"""
@@ -37,4 +38,3 @@ def arrays_for_tilepair(npts, rows_per_ptmatch, nnz_per_row):
     indptr = np.zeros(ni)
     weights = np.zeros(ni)
     return data, indices, indptr, weights
-

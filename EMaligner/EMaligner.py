@@ -28,68 +28,6 @@ import json
 
 logger = logging.getLogger(__name__)
 
-#def affine_fullsize(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
-#    # empty arrays
-#    data, indices, indptr, weights = \
-#            create_arrays_for_tilepair(
-#                    npts,
-#                    transform['rows_per_ptmatch'],
-#                    transform['nnz_per_row'])
-#
-#    # u=ax+by+c
-#    data[0 + mstep] = np.array(match['matches']['p'][0])[m]
-#    data[1 + mstep] = np.array(match['matches']['p'][1])[m]
-#    data[2 + mstep] = 1.0
-#    data[3 + mstep] = -1.0 * np.array(match['matches']['q'][0])[m]
-#    data[4 + mstep] = -1.0 * np.array(match['matches']['q'][1])[m]
-#    data[5 + mstep] = -1.0
-#    uindices = np.hstack((
-#        tile_ind1 * transform['DOF_per_tile']+np.array([0, 1, 2]),
-#        tile_ind2 * transform['DOF_per_tile']+np.array([0, 1, 2])))
-#    indices[0:npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-#    # v=dx+ey+f
-#    data[
-#            (npts * transform['nnz_per_row']):
-#            (2 * npts * transform['nnz_per_row'])] = \
-#        data[0: npts * transform['nnz_per_row']]
-#    indices[npts * transform['nnz_per_row']:
-#            2 * npts * transform['nnz_per_row']] = \
-#        np.tile(uindices + 3, npts)
-#
-#    # indptr and weights
-#    indptr[0: 2 * npts] = \
-#        np.arange(1, 2 * npts + 1) * transform['nnz_per_row']
-#    weights[0: 2 * npts] = \
-#        np.tile(np.array(match['matches']['w'])[m], 2)
-#
-#    return data, indices, indptr, weights
-#
-#
-#def affine(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
-#    # empty arrays
-#    data, indices, indptr, weights = \
-#            create_arrays_for_tilepair(
-#                    npts,
-#                    transform['rows_per_ptmatch'],
-#                    transform['nnz_per_row'])
-#
-#    # u=ax+by+c
-#    data[0 + mstep] = np.array(match['matches']['p'][0])[m]
-#    data[1 + mstep] = np.array(match['matches']['p'][1])[m]
-#    data[2 + mstep] = 1.0
-#    data[3 + mstep] = -1.0 * np.array(match['matches']['q'][0])[m]
-#    data[4 + mstep] = -1.0 * np.array(match['matches']['q'][1])[m]
-#    data[5 + mstep] = -1.0
-#    uindices = np.hstack((
-#        tile_ind1 * transform['DOF_per_tile'] / 2 + np.array([0, 1, 2]),
-#        tile_ind2 * transform['DOF_per_tile'] / 2 + np.array([0, 1, 2])))
-#    indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-#    indptr[0: npts] = np.arange(1, npts + 1) * transform['nnz_per_row']
-#    weights[0: npts] = np.array(match['matches']['w'])[m]
-#    # don't do anything for v
-#    return data, indices, indptr, weights
-#
-#
 #def poly2D(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
 #    # empty arrays
 #    data, indices, indptr, weights = \
@@ -358,12 +296,7 @@ class EMaligner(argschema.ArgSchemaParser):
                     self.args['ingest_from_file'],
                     zvals,
                     read_data=False)
-            if self.args['transformation'] == 'AffineModel':
-                x = self.combine_x_affine(
-                        assemble_result['tforms'][0],
-                        assemble_result['tforms'][1])
-            else:
-                x = assemble_result['tforms'][0]
+            x = assemble_result['tforms']
             results = {}
 
         else:
@@ -402,6 +335,8 @@ class EMaligner(argschema.ArgSchemaParser):
                     self.args['input_stack'],
                     self.args['output_stack']['name'],
                     self.args['transformation'],
+                    self.args['fullsize_transform'],
+                    self.args['poly_order'],
                     assemble_result['tspecs'],
                     assemble_result['shared_tforms'],
                     x,
@@ -433,7 +368,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         self.args['input_stack'],
                         self.args['transformation'],
                         zvals,
-                        fullsize=self.args['fullsizei_transform'],
+                        fullsize=self.args['fullsize_transform'],
                         order=self.args['poly_order'])
 
         assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
@@ -452,6 +387,14 @@ class EMaligner(argschema.ArgSchemaParser):
                     k += 1
                 else:
                     break
+
+            if len(assemble_result['tforms']) == 1:
+                n = assemble_result['tforms'][0].size
+                assemble_result['tforms'] = np.array(
+                        assemble_result['tforms']).flatten().reshape((n, 1))
+            else:
+                assemble_result['tforms'] = np.transpose(
+                        np.array(assemble_result['tforms']))
 
             reg = f.get('lambda')[()]
             datafile_names = f.get('datafile_names')[()]
@@ -550,8 +493,10 @@ class EMaligner(argschema.ArgSchemaParser):
         del from_stack, CSR_A['tiles_used'], tile_ind
 
         # create the regularization vectors
-        assemble_result['reg'] = self.create_regularization(
-                assemble_result['tforms'])
+        assemble_result['reg'] = self.transform.create_regularization(
+                assemble_result['tforms'].shape[0],
+                self.args['regularization']['default_lambda'],
+                self.args['regularization']['translation_factor'])
 
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
@@ -677,32 +622,6 @@ class EMaligner(argschema.ArgSchemaParser):
 
         return func_result
 
-    def create_regularization(self, tile_tforms):
-        # create a regularization vector
-        reg = np.ones(tile_tforms.shape[0]).astype('float64') * \
-            self.args['regularization']['default_lambda']
-        if self.args['transformation'] == 'AffineModel':
-            reg[2::3] = reg[2::3] * \
-                self.args['regularization']['translation_factor']
-        elif self.args['transformation'] == 'SimilarityModel':
-            reg[2::4] = reg[2::4] * \
-                self.args['regularization']['translation_factor']
-            reg[3::4] = reg[3::4] * \
-                self.args['regularization']['translation_factor']
-        if self.args['regularization']['freeze_first_tile']:
-            reg[0:self.transform.DOF_per_tile] = 1e15
-
-        outr = sparse.eye(reg.size, format='csr')
-        outr.data = reg
-        return outr
-
-    def combine_x_affine(self, xu, xv):
-        x = np.zeros(xu.size * 2).astype('float64')
-        for i in np.arange(3):
-            x[i::6] = xu[i::3]
-            x[i + 3::6] = xv[i::3]
-        return x
-
     def solve_or_not(self, A, weights, reg, filt_tforms):
         t0 = time.time()
         # not
@@ -753,12 +672,15 @@ class EMaligner(argschema.ArgSchemaParser):
                 precision = np.sqrt(precisionu ** 2 + precisionv ** 2)
 
                 # recombine
-                x = self.combine_x_affine(xu, xv)
+                x = np.transpose(np.vstack((xu, xv)))
                 err = np.hstack((erru, errv))
                 del xu, xv, erru, errv, precisionu, precisionv
             else:
                 # simpler case for similarity, or
                 # affine_fullsize, but 2x larger than affine
+
+                print('filt_tforms.shape')
+                print(filt_tforms.shape)
                 Lm = reg.dot(filt_tforms[:, 0])
                 x = solve(Lm)
                 err = A.dot(x)
@@ -772,7 +694,7 @@ class EMaligner(argschema.ArgSchemaParser):
             results['time'] = time.time()-t0
             results['precision'] = precision
             results['error'] = error
-            results['err'] = [np.abs(err).mean(),np.abs(err).std()]
+            results['err'] = [np.abs(err).mean(), np.abs(err).std()]
 
             message = ' solved in %0.1f sec\n' % (time.time() - t0)
             message += (
@@ -787,20 +709,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         np.abs(err).mean(),
                         np.abs(err).std()))
 
-            #if self.args['transformation'] == 'SimilarityModel':
-            #    scale = np.sqrt(
-            #            np.power(x[0::self.transform.DOF_per_tile], 2.0) +
-            #            np.power(x[1::self.transform.DOF_per_tile], 2.0))
-            #if 'Affine' in self.args['transformation']:
-            #    scale = np.sqrt(
-            #            np.power(x[0::self.transform.DOF_per_tile], 2.0) +
-            #            np.power(x[1::self.transform.DOF_per_tile], 2.0))
-            #    scale += np.sqrt(
-            #            np.power(x[3::self.transform.DOF_per_tile], 2.0) +
-            #            np.power(x[4::self.transform.DOF_per_tile], 2.0))
-            #    scale /= 2
-            #scale = scale.sum() / self.ntiles_used
-            scale=0.0
+            scale = 0.0
             results['scale'] = scale
             message += '\n avg scale = %0.2f' % scale
 

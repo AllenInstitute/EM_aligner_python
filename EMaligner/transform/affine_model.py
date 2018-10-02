@@ -53,7 +53,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         if not self.fullsize:
             # split in half for half-size solve
             # transpose into Nx2
-            vec = np.transpose(vec.reshape((2, vec.size/2)))
+            vec = np.transpose(vec.reshape((2, int(vec.size/2))))
         else:
             vec = vec.reshape((vec.size, 1))
         return vec
@@ -61,7 +61,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
     def from_solve_vec(self, vec):
         tforms = []
         if self.fullsize:
-            n = vec.shape[0] / 6
+            n = int(vec.shape[0] / 6)
             for i in range(n):
                 self.M[0, 0] = vec[i * 6 + 0]
                 self.M[0, 1] = vec[i * 6 + 1]
@@ -73,7 +73,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
                         renderapi.transform.AffineModel(
                             json=self.to_dict()))
         else:
-            n = vec.shape[0] / 3
+            n = int(vec.shape[0] / 3)
             for i in range(n):
                 self.M[0, 0] = vec[i * 3 + 0, 0]
                 self.M[0, 1] = vec[i * 3 + 1, 0]

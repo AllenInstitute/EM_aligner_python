@@ -49,7 +49,7 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
 
     def from_solve_vec(self, vec):
         tforms = []
-        n = vec.shape[0] / 4
+        n = int(vec.shape[0] / 4)
         for i in range(n):
             self.M[0, 0] = vec[i * 4 + 0]
             self.M[0, 1] = vec[i * 4 + 1]

@@ -20,7 +20,8 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
                         "can't initialize %s with %s" % (
                             self.__class__, transform.__class__))
         else:
-            params = np.zeros((2, (order + 1) * (order + 2) / 2))
+            params = np.zeros(
+                    (2, int((order + 1) * (order + 2) / 2)))
             if order > 0:
                 # identity
                 params[0, 1] = params[1, 2] = 1.0
@@ -32,7 +33,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         self.rows_per_ptmatch = 1
 
     def to_solve_vec(self, input_tform):
-        n = (self.order + 1) * (self.order + 2) / 2
+        n = int((self.order + 1) * (self.order + 2) / 2)
         # fullsize is not implemented, though it is possible, but why?
         vec = np.zeros((n, 2))
 
@@ -68,8 +69,8 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
     def from_solve_vec(self, vec):
         tforms = []
-        n = (self.order + 1) * (self.order + 2) / 2
-        nt = vec.shape[0] / n
+        n = int((self.order + 1) * (self.order + 2) / 2)
+        nt = int(vec.shape[0] / n)
         for i in range(nt):
             params = np.transpose(vec[i * n: (i + 1) * n, :])
             tforms.append(
@@ -79,7 +80,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
     def create_regularization(self, sz, default, transfac):
         reg = np.ones(sz).astype('float64') * default
-        n = (self.order + 1) * (self.order + 2) / 2
+        n = int((self.order + 1) * (self.order + 2) / 2)
         reg[0::n] *= transfac
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
@@ -117,14 +118,14 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         qy = np.array(match['matches']['q'][1])[match_index]
 
         k = 0
-        qoff = self.nnz_per_row / 2
+        qoff = int(self.nnz_per_row / 2)
         for j in range(self.order + 1):
             for i in range(j + 1):
                 data[k + stride] = px ** (j - i) * py ** i
                 data[k + stride + qoff] = -qx ** (j - i) * qy ** i
                 k += 1
 
-        ir = np.arange(self.nnz_per_row / 2)
+        ir = np.arange(int(self.nnz_per_row / 2))
         uindices = np.hstack((
             tile_ind1 * self.DOF_per_tile / 2 + ir,
             tile_ind2 * self.DOF_per_tile / 2 + ir))

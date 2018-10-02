@@ -160,6 +160,66 @@ def test_similarity_model():
     t = AlignerTransform(transform=rt)
     assert(t.__class__ == AlignerSimilarityModel)
 
+    # make CSR 
+    t = AlignerTransform(transform=rt)
+    match = example_match(100)
+    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    indptr = np.insert(indptr, 0, 0)
+    c = csr_matrix((data, indices, indptr))
+    assert c.check_format() is None
+    assert weights.size==100*t.rows_per_ptmatch
+    assert npts==100
+
+    # make CSR zero weights
+    t = AlignerTransform(transform=rt, fullsize=False)
+    match = example_match(100)
+    match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
+    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    assert data is None
+    t = AlignerTransform(transform=rt, fullsize=True)
+    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    assert data is None
+
+    # minimum size
+    t = AlignerTransform(transform=rt, fullsize=False)
+    match = example_match(100)
+    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+            match, 1, 2, 200, 500, True)
+    assert data is None
+    t = AlignerTransform(transform=rt, fullsize=True)
+    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+            match, 1, 2, 200, 500, True)
+    assert data is None
+
+    # to vec
+    rt = renderapi.transform.SimilarityModel()
+    t = AlignerTransform(transform=rt)
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([1, 0, 0, 0]).reshape(4, 1))
+    rt = renderapi.transform.Polynomial2DTransform(identity=True)
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([1, 0, 0, 0]).reshape(4, 1))
+    rt = renderapi.transform.NonLinearCoordinateTransform()
+    with pytest.raises(AlignerTransformException):
+        v = t.to_solve_vec(rt)
+
+    # from vec
+    vec = np.tile([1, 0, 0, 0], 6)
+    tforms = t.from_solve_vec(vec)
+    assert len(tforms) == 6
+    for rt in tforms:
+        assert rt == renderapi.transform.SimilarityModel()
+
+    # reg
+    r = t.create_regularization(96, 1.0, 0.1)
+    assert np.all(r.data[0::4] == 1.0)
+    assert np.all(r.data[1::4] == 1.0)
+    assert np.all(r.data[2::4] == 0.1)
+    assert np.all(r.data[3::4] == 0.1)
+
 
 def test_ptpairs():
     # doesn't meet nmin

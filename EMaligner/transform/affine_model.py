@@ -52,6 +52,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
                         input_tform.__class__, self.__class__))
         if not self.fullsize:
             # split in half for half-size solve
+            # transpose into Nx2
             vec = np.transpose(vec.reshape((2, vec.size/2)))
         else:
             vec = vec.reshape((vec.size, 1))

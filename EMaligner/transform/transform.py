@@ -25,7 +25,7 @@ class AlignerTransform(object):
             self.__class__ = AlignerPolynomial2DTransform
             AlignerPolynomial2DTransform.__init__(
                     self, transform=transform,
-                    fullsize=fullsize, order=order)
+                    order=order)
         else:
             raise AlignerTransformException(
                     'transform %s not in possible choices:' % name)

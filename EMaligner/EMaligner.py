@@ -28,37 +28,6 @@ import json
 
 logger = logging.getLogger(__name__)
 
-#def poly2D(npts, match, transform, tile_ind1, tile_ind2, m, mstep):
-#    # empty arrays
-#    data, indices, indptr, weights = \
-#            create_arrays_for_tilepair(
-#                    npts,
-#                    transform['rows_per_ptmatch'],
-#                    transform['nnz_per_row'])
-#
-#    px = np.array(match['matches']['p'][0])[m]
-#    py = np.array(match['matches']['p'][1])[m]
-#    qx = np.array(match['matches']['q'][0])[m]
-#    qy = np.array(match['matches']['q'][1])[m]
-#
-#    k = 0
-#    qoff = transform['nnz_per_row'] / 2
-#    for j in range(transform['order'] + 1):
-#        for i in range(j + 1):
-#             data[k + mstep] = px ** (j - i) * py ** i
-#             data[k + mstep + qoff] = -qx ** (j - i) * qy ** i
-#             k += 1
-#
-#    ir = np.arange(transform['nnz_per_row']/2)
-#    uindices = np.hstack((
-#        tile_ind1 * transform['DOF_per_tile'] / 2 + ir,
-#        tile_ind2 * transform['DOF_per_tile'] / 2 + ir))
-#    indices[0: npts * transform['nnz_per_row']] = np.tile(uindices, npts)
-#    indptr[0: npts] = np.arange(1, npts + 1) * transform['nnz_per_row']
-#    weights[0: npts] = np.array(match['matches']['w'])[m]
-#
-#    return data, indices, indptr, weights
-
 
 def calculate_processing_chunk(fargs):
     # set up for calling using multiprocessing pool
@@ -709,9 +678,25 @@ class EMaligner(argschema.ArgSchemaParser):
                         np.abs(err).mean(),
                         np.abs(err).std()))
 
-            scale = 0.0
-            results['scale'] = scale
-            message += '\n avg scale = %0.2f' % scale
+            # get the scales (quick way to look for distortion)
+            tforms = self.transform.from_solve_vec(x)
+            if isinstance(
+                    self.transform,
+                    renderapi.transform.Polynomial2DTransform):
+                # renderapi does not have scale property
+                if self.transform.order > 0:
+                    scales = np.array(
+                            [[t.params[0, 1], t.params[1, 2]]
+                             for t in tforms]).flatten()
+                else:
+                    scales = np.array([0])
+            else:
+                scales = np.array([
+                    np.array(t.scale) for t in tforms]).flatten()
+
+            results['scale'] = scales.mean()
+            message += '\n avg scale = %0.2f +/- %0.2f' % (
+                    scales.mean(), scales.std())
 
         return message, x, results
 

@@ -3,7 +3,7 @@
     "last_section": 1015,
     "solve_type": "montage",
     "close_stack": "True",
-    "transformation": "affine",
+    "transformation": "AffineModel",
     "output_mode": "stack",
     "start_from_file": "",
     "input_stack": {

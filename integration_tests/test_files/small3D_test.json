@@ -3,7 +3,7 @@
     "last_section": 1026,
     "solve_type": "3D",
     "close_stack": "True",
-    "transformation": "affine",
+    "transformation": "AffineModel",
     "start_from_file": "",
     "input_stack": {
         "owner": "gayathri",

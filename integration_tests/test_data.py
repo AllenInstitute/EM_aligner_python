@@ -52,7 +52,7 @@ montage_parameters = render_json_template(example_env, 'montage_test.json',
                                           solver_output_dir = outdir
                                           )
 
-rough_output_stack='rough_result_rigid'
+rough_output_stack='rough_result_similarity'
 rough_parameters = render_json_template(example_env, 'rough_test.json',
                                           render_project = project,
                                           render_host = render_host,

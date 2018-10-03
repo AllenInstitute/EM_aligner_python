@@ -83,6 +83,7 @@ class matrix_assembly(ArgSchema):
         description='weight of montage point matches')
     npts_min = Int(
         default=5,
+        missing=5,
         required=False,
         description='disregard any tile pairs with fewer points than this')
     npts_max = Int(
@@ -152,8 +153,15 @@ class EMA_Schema(ArgSchema):
     profile_data_load = Boolean(
         default=False)
     transformation = String(
-        default='affine',
-        validate=lambda x: x in ['affine','rigid','affine_fullsize'])
+        default='AffineModel',
+        validate=lambda x: x in ['AffineModel','SimilarityModel','Polynomial2DTransform'])
+    fullsize_transform = Boolean(
+        default=False,
+        description='use fullsize affine transform')
+    poly_order = Int(
+        default=3,
+        required=False,
+        description='order of polynomial transform')
     output_mode = String(
         default='hdf5')
     assemble_from_file = String(

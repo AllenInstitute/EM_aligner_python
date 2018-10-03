@@ -26,7 +26,7 @@ def raw_stack(render):
     renderapi.client.import_tilespecs(test_raw_stack,tilespecs,render=render)
     renderapi.stack.set_stack_state(test_raw_stack,'COMPLETE',render=render)
     yield test_raw_stack
-    renderapi.stack.delete_stack(test_raw_stack,render=render)
+    # renderapi.stack.delete_stack(test_raw_stack,render=render)
 
 
 @pytest.fixture(scope='function')
@@ -36,7 +36,7 @@ def loading_raw_stack(render):
     renderapi.stack.create_stack(test_raw_stack,render=render)
     renderapi.client.import_tilespecs(test_raw_stack,tilespecs,render=render)
     yield test_raw_stack
-    renderapi.stack.delete_stack(test_raw_stack,render=render)
+    # renderapi.stack.delete_stack(test_raw_stack,render=render)
 
 
 @pytest.fixture(scope='module')
@@ -73,6 +73,32 @@ def test_weighted(render,montage_pointmatches_weighted,loading_raw_stack, stack_
     assert mod.results['error'] < 200
 
 
+def one_solve(parameters, tf, fullsize=False, order=2,
+              precision = 1e-7, error=200):
+        p = dict(parameters)
+        p['output_stack']['name'] = p['input_stack']['name'] + 'solved_' + tf
+        p['transformation'] = tf 
+        p['fullsize'] = fullsize
+        p['poly_order'] = order
+        mod = EMaligner.EMaligner(input_data=p, args=[])
+        mod.run()
+        assert mod.results['precision'] < precision
+        assert mod.results['error'] < error
+
+
+def test_different_transforms(render, montage_pointmatches, loading_raw_stack, tmpdir):
+    montage_parameters['input_stack']['name'] = loading_raw_stack
+    montage_parameters['pointmatch']['name'] = montage_pointmatches
+
+    one_solve(montage_parameters, 'AffineModel', fullsize=False)
+    one_solve(montage_parameters, 'AffineModel', fullsize=True)
+    one_solve(montage_parameters, 'SimilarityModel')
+    one_solve(montage_parameters, 'Polynomial2DTransform', order=3, precision=0.5)
+    one_solve(montage_parameters, 'Polynomial2DTransform', order=2, precision=1e-4)
+    one_solve(montage_parameters, 'Polynomial2DTransform', order=1)
+    one_solve(montage_parameters, 'Polynomial2DTransform', order=0)
+      
+
 @pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
 def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state, tmpdir):
     renderapi.stack.set_stack_state(loading_raw_stack, stack_state, render=render)
@@ -84,7 +110,8 @@ def test_first_test(render,montage_pointmatches,loading_raw_stack, stack_state, 
     assert mod.results['error'] < 200
 
     #try with affine_fullsize
-    montage_parameters['transformation'] = 'affine_fullsize'
+    montage_parameters['transformation'] = 'AffineModel'
+    montage_parameters['fullsze_transform'] = True
     mod = EMaligner.EMaligner(input_data = montage_parameters,args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7

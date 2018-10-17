@@ -12,6 +12,19 @@ from scipy.sparse import csr_matrix
 import numpy as np
 
 
+def test_aliases():
+    t = AlignerTransform(name='affine')
+    assert(t.__class__ == AlignerAffineModel)
+    assert(not t.fullsize)
+
+    t = AlignerTransform(name='affine_fullsize')
+    assert(t.__class__ == AlignerAffineModel)
+    assert(t.fullsize)
+
+    t = AlignerTransform(name='rigid')
+    assert(t.__class__ == AlignerSimilarityModel)
+
+
 def test_transform():
     # must specify something
     with pytest.raises(AlignerTransformException):

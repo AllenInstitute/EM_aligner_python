@@ -14,6 +14,17 @@ class AlignerTransform(object):
         if transform is not None:
             name = transform.__class__.__name__
 
+        # backwards compatibility
+        if name == 'affine':
+            name = 'AffineModel'
+            fullsize = False
+        if name == 'affine_fullsize':
+            name = 'AffineModel'
+            fullsize = True
+        if name == 'rigid':
+            name = 'SimilarityModel'
+
+        # renderapi-consistent names
         if (name == 'AffineModel'):
             self.__class__ = AlignerAffineModel
             AlignerAffineModel.__init__(

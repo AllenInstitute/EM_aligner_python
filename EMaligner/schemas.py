@@ -154,7 +154,7 @@ class EMA_Schema(ArgSchema):
         default=False)
     transformation = String(
         default='AffineModel',
-        validate=lambda x: x in ['AffineModel','SimilarityModel','Polynomial2DTransform'])
+        validate=lambda x: x in ['AffineModel','SimilarityModel','Polynomial2DTransform', 'affine', 'rigid', 'affine_fullsize'])
     fullsize_transform = Boolean(
         default=False,
         description='use fullsize affine transform')

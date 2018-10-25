@@ -62,10 +62,10 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
                         json=self.to_dict()))
         return tforms
 
-    def create_regularization(self, sz, default, transfac):
-        reg = np.ones(sz).astype('float64') * default
-        reg[2::4] *= transfac
-        reg[3::4] *= transfac
+    def create_regularization(self, sz, regdict):
+        reg = np.ones(sz).astype('float64') * regdict['default_lambda']
+        reg[2::4] *= regdict['translation_factor']
+        reg[3::4] *= regdict['translation_factor']
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
         return outr

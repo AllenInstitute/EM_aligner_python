@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 
 from argschema import ArgSchema
-from argschema.fields import String, Int, Boolean, Nested, Float
-import marshmallow as mm
+from argschema.fields import String, Int, Boolean, Nested, Float, NumpyArray
 from marshmallow import post_load, ValidationError
+
 
 class db_params(ArgSchema):
     owner = String(
         default='',
         required=False,
-        description='owner') 
+        description='owner')
     project = String(
         default='',
         required=False,
-        description='project') 
+        description='project')
     name = String(
         required=True,
         description='stack name')
@@ -55,18 +55,25 @@ class db_params(ArgSchema):
     @post_load
     def validate_data(self, data):
         if data['db_interface'] is 'mongo':
-            if data['mongo_host'] is None or data['mongo_userName'] is None or data['mongo_authenticationDatabase'] is None or data['mongo_password'] is None:
+            if (
+                    data['mongo_host'] is None or
+                    data['mongo_userName'] is None or
+                    data['mongo_authenticationDatabase'] is None or
+                    data['mongo_password'] is None):
                 raise ValidationError("Need mongo DB details")
         else:
             if data['host'] is None:
-                raise ValidationError("Need render host") 
+                raise ValidationError("Need render host")
+
 
 class hdf5_options(ArgSchema):
     output_dir = String(
         default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
     chunks_per_file = Int(
         default=5,
-        description='how many sections with upward-looking cross section to write per .h5 file')
+        description=("how many sections with upward-looking"
+                     " cross section to write per .h5 file"))
+
 
 class matrix_assembly(ArgSchema):
     depth = Int(
@@ -93,7 +100,8 @@ class matrix_assembly(ArgSchema):
     choose_random = Boolean(
         default=False,
         required=False,
-        description='choose random pts to meet for npts_max vs. just first npts_max')
+        description=("choose random pts to meet for npts_max"
+                     " vs. just first npts_max"))
     inverse_dz = Boolean(
         default=True,
         required=False,
@@ -107,6 +115,15 @@ class regularization(ArgSchema):
     translation_factor = Float(
         default=0.005,
         description='regularization factor')
+    poly_factors = NumpyArray(
+        Float,
+        required=False,
+        default=None,
+        missing=None,
+        cli_as_single_argument=True,
+        description=("List of regularization factors by order (0, 1, ...,  n)"
+                     "will override other settings for Polynomial2DTransform"
+                     "will multiply default_lambda"))
     freeze_first_tile = Boolean(
         default=False,
         required=False)
@@ -129,15 +146,15 @@ class stack(db_params):
 
 class EMA_Schema(ArgSchema):
     first_section = Int(
-        required=True, 
-        description = 'first section for matrix assembly')
+        required=True,
+        description='first section for matrix assembly')
     last_section = Int(
         required=True,
-        description = 'last section for matrix assembly')
+        description='last section for matrix assembly')
     n_parallel_jobs = Int(
         default=4,
         required=False,
-        description = 'number of parallel jobs that will run for assembly')
+        description='number of parallel jobs that will run for assembly')
     solve_type = String(
         default='montage',
         required=False,
@@ -154,7 +171,9 @@ class EMA_Schema(ArgSchema):
         default=False)
     transformation = String(
         default='AffineModel',
-        validate=lambda x: x in ['AffineModel','SimilarityModel','Polynomial2DTransform', 'affine', 'rigid', 'affine_fullsize'])
+        validate=lambda x: x in [
+            'AffineModel', 'SimilarityModel', 'Polynomial2DTransform',
+            'affine', 'rigid', 'affine_fullsize'])
     fullsize_transform = Boolean(
         default=False,
         description='use fullsize affine transform')
@@ -166,13 +185,14 @@ class EMA_Schema(ArgSchema):
         default='hdf5')
     assemble_from_file = String(
         default='',
-        description = 'fullpath to solution_input.h5')
+        description='fullpath to solution_input.h5')
     ingest_from_file = String(
         default='',
-        description = 'fullpath to solution_output.h5')
+        description='fullpath to solution_output.h5')
     render_output = String(
         default='null',
-        description = '/path/to/file, null (devnull), or stdout for where to redirect render output')
+        description=("/path/to/file, null (devnull), or "
+                     "stdout for where to redirect render output"))
     input_stack = Nested(stack)
     output_stack = Nested(stack)
     pointmatch = Nested(pointmatch)
@@ -181,10 +201,21 @@ class EMA_Schema(ArgSchema):
     regularization = Nested(regularization)
     showtiming = Int(
         default=1,
-        description = 'have the routine showhow long each process takes')
+        description='have the routine showhow long each process takes')
     log_level = String(
         default="INFO",
         description='logging level')
+
+    @post_load
+    def validate_data(self, data):
+        if (data['regularization']['poly_factors'] is not None) & \
+                (data['transformation'] == 'Polynomial2DTransform'):
+            n = len(data['regularization']['poly_factors'])
+            if n != data['poly_order'] + 1:
+                raise ValidationError(
+                        "regularization.poly_factors must be a list"
+                        " of length poly_order + 1")
+
 
 class EMA_PlotSchema(EMA_Schema):
     z1 = Int(
@@ -209,5 +240,5 @@ class EMA_PlotSchema(EMA_Schema):
         description='threshold for colors in residual plot [pixels]')
     density = Boolean(
         default=True,
-        description='whether residual plot is density (for large numbers of points) or just points')
-
+        description=("whether residual plot is density "
+                     " (for large numbers of points) or just points"))

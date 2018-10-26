@@ -52,19 +52,6 @@ class db_params(ArgSchema):
         required=False,
         description='render bin path')
 
-    @post_load
-    def validate_data(self, data):
-        if data['db_interface'] is 'mongo':
-            if (
-                    data['mongo_host'] is None or
-                    data['mongo_userName'] is None or
-                    data['mongo_authenticationDatabase'] is None or
-                    data['mongo_password'] is None):
-                raise ValidationError("Need mongo DB details")
-        else:
-            if data['host'] is None:
-                raise ValidationError("Need render host")
-
 
 class hdf5_options(ArgSchema):
     output_dir = String(

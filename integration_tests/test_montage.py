@@ -175,17 +175,3 @@ def test_first_test(
     fout = tmpdir.join("myfile")
     mod.args['render_output'] = str(fout)
     mod.run()
-
-
-def test_mongo_validation():
-    p = copy.deepcopy(montage_parameters)
-    p['input_stack']['db_interface'] = 'mongo'
-    p['input_stack']['mongo_host'] = None
-    with pytest.raises(ValidationError):
-        mod = EMaligner.EMaligner(input_data=p, args=[])
-
-    p = copy.deepcopy(montage_parameters)
-    p['input_stack']['db_interface'] = 'render'
-    p['input_stack']['host'] = None
-    with pytest.raises(ValidationError):
-        mod = EMaligner.EMaligner(input_data=p, args=[])

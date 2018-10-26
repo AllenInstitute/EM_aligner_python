@@ -6,6 +6,9 @@ from test_data import (render_params,
 from EMaligner import EMaligner
 import json
 from marshmallow.exceptions import ValidationError
+import copy
+
+# https://www.peterbe.com/plog/be-careful-with-using-dict-to-create-a-copy
 
 FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
 
@@ -71,9 +74,10 @@ def test_weighted(
         stack_state, tmpdir):
     renderapi.stack.set_stack_state(
             loading_raw_stack, stack_state, render=render)
-    montage_parameters['input_stack']['name'] = loading_raw_stack
-    montage_parameters['pointmatch']['name'] = montage_pointmatches_weighted
-    mod = EMaligner.EMaligner(input_data=montage_parameters, args=[])
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['pointmatch']['name'] = montage_pointmatches_weighted
+    mod = EMaligner.EMaligner(input_data=p, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
@@ -81,35 +85,38 @@ def test_weighted(
 
 def one_solve(parameters, tf, fullsize=False, order=2,
               precision=1e-7, error=200):
-        p = dict(parameters)
-        p['output_stack']['name'] = p['input_stack']['name'] + 'solved_' + tf
-        p['transformation'] = tf
-        p['fullsize'] = fullsize
-        p['poly_order'] = order
-        mod = EMaligner.EMaligner(input_data=p, args=[])
-        mod.run()
-        assert mod.results['precision'] < precision
-        assert mod.results['error'] < error
+    p = dict(parameters)
+    p['output_stack']['name'] = p['input_stack']['name'] + 'solved_' + tf
+    p['transformation'] = tf
+    p['fullsize'] = fullsize
+    p['poly_order'] = order
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert mod.results['precision'] < precision
+    assert mod.results['error'] < error
 
 
 def test_different_transforms(
         render, montage_pointmatches, loading_raw_stack, tmpdir):
-    montage_parameters['input_stack']['name'] = loading_raw_stack
-    montage_parameters['pointmatch']['name'] = montage_pointmatches
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['pointmatch']['name'] = montage_pointmatches
 
-    one_solve(montage_parameters, 'AffineModel', fullsize=False)
-    one_solve(montage_parameters, 'AffineModel', fullsize=True)
-    one_solve(montage_parameters, 'SimilarityModel')
+    one_solve(p, 'AffineModel', fullsize=False)
+    one_solve(p, 'AffineModel', fullsize=True)
+    one_solve(p, 'SimilarityModel')
     one_solve(
-            montage_parameters, 'Polynomial2DTransform',
+            p, 'Polynomial2DTransform',
             order=3, precision=0.5)
     one_solve(
-            montage_parameters, 'Polynomial2DTransform',
+            p, 'Polynomial2DTransform',
             order=2, precision=1e-4)
-    one_solve(montage_parameters, 'Polynomial2DTransform', order=1)
-    one_solve(montage_parameters, 'Polynomial2DTransform', order=0)
+    one_solve(p, 'Polynomial2DTransform', order=1)
+    one_solve(p, 'Polynomial2DTransform', order=0)
 
-    p = dict(montage_parameters)
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['pointmatch']['name'] = montage_pointmatches
     p['regularization'] = {
             'default_lambda': 1000.0,
             'translation_factor': 1e-5,
@@ -118,7 +125,7 @@ def test_different_transforms(
 
 
 def test_poly_validation():
-    p = dict(montage_parameters)
+    p = copy.deepcopy(montage_parameters)
     p['regularization'] = {
             'default_lambda': 1000.0,
             'translation_factor': 1e-5,
@@ -137,26 +144,27 @@ def test_first_test(
         loading_raw_stack, stack_state, tmpdir):
     renderapi.stack.set_stack_state(
             loading_raw_stack, stack_state, render=render)
-    montage_parameters['input_stack']['name'] = loading_raw_stack
-    montage_parameters['pointmatch']['name'] = montage_pointmatches
-    mod = EMaligner.EMaligner(input_data=montage_parameters, args=[])
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['pointmatch']['name'] = montage_pointmatches
+    mod = EMaligner.EMaligner(input_data=p, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
 
     # try with affine_fullsize
-    montage_parameters['transformation'] = 'AffineModel'
-    montage_parameters['fullsze_transform'] = True
-    mod = EMaligner.EMaligner(input_data=montage_parameters, args=[])
+    p['transformation'] = 'AffineModel'
+    p['fullsze_transform'] = True
+    mod = EMaligner.EMaligner(input_data=p, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
 
     # try with render interface
-    montage_parameters['input_stack']['db_interface'] = 'render'
-    montage_parameters['output_stack']['db_interface'] = 'render'
-    montage_parameters['pointmatch']['db_interface'] = 'render'
-    mod = EMaligner.EMaligner(input_data=montage_parameters, args=[])
+    p['input_stack']['db_interface'] = 'render'
+    p['output_stack']['db_interface'] = 'render'
+    p['pointmatch']['db_interface'] = 'render'
+    mod = EMaligner.EMaligner(input_data=p, args=[])
     mod.run()
     assert mod.results['precision'] < 1e-7
     assert mod.results['error'] < 200
@@ -170,17 +178,14 @@ def test_first_test(
 
 
 def test_mongo_validation():
-    p = dict(montage_parameters)
+    p = copy.deepcopy(montage_parameters)
     p['input_stack']['db_interface'] = 'mongo'
     p['input_stack']['mongo_host'] = None
     with pytest.raises(ValidationError):
         mod = EMaligner.EMaligner(input_data=p, args=[])
 
-    p = dict(montage_parameters)
+    p = copy.deepcopy(montage_parameters)
     p['input_stack']['db_interface'] = 'render'
     p['input_stack']['host'] = None
     with pytest.raises(ValidationError):
         mod = EMaligner.EMaligner(input_data=p, args=[])
-
-
-

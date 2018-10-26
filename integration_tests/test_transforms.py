@@ -202,7 +202,10 @@ def test_affine_model():
             rt.M, renderapi.transform.AffineModel().M))
 
     # reg
-    r = t.create_regularization(96, 1.0, 0.1)
+    rdict = {
+            "default_lambda": 1.0,
+            "translation_factor": 0.1}
+    r = t.create_regularization(96, rdict)
     assert np.all(r.data[0::6] == 1.0)
     assert np.all(r.data[1::6] == 1.0)
     assert np.all(r.data[2::6] == 0.1)
@@ -277,7 +280,10 @@ def test_similarity_model():
             rt.M, renderapi.transform.SimilarityModel().M))
 
     # reg
-    r = t.create_regularization(96, 1.0, 0.1)
+    rdict = {
+            "default_lambda": 1.0,
+            "translation_factor": 0.1}
+    r = t.create_regularization(96, rdict)
     assert np.all(r.data[0::4] == 1.0)
     assert np.all(r.data[1::4] == 1.0)
     assert np.all(r.data[2::4] == 0.1)
@@ -390,7 +396,30 @@ def test_polynomial_model():
         rt0 = renderapi.transform.Polynomial2DTransform(params=vec)
         t = AlignerTransform(transform=rt0)
 
-        r = t.create_regularization(n * 17, 1.0, 0.1)
+        rdict = {
+                "default_lambda": 1.0,
+                "translation_factor": 0.1,
+                "poly_factors": None}
+        r = t.create_regularization(n * 17, rdict)
         assert np.all(r.data[0::n] == 0.1)
         for j in range(1, n):
             assert np.all(r.data[j::n] == 1.0)
+
+    # reg
+    for order in range(4):
+        n = int((order + 1) * (order + 2) / 2)
+        vec = np.zeros((n, 2))
+        rt0 = renderapi.transform.Polynomial2DTransform(params=vec)
+        t = AlignerTransform(transform=rt0)
+
+        pf = np.random.randn(order + 1)
+        rdict = {
+                "default_lambda": 1.0,
+                "translation_factor": 0.1,
+                "poly_factors": pf.tolist()}
+        r = t.create_regularization(n * 17, rdict)
+        ni = 0
+        for i in range(order + 1):
+            for j in range(i + 1):
+                assert np.all(r.data[ni::n] == pf[i])
+                ni += 1

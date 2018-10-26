@@ -464,8 +464,7 @@ class EMaligner(argschema.ArgSchemaParser):
         # create the regularization vectors
         assemble_result['reg'] = self.transform.create_regularization(
                 assemble_result['tforms'].shape[0],
-                self.args['regularization']['default_lambda'],
-                self.args['regularization']['translation_factor'])
+                self.args['regularization'])
 
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':

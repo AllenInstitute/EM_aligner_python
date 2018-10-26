@@ -78,10 +78,18 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
                         params=params))
         return tforms
 
-    def create_regularization(self, sz, default, transfac):
-        reg = np.ones(sz).astype('float64') * default
+    def create_regularization(self, sz, regdict):
+        reg = np.ones(sz).astype('float64') * regdict['default_lambda']
         n = int((self.order + 1) * (self.order + 2) / 2)
-        reg[0::n] *= transfac
+        if regdict['poly_factors'] is None:
+            reg[0::n] *= regdict['translation_factor']
+        else:
+            ni = 0
+            for i in range(self.order + 1):
+                for j in range(i + 1):
+                    reg[ni::n] *= regdict['poly_factors'][i]
+                    ni += 1
+
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
         return outr

@@ -120,6 +120,9 @@ class pointmatch(db_params):
     collection_type = String(
         default='pointmatch',
         description="'stack' or 'pointmatch'")
+    def tolist(self, data):
+        if not isinstance(data['name'], list):
+            data['name'] = [data['name']]
 
 
 class stack(db_params):

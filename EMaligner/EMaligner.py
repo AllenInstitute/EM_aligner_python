@@ -25,7 +25,6 @@ import sys
 import multiprocessing
 import logging
 import json
-import itertools
 
 logger = logging.getLogger(__name__)
 

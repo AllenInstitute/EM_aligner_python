@@ -6,13 +6,13 @@ import collections
 import logging
 import time
 import warnings
-warnings.filterwarnings("ignore", message="numpy.dtype size changed")
-warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
-import h5py
 import os
 import sys
 import json
 from .transform.transform import AlignerTransform
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+import h5py
 
 logger2 = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
     tile_tspecs = []
     shared_tforms = []
     sectionIds = []
+    z_present = []
     t0 = time.time()
 
     for z in zvals:
@@ -145,6 +146,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
 
         if sectionId is not None:
             sectionIds.append(sectionId)
+            z_present.append(z)
 
             # make lists of IDs and transforms
             solve_tf = AlignerTransform(
@@ -162,11 +164,12 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
 
     logger2.info(
             "\n loaded %d tile specs from %d zvalues in "
-            "%0.1f sec using interface: %s" % (
+            "%0.1f sec using interface: %s (%d zvalues in input range)" % (
                 len(tile_ids),
-                len(zvals),
+                len(z_present),
                 time.time() - t0,
-                stack['db_interface']))
+                stack['db_interface'],
+                len(zvals)))
 
     tile_tforms = np.concatenate(tile_tforms, axis=0)
 
@@ -175,7 +178,8 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
             'tforms': tile_tforms,
             'tspecs': np.array(tile_tspecs).flatten(),
             'shared_tforms': shared_tforms,
-            'sectionIds': sectionIds
+            'sectionIds': sectionIds,
+            'zvals': z_present
             }
 
 

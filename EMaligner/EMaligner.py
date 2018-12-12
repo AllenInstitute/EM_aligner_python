@@ -1,7 +1,7 @@
 import numpy as np
 import renderapi
 import argschema
-from .schemas import *
+from .schemas import EMA_Schema
 from .utils import (
     make_dbconnection,
     get_tileids_and_tforms,
@@ -17,21 +17,21 @@ import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import factorized
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
-import h5py
-warnings.resetwarnings()
 import os
 import sys
 import multiprocessing
 import logging
 import json
+warnings.simplefilter(action='ignore', category=FutureWarning)
+import h5py
+warnings.resetwarnings()
 
 logger = logging.getLogger(__name__)
 
 
 def calculate_processing_chunk(fargs):
     # set up for calling using multiprocessing pool
-    [zvals, sectionIds, zloc, args, tile_ids] = fargs
+    [pair, zloc, args, tile_ids] = fargs
 
     dbconnection = make_dbconnection(args['pointmatch'])
     sorter = np.argsort(tile_ids)
@@ -51,10 +51,11 @@ def calculate_processing_chunk(fargs):
     # get point matches
     t0 = time.time()
     matches = get_matches(
-        sectionIds[0],
-        sectionIds[1],
-        args['pointmatch'],
-        dbconnection)
+            pair['section1'],
+            pair['section2'],
+            args['pointmatch'],
+            dbconnection)
+
     if len(matches) == 0:
         return chunk
 
@@ -75,22 +76,23 @@ def calculate_processing_chunk(fargs):
 
     if len(matches) == 0:
         logger.debug(
-            "%sno tile pairs in "
-            "stack for pointmatch groupIds %s and %s" % (
-                pstr, sectionIds[0], sectionIds[1]))
+                "%sno tile pairs in "
+                "stack for pointmatch groupIds %s and %s" % (
+                    pstr, pair['section1'], pair['section2']))
         return chunk
 
     logger.debug(
-        "%sloaded %d matches, using %d, "
-        "for groupIds %s and %s in %0.1f sec "
-        "using interface: %s" % (
-            pstr,
-            instack.size,
-            len(matches),
-            sectionIds[0],
-            sectionIds[1],
-            time.time() - t0,
-            args['pointmatch']['db_interface']))
+            "%sloaded %d matches, using %d, "
+            "for groupIds %s and %s in %0.1f sec "
+            "using interface: %s" % (
+                pstr,
+                instack.size,
+                len(matches),
+                pair['section1'],
+                pair['section2'],
+                time.time() - t0,
+                args['pointmatch']['db_interface']))
+
 
     t0 = time.time()
     # for the given point matches, these are the indices in tile_ids
@@ -127,9 +129,10 @@ def calculate_processing_chunk(fargs):
     nrows = 0
 
     tilepair_weightfac = tilepair_weight(
-        float(sectionIds[0]),
-        float(sectionIds[1]),
-        args['matrix_assembly'])
+            pair['z1'],
+            pair['z2'],
+            args['matrix_assembly'])
+
 
     for k in np.arange(nmatches):
         # create the CSR sub-matrix for this tile pair
@@ -175,8 +178,8 @@ def calculate_processing_chunk(fargs):
     chunk['weights'] = np.copy(weights)
     chunk['indices'] = np.copy(indices)
     chunk['indptr'] = np.copy(indptr)
-    chunk['zlist'].append(float(sectionIds[0]))
-    chunk['zlist'].append(float(sectionIds[1]))
+    chunk['zlist'].append(pair['z1'])
+    chunk['zlist'].append(pair['z2'])
     chunk['zlist'] = np.array(chunk['zlist'])
     del data, indices, indptr, weights
 
@@ -435,9 +438,10 @@ class EMaligner(argschema.ArgSchemaParser):
 
         # create A matrix in compressed sparse row (CSR) format
         CSR_A = self.create_CSR_A(
-            from_stack['tids'],
-            zvals,
-            from_stack['sectionIds'])
+                from_stack['tids'],
+                from_stack['zvals'],
+                from_stack['sectionIds'])
+
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
 
@@ -480,15 +484,18 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def determine_zvalue_pairs(self, zvals, sectionIds):
         # create all possible pairs, given zvals and depth
-        zs = np.array(sectionIds).astype(float)
         pairs = []
-        for z in zs:
-            i = 0
-            while i <= self.args['matrix_assembly']['depth']:
-                if z+i in zvals:
-                    pairs.append([str(z), str(z + i)])
-                i += 1
-        return np.array(pairs)
+        for i in range(len(zvals)):
+            for j in range(0, self.args['matrix_assembly']['depth'] + 1):
+                z2 = zvals[i] + j
+                if z2 in zvals:
+                    ind2 = np.argwhere(zvals == z2)[0][0]
+                    pairs.append({
+                        'z1': zvals[i],
+                        'z2': z2,
+                        'section1': sectionIds[i],
+                        'section2': sectionIds[ind2]})
+        return pairs
 
     def concatenate_chunks(self, chunks):
         i = 0
@@ -516,7 +523,8 @@ class EMaligner(argschema.ArgSchemaParser):
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
         pairs = self.determine_zvalue_pairs(zvals, sectionIds)
-        npairs = pairs.shape[0]
+
+        npairs = len(pairs)
 
         # split up the work
         if self.args['hdf5_options']['chunks_per_file'] == -1:
@@ -531,8 +539,7 @@ class EMaligner(argschema.ArgSchemaParser):
         fargs = []
         for i in np.arange(npairs):
             fargs.append([
-                zvals,
-                pairs[i, :],
+                pairs[i],
                 i,
                 self.args,
                 tile_ids])
@@ -649,8 +656,6 @@ class EMaligner(argschema.ArgSchemaParser):
                 # simpler case for similarity, or
                 # affine_fullsize, but 2x larger than affine
 
-                print('filt_tforms.shape')
-                print(filt_tforms.shape)
                 Lm = reg.dot(filt_tforms[:, 0])
                 x = solve(Lm)
                 err = A.dot(x)

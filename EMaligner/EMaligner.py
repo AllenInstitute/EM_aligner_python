@@ -68,7 +68,7 @@ def calculate_processing_chunk(fargs):
     qids = np.array(qids)
 
     # remove matches that don't have both IDs in tile_ids
-    instack = (np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids))
+    instack = np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids)
     matches = matches[instack]
     pids = pids[instack]
     qids = qids[instack]

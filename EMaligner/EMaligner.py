@@ -72,6 +72,7 @@ def calculate_processing_chunk(fargs):
     matches = matches[instack]
     pids = pids[instack]
     qids = qids[instack]
+
     if len(matches) == 0:
         logger.debug(
             "%sno tile pairs in "

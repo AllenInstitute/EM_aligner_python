@@ -68,11 +68,10 @@ def calculate_processing_chunk(fargs):
     qids = np.array(qids)
 
     # remove matches that don't have both IDs in tile_ids
-    instack = np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids)
+    instack = (np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids))
     matches = matches[instack]
     pids = pids[instack]
     qids = qids[instack]
-
     if len(matches) == 0:
         logger.debug(
             "%sno tile pairs in "
@@ -566,18 +565,24 @@ class EMaligner(argschema.ArgSchemaParser):
                             cat_chunk['weights']))
 
         else:
-            data = np.concatenate([results[i]['data'] for i in range(
-                len(results)) if results[i]['data'] is not None]).astype('float64')
-            weights = np.concatenate([results[i]['weights'] for i in range(
-                len(results)) if results[i]['data'] is not None]).astype('float64')
-            indices = np.concatenate([results[i]['indices'] for i in range(
-                len(results)) if results[i]['data'] is not None]).astype('int64')
-            # Pointers need to be handled differently, since you need to sum the arrays
-            indptr = [results[i]['indptr'] for i in range(
-                len(results)) if results[i]['data'] is not None]
+            data = np.concatenate([
+                results[i]['data'] for i in range(len(results))
+                if results[i]['data'] is not None]).astype('float64')
+            weights = np.concatenate([
+                results[i]['weights'] for i in range(len(results))
+                if results[i]['data'] is not None]).astype('float64')
+            indices = np.concatenate([
+                results[i]['indices'] for i in range(len(results))
+                if results[i]['data'] is not None]).astype('int64')
+            # Pointers need to be handled differently,
+            # since you need to sum the arrays
+            indptr = [results[i]['indptr']
+                      for i in range(len(results))
+                      if results[i]['data'] is not None]
             indptr_cumends = np.cumsum([i[-1] for i in indptr])
             indptr = np.concatenate(
-                [j if i == 0 else j[1:]+indptr_cumends[i-1] for i, j in enumerate(indptr)]).astype('int64')
+                [j if i == 0 else j[1:]+indptr_cumends[i-1] for i, j
+                 in enumerate(indptr)]).astype('int64')
             A = csr_matrix((data, indices, indptr))
             outw = sparse.eye(weights.size, format='csr')
             outw.data = weights

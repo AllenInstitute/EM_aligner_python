@@ -42,14 +42,14 @@ def make_dbconnection(collection, which='tile'):
             mongo_collection_name = (
                     collection['owner'] +
                     '__' + collection['project'] +
-                    '__' + collection['name'] +
+                    '__' + collection['name'][0] +
                     '__'+which)
             dbconnection = client.render[mongo_collection_name]
         elif collection['collection_type'] == 'pointmatch':
-            mongo_collection_name = (
+            mongo_collection_name = [(
                     collection['owner'] +
-                    '__' + collection['name'])
-            dbconnection = client.match[mongo_collection_name]
+                    '__' + name) for name in collection['name']]
+            dbconnection = [client.match[name] for name in mongo_collection_name]
     elif collection['db_interface'] == 'render':
         dbconnection = renderapi.connect(**collection)
     else:
@@ -65,7 +65,7 @@ def get_unused_tspecs(stack, tids):
         for t in tids:
             tspecs.append(
                     renderapi.tilespec.get_tile_spec(
-                        stack['name'],
+                        stack['name'][0],
                         t,
                         render=dbconnection,
                         owner=stack['owner'],
@@ -95,7 +95,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
         if stack['db_interface'] == 'render':
             try:
                 tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(
-                        stack['name'],
+                        stack['name'][0],
                         float(z),
                         render=dbconnection,
                         owner=stack['owner'],
@@ -105,7 +105,7 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
                     shared_tforms.append(st)
                 try:
                     sectionId = renderapi.stack.get_sectionId_for_z(
-                        stack['name'],
+                        stack['name'][0],
                         float(z),
                         render=dbconnection,
                         owner=stack['owner'],
@@ -185,33 +185,39 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
 
 def get_matches(iId, jId, collection, dbconnection):
     if collection['db_interface'] == 'render':
+        mlist = []
         if iId == jId:
-            matches = renderapi.pointmatch.get_matches_within_group(
-                    collection['name'],
-                    iId,
-                    owner=collection['owner'],
-                    render=dbconnection)
+            for name in collection['name']:
+                mlist.append(renderapi.pointmatch.get_matches_within_group(
+                        name,
+                        iId,
+                        owner=collection['owner'],
+                        render=dbconnection))
         else:
-            matches = renderapi.pointmatch.get_matches_from_group_to_group(
-                    collection['name'],
-                    iId,
-                    jId,
-                    owner=collection['owner'],
-                    render=dbconnection)
-        matches = np.array(matches)
+            for name in collection['name']:
+                mlist.append(renderapi.pointmatch.get_matches_from_group_to_group(
+                        name,
+                        iId,
+                        jId,
+                        owner=collection['owner'],
+                        render=dbconnection))
+        matches = np.concatenate(mlist)
     if collection['db_interface'] == 'mongo':
-        cursor = dbconnection.find(
-                {'pGroupId': iId, 'qGroupId': jId},
-                {'_id': False})
-        matches = np.array(list(cursor))
-        if iId != jId:
-            # in principle, this does nothing if zi < zj, but, just in case
-            cursor = dbconnection.find(
-                    {
-                        'pGroupId': jId,
-                        'qGroupId': iId},
+        mlist = []
+        for dbconn in dbconnection:
+            cursor = dbconn.find(
+                    {'pGroupId': iId, 'qGroupId': jId},
                     {'_id': False})
-            matches = np.append(matches, list(cursor))
+            mlist.append(np.array(list(cursor)))
+            if iId != jId:
+                # in principle, this does nothing if zi < zj, but, just in case
+                cursor = dbconn.find(
+                        {
+                            'pGroupId': jId,
+                            'qGroupId': iId},
+                        {'_id': False})
+                mlist.append(np.array(list(cursor)))
+        matches = np.concatenate(mlist)
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
     if len(matches) == 0:

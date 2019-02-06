@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 from argschema import ArgSchema
-from argschema.fields import String, Int, Boolean, Nested, Float, NumpyArray
-from marshmallow import post_load, ValidationError
+from argschema.fields import \
+        String, Int, Boolean, Nested, Float, NumpyArray, List
+from marshmallow import post_load, ValidationError, pre_load
+import numpy as np
 
 
 class db_params(ArgSchema):
@@ -14,8 +16,11 @@ class db_params(ArgSchema):
         default='',
         required=False,
         description='project')
-    name = String(
+    name = List(
+        String,
+        cli_as_single_argument=True,
         required=True,
+        many=True,
         description='stack name')
     host = String(
         default=None,
@@ -51,6 +56,10 @@ class db_params(ArgSchema):
         default='/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts',
         required=False,
         description='render bin path')
+    @pre_load
+    def tolist(self, data):
+        if not isinstance(data['name'], list):
+            data['name'] = [data['name']]
 
 
 class hdf5_options(ArgSchema):
@@ -63,10 +72,33 @@ class hdf5_options(ArgSchema):
 
 
 class matrix_assembly(ArgSchema):
-    depth = Int(
-        default=2,
+    depth = List(
+        Int,
+        cli_as_single_argument=True,
+        default=[0, 1, 2],
         required=False,
         description='depth in z for matrix assembly point matches')
+    explicit_weight_by_depth = List(
+        Float,
+        cli_as_single_argument=True,
+        default=None,
+        missing=None,
+        description='explicitly set solver weights by depth')
+    
+    @pre_load
+    def tolist(self, data):
+        if not isinstance(data['depth'], list):
+            data['depth'] = np.arange(0, data['depth'] + 1).tolist()
+    
+    @post_load
+    def check_explicit(self, data):
+        if data['explicit_weight_by_depth'] is not None:
+            if (
+                    len(data['explicit_weight_by_depth']) !=
+                    len(data['depth'])):
+                raise ValidationError(
+                        "matrix_assembly['explicit_weight_by_depth'] "
+                        "must be the same length as matrix_assembly['depth']")
     cross_pt_weight = Float(
         default=1.0,
         required=False,
@@ -120,9 +152,6 @@ class pointmatch(db_params):
     collection_type = String(
         default='pointmatch',
         description="'stack' or 'pointmatch'")
-    def tolist(self, data):
-        if not isinstance(data['name'], list):
-            data['name'] = [data['name']]
 
 
 class stack(db_params):
@@ -132,6 +161,10 @@ class stack(db_params):
     use_rest = Boolean(
         default=False,
         description="passed as arg in import_tilespecs_parallel")
+    @post_load
+    def validate_data(self, data):
+        if len(data['name']) != 1:
+            raise ValidationError("only one input or output stack name is allowed")
 
 
 class EMA_Schema(ArgSchema):

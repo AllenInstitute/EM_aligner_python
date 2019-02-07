@@ -3,6 +3,7 @@ import renderapi
 from EMaligner.transform.transform import AlignerTransform
 from EMaligner.transform.affine_model import AlignerAffineModel
 from EMaligner.transform.similarity_model import AlignerSimilarityModel
+from EMaligner.transform.translation_model import AlignerTranslationModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
 from EMaligner.transform.utils import (
         AlignerTransformException,
@@ -45,6 +46,14 @@ def test_transform():
     rt = renderapi.transform.SimilarityModel()
     t = AlignerTransform(transform=rt)
     assert(t.__class__ == AlignerSimilarityModel)
+
+    # two ways to load translation
+    t = AlignerTransform(name='TranslationModel')
+    assert(t.__class__ == AlignerTranslationModel)
+    del t
+    rt = renderapi.transform.TranslationModel()
+    t = AlignerTransform(transform=rt)
+    assert(t.__class__ == AlignerTranslationModel)
 
     # two ways to load polynomial
     t = AlignerTransform(name='Polynomial2DTransform')
@@ -90,7 +99,7 @@ def test_ptpairs():
 
 
 def test_array_gen():
-    data, indices, indptr, weights = arrays_for_tilepair(
+    data, indices, indptr, weights, b = arrays_for_tilepair(
             100, 2, 14)
     c = csr_matrix((data, indices, indptr))
     assert c.check_format() is None
@@ -105,6 +114,77 @@ def example_match(npts):
             "q": [list(np.random.randn(npts)), list(np.random.randn(npts))]
             }
     return match
+
+
+def test_translation_model():
+    # can't do this
+    rt = renderapi.transform.Polynomial2DTransform()
+    with pytest.raises(AlignerTransformException):
+        t = AlignerTranslationModel(transform=rt)
+
+    # check args
+    rt = renderapi.transform.TranslationModel()
+    t = AlignerTransform(transform=rt)
+    assert(t.__class__ == AlignerTranslationModel)
+
+    # make CSR
+    t = AlignerTransform(transform=rt)
+    match = example_match(100)
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    indptr = np.insert(indptr, 0, 0)
+    c = csr_matrix((data, indices, indptr))
+    assert c.check_format() is None
+    assert weights.size == 100*t.rows_per_ptmatch
+    assert npts == 100
+    assert not np.any(np.isclose(b, 0))
+
+    # make CSR zero weights
+    t = AlignerTransform(transform=rt)
+    match = example_match(100)
+    match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    assert data is None
+
+    # minimum size
+    t = AlignerTransform(transform=rt)
+    match = example_match(100)
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
+            match, 1, 2, 200, 500, True)
+    assert data is None
+
+    # to vec
+    rt = renderapi.transform.TranslationModel()
+    t = AlignerTransform(transform=rt, fullsize=True)
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([0.0, 0.0]).reshape(2, 1))
+    rt = renderapi.transform.TranslationModel(B0=3.0, B1=-123.0)
+    t = AlignerTransform(transform=rt, fullsize=True)
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([3.0, -123.0]).reshape(2, 1))
+    rt = renderapi.transform.Polynomial2DTransform(identity=True)
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([0.0, 0.0]))
+    rt = renderapi.transform.NonLinearCoordinateTransform()
+    with pytest.raises(AlignerTransformException):
+        v = t.to_solve_vec(rt)
+
+    # from vec
+    vec = np.tile([4.0, -17.4], 6)
+    t.fullsize = True
+    tforms = t.from_solve_vec(vec)
+    assert len(tforms) == 6
+    for rt in tforms:
+        assert np.all(np.isclose(
+            rt.M, renderapi.transform.AffineModel(B0=4.0, B1=-17.4).M))
+
+    # reg
+    rdict = {
+            "default_lambda": 5.0,
+            "translation_factor": 0.1}
+    r = t.create_regularization(96, rdict)
+    assert np.all(r.data == 0.5)
 
 
 def test_affine_model():
@@ -125,45 +205,47 @@ def test_affine_model():
     # make CSR (fullsize)
     t = AlignerTransform(transform=rt, fullsize=True)
     match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     indptr = np.insert(indptr, 0, 0)
     c = csr_matrix((data, indices, indptr))
     assert c.check_format() is None
     assert weights.size == 100*t.rows_per_ptmatch
     assert npts == 100
+    assert np.all(np.isclose(b, 0))
 
     # make CSR (halfsize)
     t = AlignerTransform(transform=rt, fullsize=False)
     match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     indptr = np.insert(indptr, 0, 0)
     c = csr_matrix((data, indices, indptr))
     assert c.check_format() is None
     assert weights.size == 100*t.rows_per_ptmatch
     assert npts == 100
+    assert np.all(np.isclose(b, 0))
 
     # make CSR zero weights
     t = AlignerTransform(transform=rt, fullsize=False)
     match = example_match(100)
     match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
     t = AlignerTransform(transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
 
     # minimum size
     t = AlignerTransform(transform=rt, fullsize=False)
     match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
     t = AlignerTransform(transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
 
@@ -228,7 +310,7 @@ def test_similarity_model():
     # make CSR
     t = AlignerTransform(transform=rt)
     match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     indptr = np.insert(indptr, 0, 0)
     c = csr_matrix((data, indices, indptr))
@@ -240,22 +322,22 @@ def test_similarity_model():
     t = AlignerTransform(transform=rt, fullsize=False)
     match = example_match(100)
     match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
     t = AlignerTransform(transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
 
     # minimum size
     t = AlignerTransform(transform=rt, fullsize=False)
     match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
     t = AlignerTransform(transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
 
@@ -309,7 +391,7 @@ def test_polynomial_model():
         rt = renderapi.transform.Polynomial2DTransform(params=params)
         t = AlignerTransform(transform=rt)
         match = example_match(100)
-        data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+        data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
                 match, 1, 2, 5, 500, True)
         indptr = np.insert(indptr, 0, 0)
         c = csr_matrix((data, indices, indptr))
@@ -321,14 +403,14 @@ def test_polynomial_model():
     t = AlignerTransform(transform=rt)
     match = example_match(100)
     match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
 
     # minimum size
     t = AlignerTransform(transform=rt)
     match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
 

@@ -99,7 +99,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
             nmin, nmax, choose_random):
         if np.all(np.array(match['matches']['w']) == 0):
             # zero weights
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         match_index, stride = ptpair_indices(
                 len(match['matches']['q'][0]),
@@ -109,12 +109,12 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
                 choose_random)
         if match_index is None:
             # did not meet nmin requirement
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         npts = match_index.size
 
         # empty arrays
-        data, indices, indptr, weights = (
+        data, indices, indptr, weights, b = (
                 arrays_for_tilepair(
                    npts,
                    self.rows_per_ptmatch,
@@ -141,4 +141,4 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         indptr[0: npts] = np.arange(1, npts + 1) * self.nnz_per_row
         weights[0: npts] = np.array(match['matches']['w'])[match_index]
 
-        return data, indices, indptr, weights, npts
+        return data, indices, indptr, weights, b, npts

@@ -110,7 +110,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
             nmin, nmax, choose_random):
         if np.all(np.array(match['matches']['w']) == 0):
             # zero weights
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         match_index, stride = ptpair_indices(
                 len(match['matches']['q'][0]),
@@ -120,12 +120,12 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
                 choose_random)
         if match_index is None:
             # did not meet nmin requirement
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         npts = match_index.size
 
         # empty arrays
-        data, indices, indptr, weights = (
+        data, indices, indptr, weights, b = (
                 arrays_for_tilepair(
                    npts,
                    self.rows_per_ptmatch,
@@ -159,14 +159,14 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         weights[0: 2 * npts] = \
             np.tile(np.array(match['matches']['w'])[match_index], 2)
 
-        return data, indices, indptr, weights, npts
+        return data, indices, indptr, weights, b, npts
 
     def CSR_halfsize(
             self, match, tile_ind1, tile_ind2,
             nmin, nmax, choose_random):
         if np.all(np.array(match['matches']['w']) == 0):
             # zero weights
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         match_index, stride = ptpair_indices(
                 len(match['matches']['q'][0]),
@@ -176,12 +176,12 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
                 choose_random)
         if match_index is None:
             # did not meet nmin requirement
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         npts = match_index.size
 
         # empty arrays
-        data, indices, indptr, weights = (
+        data, indices, indptr, weights, b = (
                 arrays_for_tilepair(
                         npts,
                         self.rows_per_ptmatch,
@@ -203,4 +203,4 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         indptr[0: npts] = np.arange(1, npts + 1) * self.nnz_per_row
         weights[0: npts] = np.array(match['matches']['w'])[match_index]
 
-        return data, indices, indptr, weights, npts
+        return data, indices, indptr, weights, b, npts

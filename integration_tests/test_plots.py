@@ -1,11 +1,8 @@
 import pytest
 import renderapi
 from test_data import (render_params,
-                       render_json_template,
-                       example_env,
                        montage_raw_tilespecs_json,
                        montage_parameters)
-from EMaligner.schemas import *
 from EMaligner.qctools.CheckPointMatches import CheckPointMatches
 from EMaligner.qctools.CheckResiduals import CheckResiduals
 from EMaligner.qctools.CheckTransforms import CheckTransforms, fixpi
@@ -27,10 +24,14 @@ def render():
 @pytest.fixture(scope='module')
 def raw_stack(render):
     test_raw_stack = 'input_raw_stack'
-    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
+    tilespecs = [
+            renderapi.tilespec.TileSpec(json=d)
+            for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack, render=render)
-    renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
-    renderapi.stack.set_stack_state(test_raw_stack, 'COMPLETE', render=render)
+    renderapi.client.import_tilespecs(
+        test_raw_stack, tilespecs, render=render)
+    renderapi.stack.set_stack_state(
+        test_raw_stack, 'COMPLETE', render=render)
     yield test_raw_stack
     renderapi.stack.delete_stack(test_raw_stack, render=render)
 
@@ -39,22 +40,30 @@ def raw_stack(render):
 def raw_stack_offset_z(render):
     dz = 10
     test_raw_stack_offset = 'input_raw_stack_offset'
-    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
+    tilespecs = [
+            renderapi.tilespec.TileSpec(json=d)
+            for d in montage_raw_tilespecs_json]
     for i in range(len(tilespecs)):
         tilespecs[i].z += dz
         tilespecs[i].layout.sectionId = '%0.1f' % tilespecs[i].z
 
-    renderapi.stack.create_stack(test_raw_stack_offset, render=render)
-    renderapi.client.import_tilespecs(test_raw_stack_offset, tilespecs, render=render)
-    renderapi.stack.set_stack_state(test_raw_stack_offset, 'COMPLETE', render=render)
+    renderapi.stack.create_stack(
+        test_raw_stack_offset, render=render)
+    renderapi.client.import_tilespecs(
+        test_raw_stack_offset, tilespecs, render=render)
+    renderapi.stack.set_stack_state(
+        test_raw_stack_offset, 'COMPLETE', render=render)
     yield test_raw_stack_offset
-    renderapi.stack.delete_stack(test_raw_stack_offset, render=render)
+    renderapi.stack.delete_stack(
+        test_raw_stack_offset, render=render)
 
 
 @pytest.fixture(scope='module')
 def raw_stack_loading(render):
     test_raw_stack = 'input_raw_stack_2'
-    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in montage_raw_tilespecs_json]
+    tilespecs = [
+            renderapi.tilespec.TileSpec(json=d)
+            for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack, render=render)
     renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
     yield test_raw_stack
@@ -65,7 +74,8 @@ def raw_stack_loading(render):
 def montage_pointmatches(render):
     test_montage_collection = 'montage_collection'
     pms_from_json = json.load(open(FILE_PMS, 'r'))
-    renderapi.pointmatch.import_matches(test_montage_collection, pms_from_json, render=render)
+    renderapi.pointmatch.import_matches(
+            test_montage_collection, pms_from_json, render=render)
     yield test_montage_collection
 
 
@@ -78,7 +88,7 @@ def test_fixpi():
 
 def test_pmplot(render, montage_pointmatches, raw_stack, tmpdir):
     p = copy.deepcopy(montage_parameters)
-    p['input_stack']['name']=raw_stack
+    p['input_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
     mod = CheckPointMatches(input_data=p, args=[])
     mod.args['z1'] = 1015
@@ -90,9 +100,10 @@ def test_pmplot(render, montage_pointmatches, raw_stack, tmpdir):
     mod.run()
 
 
-def test_pmplot_loading(render, montage_pointmatches, raw_stack_loading, tmpdir):
+def test_pmplot_loading(
+        render, montage_pointmatches, raw_stack_loading, tmpdir):
     p = copy.deepcopy(montage_parameters)
-    p['input_stack']['name']=raw_stack_loading
+    p['input_stack']['name'] = raw_stack_loading
     p['pointmatch']['name'] = montage_pointmatches
     mod = CheckPointMatches(input_data=p, args=[])
     mod.args['z1'] = 1015
@@ -101,12 +112,13 @@ def test_pmplot_loading(render, montage_pointmatches, raw_stack_loading, tmpdir)
     mod.run()
     assert os.path.exists(mod.outputname)
 
-def test_resplot(render,montage_pointmatches,raw_stack,tmpdir):
+
+def test_resplot(render, montage_pointmatches, raw_stack, tmpdir):
     p = copy.deepcopy(montage_parameters)
-    p['input_stack']['name']=raw_stack
-    p['output_stack']['name']=raw_stack
+    p['input_stack']['name'] = raw_stack
+    p['output_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
-    mod = CheckResiduals(input_data=p,args=[])
+    mod = CheckResiduals(input_data=p, args=[])
     mod.args['z1'] = 1015
     mod.args['z2'] = 1015
     mod.args['plot_dir'] = str(tmpdir.mkdir('plotoutput'))
@@ -114,12 +126,10 @@ def test_resplot(render,montage_pointmatches,raw_stack,tmpdir):
     mod.run()
     assert os.path.exists(mod.outputname)
     fig = plt.figure(12)
-    print(len(mod.p))
-    print(len(mod.q))
     mod.make_lc_plots(fig)
 
 
-def test_trplot(render, montage_pointmatches, raw_stack,tmpdir):
+def test_trplot(render, montage_pointmatches, raw_stack, tmpdir):
     p = copy.deepcopy(montage_parameters)
     p['input_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
@@ -131,7 +141,8 @@ def test_trplot(render, montage_pointmatches, raw_stack,tmpdir):
     assert os.path.exists(mod.outputname)
 
 
-def test_resplot_zoff(render, montage_pointmatches, raw_stack_offset_z, tmpdir):
+def test_resplot_zoff(
+        render, montage_pointmatches, raw_stack_offset_z, tmpdir):
     p = copy.deepcopy(montage_parameters)
     p['input_stack']['name'] = raw_stack_offset_z
     p['output_stack']['name'] = raw_stack_offset_z

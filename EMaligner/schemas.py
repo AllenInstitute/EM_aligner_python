@@ -53,9 +53,11 @@ class db_params(ArgSchema):
     db_interface = String(
         default='mongo')
     client_scripts = String(
-        default='/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts',
+        default=("/allen/aibs/pipeline/image_processing/"
+                 "volume_assembly/render-jars/production/scripts"),
         required=False,
         description='render bin path')
+
     @pre_load
     def tolist(self, data):
         if not isinstance(data['name'], list):
@@ -64,7 +66,7 @@ class db_params(ArgSchema):
 
 class hdf5_options(ArgSchema):
     output_dir = String(
-        default='/allen/programs/celltypes/workgroups/em-connectomics/danielk/solver_exchange/python/')
+        default="")
     chunks_per_file = Int(
         default=5,
         description=("how many sections with upward-looking"
@@ -84,12 +86,12 @@ class matrix_assembly(ArgSchema):
         default=None,
         missing=None,
         description='explicitly set solver weights by depth')
-    
+
     @pre_load
     def tolist(self, data):
         if not isinstance(data['depth'], list):
             data['depth'] = np.arange(0, data['depth'] + 1).tolist()
-    
+
     @post_load
     def check_explicit(self, data):
         if data['explicit_weight_by_depth'] is not None:
@@ -161,10 +163,12 @@ class stack(db_params):
     use_rest = Boolean(
         default=False,
         description="passed as arg in import_tilespecs_parallel")
+
     @post_load
     def validate_data(self, data):
         if len(data['name']) != 1:
-            raise ValidationError("only one input or output stack name is allowed")
+            raise ValidationError("only one input or output "
+                                  "stack name is allowed")
 
 
 class EMA_Schema(ArgSchema):

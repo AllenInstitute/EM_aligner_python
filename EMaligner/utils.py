@@ -49,7 +49,8 @@ def make_dbconnection(collection, which='tile'):
             mongo_collection_name = [(
                     collection['owner'] +
                     '__' + name) for name in collection['name']]
-            dbconnection = [client.match[name] for name in mongo_collection_name]
+            dbconnection = [
+                    client.match[name] for name in mongo_collection_name]
     elif collection['db_interface'] == 'render':
         dbconnection = renderapi.connect(**collection)
     else:
@@ -195,12 +196,13 @@ def get_matches(iId, jId, collection, dbconnection):
                         render=dbconnection))
         else:
             for name in collection['name']:
-                mlist.append(renderapi.pointmatch.get_matches_from_group_to_group(
-                        name,
-                        iId,
-                        jId,
-                        owner=collection['owner'],
-                        render=dbconnection))
+                mlist.append(
+                        renderapi.pointmatch.get_matches_from_group_to_group(
+                            name,
+                            iId,
+                            jId,
+                            owner=collection['owner'],
+                            render=dbconnection))
         matches = np.concatenate(mlist)
     if collection['db_interface'] == 'mongo':
         mlist = []

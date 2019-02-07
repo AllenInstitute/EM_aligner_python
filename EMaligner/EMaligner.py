@@ -56,8 +56,6 @@ def calculate_processing_chunk(fargs):
             args['pointmatch'],
             dbconnection)
 
-    #print(len(matches))
-
     if len(matches) == 0:
         return chunk
 
@@ -94,7 +92,6 @@ def calculate_processing_chunk(fargs):
                 pair['section2'],
                 time.time() - t0,
                 args['pointmatch']['db_interface']))
-
 
     t0 = time.time()
     # for the given point matches, these are the indices in tile_ids
@@ -134,7 +131,6 @@ def calculate_processing_chunk(fargs):
             pair['z1'],
             pair['z2'],
             args['matrix_assembly'])
-
 
     for k in np.arange(nmatches):
         # create the CSR sub-matrix for this tile pair

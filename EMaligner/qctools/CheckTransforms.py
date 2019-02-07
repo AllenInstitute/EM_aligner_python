@@ -115,7 +115,7 @@ class CheckTransforms(argschema.ArgSchemaParser):
         stack_dbconnection = make_dbconnection(stack)
 
         tspecs = renderapi.tilespec.get_tile_specs_from_z(
-                stack['name'],
+                stack['name'][0],
                 int(float(z1)),
                 render=stack_dbconnection)
         tids = []
@@ -135,7 +135,7 @@ class CheckTransforms(argschema.ArgSchemaParser):
             z1,
             stack['owner'],
             stack['project'],
-            stack['name']))
+            stack['name'][0]))
         print("average shear: %0.2f" % tpatches[1].mean())
         print("average rotation: %0.2f" % tpatches[2].mean())
         print("average xscale: %0.2f" % tpatches[3].mean())
@@ -160,7 +160,7 @@ class CheckTransforms(argschema.ArgSchemaParser):
 
             fname = '%s/transforms_%s_%d.pdf' % (
                     self.args['plot_dir'],
-                    stack['name'],
+                    stack['name'][0],
                     z1)
             pdf = PdfPages(fname)
             pdf.savefig(fig)

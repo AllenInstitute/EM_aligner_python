@@ -12,17 +12,13 @@ import copy
 
 dname = os.path.dirname(os.path.abspath(__file__))
 FILE_ROUGH_TILES = os.path.join(
-        dname,
-        'test_files/rough_input_tiles.json')
+        dname, 'test_files', 'rough_input_tiles.json')
 FILE_ROUGH_PMS = os.path.join(
-        dname,
-        'test_files/rough_input_matches.json')
+        dname, 'test_files', 'rough_input_matches.json')
 FILE_ROUGH_PMS_S1 = os.path.join(
-        dname,
-        'test_files/rough_input_matches_split1.json')
+        dname, 'test_files', 'rough_input_matches_split1.json')
 FILE_ROUGH_PMS_S2 = os.path.join(
-        dname,
-        'test_files/rough_input_matches_split2.json')
+        dname, 'test_files', 'rough_input_matches_split2.json')
 
 
 @pytest.fixture(scope='module')

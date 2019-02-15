@@ -13,14 +13,11 @@ import os
 
 dname = os.path.dirname(os.path.abspath(__file__))
 FILE_PMS = os.path.join(
-        dname,
-        'test_files/montage_pointmatches.json')
+        dname, 'test_files', 'montage_pointmatches.json')
 FILE_PMS_S1 = os.path.join(
-        dname,
-        'test_files/montage_pointmatches_split1.json')
+        dname, 'test_files', 'montage_pointmatches_split1.json')
 FILE_PMS_S2 = os.path.join(
-        dname,
-        'test_files/montage_pointmatches_split2.json')
+        dname, 'test_files', 'ontage_pointmatches_split2.json')
 
 
 @pytest.fixture(scope='module')

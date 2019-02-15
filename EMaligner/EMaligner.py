@@ -60,17 +60,12 @@ def calculate_processing_chunk(fargs):
         return chunk
 
     # extract IDs for fast checking
-    pids = []
-    qids = []
-    for m in matches:
-        pids.append(m['pId'])
-        qids.append(m['qId'])
-    pids = np.array(pids)
-    qids = np.array(qids)
+    pids = np.array([m['pId'] for m in matches])
+    qids = np.array([m['qId'] for m in matches])
 
     # remove matches that don't have both IDs in tile_ids
     instack = np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids)
-    matches = matches[instack]
+    matches = [im for im, ii in zip(matches, instack) if ii]
     pids = pids[instack]
     qids = qids[instack]
 

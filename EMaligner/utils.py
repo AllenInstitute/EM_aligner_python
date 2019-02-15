@@ -185,32 +185,30 @@ def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
 
 
 def get_matches(iId, jId, collection, dbconnection):
+    matches = []
     if collection['db_interface'] == 'render':
-        mlist = []
         if iId == jId:
             for name in collection['name']:
-                mlist.append(renderapi.pointmatch.get_matches_within_group(
+                matches.extend(renderapi.pointmatch.get_matches_within_group(
                         name,
                         iId,
                         owner=collection['owner'],
                         render=dbconnection))
         else:
             for name in collection['name']:
-                mlist.append(
+                matches.extend(
                         renderapi.pointmatch.get_matches_from_group_to_group(
                             name,
                             iId,
                             jId,
                             owner=collection['owner'],
                             render=dbconnection))
-        matches = np.concatenate(mlist)
     if collection['db_interface'] == 'mongo':
-        mlist = []
         for dbconn in dbconnection:
             cursor = dbconn.find(
                     {'pGroupId': iId, 'qGroupId': jId},
                     {'_id': False})
-            mlist.append(np.array(list(cursor)))
+            matches.extend(list(cursor))
             if iId != jId:
                 # in principle, this does nothing if zi < zj, but, just in case
                 cursor = dbconn.find(
@@ -218,8 +216,7 @@ def get_matches(iId, jId, collection, dbconnection):
                             'pGroupId': jId,
                             'qGroupId': iId},
                         {'_id': False})
-                mlist.append(np.array(list(cursor)))
-        matches = np.concatenate(mlist)
+                matches.extend(list(cursor))
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
     if len(matches) == 0:

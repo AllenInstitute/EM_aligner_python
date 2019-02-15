@@ -17,7 +17,7 @@ FILE_PMS = os.path.join(
 FILE_PMS_S1 = os.path.join(
         dname, 'test_files', 'montage_pointmatches_split1.json')
 FILE_PMS_S2 = os.path.join(
-        dname, 'test_files', 'ontage_pointmatches_split2.json')
+        dname, 'test_files', 'montage_pointmatches_split2.json')
 
 
 @pytest.fixture(scope='module')

@@ -7,12 +7,20 @@ from EMaligner import EMaligner
 import json
 from marshmallow.exceptions import ValidationError
 import copy
+import os
 
 # https://www.peterbe.com/plog/be-careful-with-using-dict-to-create-a-copy
 
-FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
-FILE_PMS_S1 = './integration_tests/test_files/montage_pointmatches_split1.json'
-FILE_PMS_S2 = './integration_tests/test_files/montage_pointmatches_split2.json'
+dname = os.path.dirname(os.path.abspath(__file__))
+FILE_PMS = os.path.join(
+        dname,
+        'test_files/montage_pointmatches.json')
+FILE_PMS_S1 = os.path.join(
+        dname,
+        'test_files/montage_pointmatches_split1.json')
+FILE_PMS_S2 = os.path.join(
+        dname,
+        'test_files/montage_pointmatches_split2.json')
 
 
 @pytest.fixture(scope='module')

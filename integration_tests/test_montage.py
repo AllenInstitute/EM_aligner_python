@@ -7,10 +7,17 @@ from EMaligner import EMaligner
 import json
 from marshmallow.exceptions import ValidationError
 import copy
+import os
 
 # https://www.peterbe.com/plog/be-careful-with-using-dict-to-create-a-copy
 
-FILE_PMS = './integration_tests/test_files/montage_pointmatches.json'
+dname = os.path.dirname(os.path.abspath(__file__))
+FILE_PMS = os.path.join(
+        dname, 'test_files', 'montage_pointmatches.json')
+FILE_PMS_S1 = os.path.join(
+        dname, 'test_files', 'montage_pointmatches_split1.json')
+FILE_PMS_S2 = os.path.join(
+        dname, 'test_files', 'montage_pointmatches_split2.json')
 
 
 @pytest.fixture(scope='module')
@@ -48,10 +55,25 @@ def montage_pointmatches(render):
     pms_from_json = []
     with open(FILE_PMS, 'r') as f:
         pms_from_json = json.load(f)
-
     renderapi.pointmatch.import_matches(
             test_montage_collection, pms_from_json, render=render)
     yield test_montage_collection
+
+
+@pytest.fixture(scope='module')
+def split_montage_pointmatches(render):
+    test_montage_collection1 = 'montage_collection_split_1'
+    test_montage_collection2 = 'montage_collection_split_2'
+    pms_from_json = []
+    with open(FILE_PMS_S1, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_montage_collection1, pms_from_json, render=render)
+    with open(FILE_PMS_S2, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_montage_collection2, pms_from_json, render=render)
+    yield [test_montage_collection1, test_montage_collection2]
 
 
 @pytest.fixture(scope='module')
@@ -85,7 +107,7 @@ def test_weighted(
 
 def one_solve(parameters, tf, fullsize=False, order=2,
               precision=1e-7, error=200):
-    p = dict(parameters)
+    p = copy.deepcopy(parameters)
     p['output_stack']['name'] = p['input_stack']['name'] + 'solved_' + tf
     p['transformation'] = tf
     p['fullsize'] = fullsize
@@ -94,6 +116,15 @@ def one_solve(parameters, tf, fullsize=False, order=2,
     mod.run()
     assert mod.results['precision'] < precision
     assert mod.results['error'] < error
+
+
+def test_multi_pm(
+        render, split_montage_pointmatches, loading_raw_stack, tmpdir):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    # the following is now a list
+    p['pointmatch']['name'] = split_montage_pointmatches
+    one_solve(p, 'AffineModel', fullsize=False)
 
 
 def test_different_transforms(
@@ -130,12 +161,13 @@ def test_poly_validation():
             'default_lambda': 1000.0,
             'translation_factor': 1e-5,
             'poly_factors': [1e-5, 1000.0, 1e6, 1e3]}
-    p['output_stack']['name'] = p['input_stack']['name'] + 'solved_' + 'poly_validate'
+    p['output_stack']['name'] = \
+        p['input_stack']['name'] + 'solved_' + 'poly_validate'
     p['transformation'] = 'Polynomial2DTransform'
     p['poly_order'] = 2
     with pytest.raises(ValidationError):
         # because poly_factors should be length 3
-        mod = EMaligner.EMaligner(input_data=p, args=[])
+        EMaligner.EMaligner(input_data=p, args=[])
 
 
 @pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])

@@ -35,7 +35,7 @@ class CheckPointMatches(argschema.ArgSchemaParser):
         yc = []
         tid = []
         tspecs = renderapi.tilespec.get_tile_specs_from_z(
-                stack['name'],
+                stack['name'][0],
                 float(z),
                 render=dbconnection)
         for k in np.arange(len(tspecs)):
@@ -70,11 +70,11 @@ class CheckPointMatches(argschema.ArgSchemaParser):
         stack['db_interface'] = 'render'
         render = renderapi.connect(**stack)
         iId = self.get_sectionId(
-                stack['name'],
+                stack['name'][0],
                 z1,
                 render)
         jId = self.get_sectionId(
-                stack['name'],
+                stack['name'][0],
                 z2,
                 render)
         self.pm = get_matches(iId, jId, collection, dbconnection)
@@ -83,7 +83,7 @@ class CheckPointMatches(argschema.ArgSchemaParser):
             z1,
             z2,
             collection['owner'],
-            collection['name']))
+            collection['name'][0]))
         if not plot:
             return
 

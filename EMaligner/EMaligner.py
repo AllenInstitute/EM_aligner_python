@@ -60,17 +60,12 @@ def calculate_processing_chunk(fargs):
         return chunk
 
     # extract IDs for fast checking
-    pids = []
-    qids = []
-    for m in matches:
-        pids.append(m['pId'])
-        qids.append(m['qId'])
-    pids = np.array(pids)
-    qids = np.array(qids)
+    pids = np.array([m['pId'] for m in matches])
+    qids = np.array([m['qId'] for m in matches])
 
     # remove matches that don't have both IDs in tile_ids
     instack = np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids)
-    matches = matches[instack]
+    matches = np.array(matches)[instack].tolist()
     pids = pids[instack]
     qids = qids[instack]
 
@@ -92,7 +87,6 @@ def calculate_processing_chunk(fargs):
                 pair['section2'],
                 time.time() - t0,
                 args['pointmatch']['db_interface']))
-
 
     t0 = time.time()
     # for the given point matches, these are the indices in tile_ids
@@ -132,7 +126,6 @@ def calculate_processing_chunk(fargs):
             pair['z1'],
             pair['z2'],
             args['matrix_assembly'])
-
 
     for k in np.arange(nmatches):
         # create the CSR sub-matrix for this tile pair
@@ -187,12 +180,16 @@ def calculate_processing_chunk(fargs):
 
 
 def tilepair_weight(z1, z2, matrix_assembly):
-    if z1 == z2:
-        tp_weight = matrix_assembly['montage_pt_weight']
+    if matrix_assembly['explicit_weight_by_depth'] is not None:
+        ind = matrix_assembly['depth'].index(int(np.abs(z1 - z2)))
+        tp_weight = matrix_assembly['explicit_weight_by_depth'][ind]
     else:
-        tp_weight = matrix_assembly['cross_pt_weight']
-        if matrix_assembly['inverse_dz']:
-            tp_weight = tp_weight/np.abs(z2-z1+1)
+        if z1 == z2:
+            tp_weight = matrix_assembly['montage_pt_weight']
+        else:
+            tp_weight = matrix_assembly['cross_pt_weight']
+            if matrix_assembly['inverse_dz']:
+                tp_weight = tp_weight/(np.abs(z2 - z1) + 1)
     return tp_weight
 
 
@@ -221,7 +218,7 @@ class EMaligner(argschema.ArgSchemaParser):
         if self.args['output_mode'] == 'stack':
             ingestconn = make_dbconnection(self.args['output_stack'])
             renderapi.stack.create_stack(
-                self.args['output_stack']['name'],
+                self.args['output_stack']['name'][0],
                 render=ingestconn)
 
         # montage
@@ -232,7 +229,7 @@ class EMaligner(argschema.ArgSchemaParser):
             conn = make_dbconnection(self.args['input_stack'])
             self.args['input_stack']['db_interface'] = tmp
             z_in_stack = renderapi.stack.get_z_values_for_stack(
-                self.args['input_stack']['name'],
+                self.args['input_stack']['name'][0],
                 render=conn)
             newzvals = []
             for z in zvals:
@@ -250,7 +247,7 @@ class EMaligner(argschema.ArgSchemaParser):
         if ingestconn is not None:
             if self.args['close_stack']:
                 renderapi.stack.set_stack_state(
-                    self.args['output_stack']['name'],
+                    self.args['output_stack']['name'][0],
                     state='COMPLETE',
                     render=ingestconn)
         logger.info(' total time: %0.1f' % (time.time() - t0))
@@ -305,7 +302,7 @@ class EMaligner(argschema.ArgSchemaParser):
         if self.args['output_mode'] == 'stack':
             write_to_new_stack(
                 self.args['input_stack'],
-                self.args['output_stack']['name'],
+                self.args['output_stack']['name'][0],
                 self.args['transformation'],
                 self.args['fullsize_transform'],
                 self.args['poly_order'],
@@ -486,7 +483,8 @@ class EMaligner(argschema.ArgSchemaParser):
         # create all possible pairs, given zvals and depth
         pairs = []
         for i in range(len(zvals)):
-            for j in range(0, self.args['matrix_assembly']['depth'] + 1):
+            for j in self.args['matrix_assembly']['depth']:
+                # need to get rid of duplicates
                 z2 = zvals[i] + j
                 if z2 in zvals:
                     ind2 = np.argwhere(zvals == z2)[0][0]

@@ -57,13 +57,13 @@ class CheckResiduals(argschema.ArgSchemaParser):
 
         tspecs = [
                 renderapi.tilespec.get_tile_specs_from_z(
-                    self.args['output_stack']['name'],
+                    self.args['output_stack']['name'][0],
                     float(self.args['z1']),
                     render=stack_dbconnection)]
         if self.args['z1'] != self.args['z2']:
             tspecs.append(
                     renderapi.tilespec.get_tile_specs_from_z(
-                        self.args['output_stack']['name'],
+                        self.args['output_stack']['name'][0],
                         float(self.args['z2']),
                         render=stack_dbconnection))
         sectionIds = []
@@ -82,7 +82,7 @@ class CheckResiduals(argschema.ArgSchemaParser):
             sectionIds = tmp
 
         matches = renderapi.pointmatch.get_matches_from_group_to_group(
-                self.args['pointmatch']['name'],
+                self.args['pointmatch']['name'][0],
                 sectionIds[0],
                 sectionIds[1],
                 render=match_dbconnection)
@@ -107,8 +107,8 @@ class CheckResiduals(argschema.ArgSchemaParser):
 
         self.ident = 'owner: %s' % self.args['output_stack']['owner']
         self.ident += '\nproject: %s' % self.args['output_stack']['project']
-        self.ident += '\nstack: %s' % self.args['output_stack']['name']
-        self.ident += '\n'+'collection: %s' % self.args['pointmatch']['name']
+        self.ident += '\nstack: %s' % self.args['output_stack']['name'][0]
+        self.ident += '\n'+'collection: %s' % self.args['pointmatch']['name'][0]
         self.ident += '\n'+'z1,z2: %d,%d' % (self.args['z1'], self.args['z2'])
 
     def make_plot(
@@ -242,8 +242,8 @@ class CheckResiduals(argschema.ArgSchemaParser):
         if self.args['savefig']:
             self.outputname = '%s/residuals_%s_%s_%d_%d.pdf' % (
                     self.args['plot_dir'],
-                    self.args['output_stack']['name'],
-                    self.args['pointmatch']['name'],
+                    self.args['output_stack']['name'][0],
+                    self.args['pointmatch']['name'][0],
                     self.args['z1'],
                     self.args['z2'])
             pdf = PdfPages(self.outputname)

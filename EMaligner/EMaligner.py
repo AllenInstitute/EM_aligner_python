@@ -114,6 +114,11 @@ def calculate_processing_chunk(fargs):
     data = np.zeros(nd).astype('float64')
     indices = np.zeros(nd).astype('int64')
     indptr = np.zeros(ni + 1).astype('int64')
+    if transform.fullsize:
+        b = np.zeros((ni, 1)).astype('int64')
+    else:
+        b = np.zeros((ni, 2)).astype('int64')
+
     weights = np.zeros(ni).astype('float64')
 
     # see definition of CSR format, wikipedia for example
@@ -129,7 +134,7 @@ def calculate_processing_chunk(fargs):
 
     for k in np.arange(nmatches):
         # create the CSR sub-matrix for this tile pair
-        d, ind, iptr, wts, npts = transform.CSR_from_tilepair(
+        d, ind, iptr, wts, ib, npts = transform.CSR_from_tilepair(
             matches[k],
             pinds[k],
             qinds[k],
@@ -156,6 +161,7 @@ def calculate_processing_chunk(fargs):
         global_rowind = \
             np.arange(npts * transform.rows_per_ptmatch) + nrows
         weights[global_rowind] = wts * tilepair_weightfac
+        b[global_rowind, :] = ib
         indptr[global_rowind + 1] = iptr + indptr[nrows]
 
         nrows += wts.size
@@ -166,15 +172,17 @@ def calculate_processing_chunk(fargs):
     indices = indices[0: nrows * transform.nnz_per_row]
     indptr = indptr[0: nrows + 1]
     weights = weights[0: nrows]
+    b = b[0: nrows, :]
 
     chunk['data'] = np.copy(data)
     chunk['weights'] = np.copy(weights)
     chunk['indices'] = np.copy(indices)
     chunk['indptr'] = np.copy(indptr)
+    chunk['b'] = np.copy(b)
     chunk['zlist'].append(pair['z1'])
     chunk['zlist'].append(pair['z2'])
     chunk['zlist'] = np.array(chunk['zlist'])
-    del data, indices, indptr, weights
+    del data, indices, indptr, weights, b
 
     return chunk
 
@@ -293,7 +301,8 @@ class EMaligner(argschema.ArgSchemaParser):
                     assemble_result['A'],
                     assemble_result['weights'],
                     assemble_result['reg'],
-                    assemble_result['tforms'])
+                    assemble_result['tforms'],
+                    assemble_result['b'])
             logger.info('\n' + message)
             if assemble_result['A'] is not None:
                 results['Ashape'] = assemble_result['A'].shape
@@ -440,6 +449,7 @@ class EMaligner(argschema.ArgSchemaParser):
                 from_stack['sectionIds'])
 
         assemble_result['A'] = CSR_A.pop('A')
+        assemble_result['b'] = CSR_A.pop('b')
         assemble_result['weights'] = CSR_A.pop('weights')
 
         # some book-keeping if there were some unused tiles
@@ -574,6 +584,9 @@ class EMaligner(argschema.ArgSchemaParser):
             data = np.concatenate([
                 results[i]['data'] for i in range(len(results))
                 if results[i]['data'] is not None]).astype('float64')
+            b = np.concatenate([
+                results[i]['b'] for i in range(len(results))
+                if results[i]['data'] is not None]).astype('float64')
             weights = np.concatenate([
                 results[i]['weights'] for i in range(len(results))
                 if results[i]['data'] is not None]).astype('float64')
@@ -593,11 +606,12 @@ class EMaligner(argschema.ArgSchemaParser):
             outw = sparse.eye(weights.size, format='csr')
             outw.data = weights
             func_result['A'] = A
+            func_result['b'] = b
             func_result['weights'] = outw
 
         return func_result
 
-    def solve_or_not(self, A, weights, reg, filt_tforms):
+    def solve_or_not(self, A, weights, reg, filt_tforms, b):
         t0 = time.time()
         # not
         if self.args['output_mode'] in ['hdf5']:
@@ -619,6 +633,9 @@ class EMaligner(argschema.ArgSchemaParser):
         else:
             # regularized least squares
             # ensure symmetry of K
+            rhs = np.zeros_like(filt_tforms)
+            for i in range(b.shape[1]):
+                rhs[:, i] = A.transpose().dot(weights).dot(b[:, i])
             weights.data = np.sqrt(weights.data)
             rtWA = weights.dot(A)
             K = rtWA.transpose().dot(rtWA) + reg
@@ -633,15 +650,15 @@ class EMaligner(argschema.ArgSchemaParser):
                 # certain transforms have redundant matrices
                 # then applies the LU decomposition to
                 # the u and v transforms separately
-                Lm = reg.dot(filt_tforms[:, 0])
+                Lm = reg.dot(filt_tforms[:, 0]) + rhs[:, 0]
                 xu = solve(Lm)
-                erru = A.dot(xu)
+                erru = A.dot(xu) - b[:, 0]
                 precisionu = \
                     np.linalg.norm(K.dot(xu) - Lm) / np.linalg.norm(Lm)
 
-                Lm = reg.dot(filt_tforms[:, 1])
+                Lm = reg.dot(filt_tforms[:, 1]) + rhs[:, 1]
                 xv = solve(Lm)
-                errv = A.dot(xv)
+                errv = A.dot(xv) - b[:, 1]
                 precisionv = \
                     np.linalg.norm(K.dot(xv) - Lm) / np.linalg.norm(Lm)
                 precision = np.sqrt(precisionu ** 2 + precisionv ** 2)
@@ -654,9 +671,9 @@ class EMaligner(argschema.ArgSchemaParser):
                 # simpler case for similarity, or
                 # affine_fullsize, but 2x larger than affine
 
-                Lm = reg.dot(filt_tforms[:, 0])
+                Lm = reg.dot(filt_tforms[:, 0]) + rhs[:, 0]
                 x = solve(Lm)
-                err = A.dot(x)
+                err = A.dot(x) - b[:, 0]
                 precision = \
                     np.linalg.norm(K.dot(x) - Lm) / np.linalg.norm(Lm)
             del K, Lm

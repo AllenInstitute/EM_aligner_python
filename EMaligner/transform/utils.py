@@ -55,5 +55,5 @@ def arrays_for_tilepair(npts, rows_per_ptmatch, nnz_per_row):
     indices = np.zeros(nd).astype('int64')
     indptr = np.zeros(ni)
     weights = np.zeros(ni)
-    b = np.zeros(ni)
+    b = np.zeros((ni, 1))
     return data, indices, indptr, weights, b

@@ -31,6 +31,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         self.DOF_per_tile = (self.order + 1) * (self.order + 2)
         self.nnz_per_row = (self.order + 1) * (self.order + 2)
         self.rows_per_ptmatch = 1
+        self.fullsize = False
 
     def to_solve_vec(self, input_tform):
         n = int((self.order + 1) * (self.order + 2) / 2)

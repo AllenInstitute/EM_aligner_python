@@ -24,6 +24,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         self.DOF_per_tile = 2
         self.nnz_per_row = 2
         self.rows_per_ptmatch = 2
+        self.fullsize = True
 
     def to_solve_vec(self, input_tform):
         if isinstance(input_tform, renderapi.transform.AffineModel):

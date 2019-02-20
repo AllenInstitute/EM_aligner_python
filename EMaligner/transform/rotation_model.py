@@ -26,6 +26,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         self.DOF_per_tile = 1
         self.nnz_per_row = 2
         self.rows_per_ptmatch = 1
+        self.fullsize = True
 
     def to_solve_vec(self, input_tform):
         if isinstance(input_tform, renderapi.transform.AffineModel):
@@ -116,7 +117,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         # u=x+dx
         data[0 + stride] = 1.0
         data[1 + stride] = -1.0
-        b[0: npts] = np.array(newangs)
+        b[0: npts, 0] = np.array(newangs)
         uindices = np.array([
             tile_ind1 * self.DOF_per_tile,
             tile_ind2 * self.DOF_per_tile])

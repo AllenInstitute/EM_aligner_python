@@ -24,6 +24,7 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         self.DOF_per_tile = 4
         self.nnz_per_row = 6
         self.rows_per_ptmatch = 4
+        self.fullsize = True
 
     def to_solve_vec(self, input_tform):
         if isinstance(input_tform, renderapi.transform.AffineModel):

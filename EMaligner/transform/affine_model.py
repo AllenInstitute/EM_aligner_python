@@ -203,4 +203,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         indptr[0: npts] = np.arange(1, npts + 1) * self.nnz_per_row
         weights[0: npts] = np.array(match['matches']['w'])[match_index]
 
+        # make 2 b's for half-size solve
+        b = np.hstack((b, b))
+
         return data, indices, indptr, weights, b, npts

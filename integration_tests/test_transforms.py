@@ -4,11 +4,13 @@ from EMaligner.transform.transform import AlignerTransform
 from EMaligner.transform.affine_model import AlignerAffineModel
 from EMaligner.transform.similarity_model import AlignerSimilarityModel
 from EMaligner.transform.translation_model import AlignerTranslationModel
+from EMaligner.transform.rotation_model import AlignerRotationModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
 from EMaligner.transform.utils import (
         AlignerTransformException,
         ptpair_indices,
-        arrays_for_tilepair)
+        arrays_for_tilepair,
+        aff_matrix)
 from scipy.sparse import csr_matrix
 import numpy as np
 
@@ -54,6 +56,14 @@ def test_transform():
     rt = renderapi.transform.TranslationModel()
     t = AlignerTransform(transform=rt)
     assert(t.__class__ == AlignerTranslationModel)
+
+    # two ways to load rotation
+    t = AlignerTransform(name='RotationModel')
+    assert(t.__class__ == AlignerRotationModel)
+    del t
+    rt = renderapi.transform.AffineModel()
+    t = AlignerRotationModel(transform=rt)
+    assert(t.__class__ == AlignerRotationModel)
 
     # two ways to load polynomial
     t = AlignerTransform(name='Polynomial2DTransform')
@@ -106,14 +116,85 @@ def test_array_gen():
     assert weights.size == 200
 
 
-def example_match(npts):
+def example_match(npts, scale=1000):
     match = {}
     match['matches'] = {
             "w": list(np.ones(npts)),
-            "p": [list(np.random.randn(npts)), list(np.random.randn(npts))],
-            "q": [list(np.random.randn(npts)), list(np.random.randn(npts))]
+            "p": [
+                list(np.random.randn(npts) * scale),
+                list(np.random.randn(npts) * scale)],
+            "q": [
+                list(np.random.randn(npts) * scale),
+                list(np.random.randn(npts) * scale)]
             }
     return match
+
+
+def test_rotation_model():
+    # can't do this
+    rt = renderapi.transform.Polynomial2DTransform()
+    with pytest.raises(AlignerTransformException):
+        t = AlignerRotationModel(transform=rt)
+
+    # make CSR
+    t = AlignerRotationModel()
+    match = example_match(100)
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    indptr = np.insert(indptr, 0, 0)
+    c = csr_matrix((data, indices, indptr))
+    assert c.check_format() is None
+    # roation can filtr some points where atan2 is too variant
+    assert weights.size <= 100*t.rows_per_ptmatch
+    assert npts <= 100
+    assert not np.any(np.isclose(b, 0))
+
+    # make CSR zero weights
+    t = AlignerRotationModel()
+    match = example_match(100)
+    match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
+            match, 1, 2, 5, 500, True)
+    assert data is None
+
+    # minimum size
+    t = AlignerRotationModel()
+    match = example_match(100)
+    data, indices, indptr, weights, b, npts = t.CSR_from_tilepair(
+            match, 1, 2, 200, 500, True)
+    assert data is None
+
+    # to vec
+    rt = renderapi.transform.AffineModel()
+    t = AlignerRotationModel()
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([0.0]).reshape(1, 1))
+    rt = renderapi.transform.AffineModel()
+    rt.M = aff_matrix(0.0123, offs=[0.0, 0.0])
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([0.0123]).reshape(1, 1))
+    rt = renderapi.transform.Polynomial2DTransform(identity=True)
+    v = t.to_solve_vec(rt)
+    assert np.all(v == np.array([0.0, 0.0]))
+    rt = renderapi.transform.NonLinearCoordinateTransform()
+    with pytest.raises(AlignerTransformException):
+        v = t.to_solve_vec(rt)
+
+    # from vec
+    vec = np.random.rand(6) * 0.15
+    tforms = t.from_solve_vec(vec)
+    assert len(tforms) == 6
+    for i in range(6):
+        am = renderapi.transform.AffineModel()
+        am.M = aff_matrix(vec[i], offs = [0.0, 0.0])
+        assert np.all(np.isclose(tforms[i].M, am.M))
+
+    # reg
+    rdict = {
+            "default_lambda": 5.0,
+            "translation_factor": 0.1}
+    r = t.create_regularization(96, rdict)
+    assert np.all(r.data == 5.0)
 
 
 def test_translation_model():

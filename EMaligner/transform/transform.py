@@ -3,6 +3,7 @@ from .affine_model import AlignerAffineModel
 from .similarity_model import AlignerSimilarityModel
 from .polynomial_model import AlignerPolynomial2DTransform
 from .translation_model import AlignerTranslationModel
+from .rotation_model import AlignerRotationModel
 
 
 class AlignerTransform(object):
@@ -36,6 +37,9 @@ class AlignerTransform(object):
         elif (name == 'TranslationModel'):
             self.__class__ = AlignerTranslationModel
             AlignerTranslationModel.__init__(self, transform=transform)
+        elif (name == 'RotationModel'):
+            self.__class__ = AlignerRotationModel
+            AlignerRotationModel.__init__(self, transform=transform)
         elif (name == 'Polynomial2DTransform'):
             self.__class__ = AlignerPolynomial2DTransform
             AlignerPolynomial2DTransform.__init__(

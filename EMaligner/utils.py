@@ -226,7 +226,7 @@ def get_matches(iId, jId, collection, dbconnection):
     return matches
 
 
-def write_chunk_to_file(fname, c, file_weights):
+def write_chunk_to_file(fname, c, b, file_weights):
     fcsr = h5py.File(fname, "w")
 
     indptr_dset = fcsr.create_dataset(
@@ -253,6 +253,23 @@ def write_chunk_to_file(fname, c, file_weights):
             (file_weights.size,),
             dtype='float64')
     weights_dset[:] = file_weights
+
+    for j in np.arange(b.shape[1]):
+        dsetname = 'b_%d' % j
+        dset = fcsr.create_dataset(
+                dsetname,
+                (b[:, j].size,),
+                dtype='float64')
+        dset[:] = b[:, j]
+
+    # a list of b indices (clunky, but works for PETSc to count)
+    blist = np.arange(b.shape[1]).astype('int32')
+    dset = fcsr.create_dataset(
+            "b_list",
+            (blist.size, 1),
+            dtype='int32')
+    dset[:] = blist.reshape(blist.size, 1)
+
     fcsr.close()
 
     logger2.info(
@@ -287,7 +304,7 @@ def write_reg_and_tforms(
                     (tforms[:, j].size,),
                     dtype='float64')
             dset[:] = tforms[:, j]
-
+        
         # a list of transform indices (clunky, but works for PETSc to count)
         tlist = np.arange(tforms.shape[1]).astype('int32')
         dset = f.create_dataset(
@@ -341,8 +358,6 @@ def write_reg_and_tforms(
                     (vals.size, 1),
                     dtype='int64')
             dset[:] = vals.reshape(vals.size, 1)
-
-        print('wrote %s' % fname)
 
 
 def get_stderr_stdout(outarg):

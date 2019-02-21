@@ -96,7 +96,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         # u=x+dx
         data[0 + stride] = 1.0
         data[1 + stride] = -1.0
-        b[0: npts] = qx - px
+        b[0: npts, 0] = qx - px
         uindices = np.array([
             tile_ind1 * self.DOF_per_tile,
             tile_ind2 * self.DOF_per_tile])
@@ -104,7 +104,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         # v=y+dy
         data[0 + stride + npts * self.nnz_per_row] = 1.0
         data[1 + stride + npts * self.nnz_per_row] = -1.0
-        b[npts: 2 * npts] = qy - py
+        b[npts: 2 * npts, 0] = qy - py
         vindices = np.array([
             tile_ind1 * self.DOF_per_tile + 1,
             tile_ind2 * self.DOF_per_tile + 1])

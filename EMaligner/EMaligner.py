@@ -331,6 +331,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
     assemble_struct = {
         'A': None,
+        'b': None,
         'weights': None,
         'reg': None,
         'tspecs': None,
@@ -356,7 +357,7 @@ class EMaligner(argschema.ArgSchemaParser):
                 f.get('used_tile_ids')[()]).astype('U')
             assemble_result['unused_tids'] = np.array(
                 f.get('unused_tile_ids')[()]).astype('U')
-            k = 0
+            k=0
             assemble_result['tforms'] = []
             while True:
                 name = 'transforms_%d' % k
@@ -389,6 +390,7 @@ class EMaligner(argschema.ArgSchemaParser):
         if read_data:
             data = np.array([]).astype('float64')
             weights = np.array([]).astype('float64')
+            ib = [np.array([]), np.array([])]
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
 
@@ -406,9 +408,24 @@ class EMaligner(argschema.ArgSchemaParser):
                             indptr,
                             f.get('indptr')[()][1:] + indptr[-1])
                     weights = np.append(weights, f.get('weights')[()])
+                    
+                    k = 0
+                    while True:
+                        name = 'b_%d' % k
+                        if name in f.keys():
+                            ib[k] = np.append(ib[k], f.get(name)[()])
+                            k += 1
+                        else:
+                            break
+
                     logger.info('  %s read' % fname)
 
             assemble_result['A'] = csr_matrix((data, indices, indptr))
+            assemble_result['b'] = ib[0].reshape(-1, 1)
+            if ib[1].size > 0:
+                assemble_result['b'] = np.hstack((
+                    assemble_result['b'],
+                    ib[1].reshape(-1, 1)))
 
             outw = sparse.eye(weights.size, format='csr')
             outw.data = weights
@@ -519,11 +536,13 @@ class EMaligner(argschema.ArgSchemaParser):
                 ckey = 'indptr'
                 lastptr = c0[ckey][-1]
                 c0[ckey] = np.append(c0[ckey], c[ckey][1:] + lastptr)
+                c0['b'] = np.append(c0['b'], c['b'], axis=0)
         return c0
 
     def create_CSR_A(self, tile_ids, zvals, sectionIds):
         func_result = {
             'A': None,
+            'b': None,
             'weights': None,
             'tiles_used': None,
             'metadata': None}
@@ -578,6 +597,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         write_chunk_to_file(
                             fname,
                             c,
+                            cat_chunk['b'],
                             cat_chunk['weights']))
 
         else:

@@ -28,7 +28,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         self.rows_per_ptmatch = 1
         self.fullsize = True
 
-    def to_solve_vec(self, input_tform):
+    def to_solve_vec(self):
         if isinstance(input_tform, renderapi.transform.AffineModel):
             vec = np.array([input_tform.rotation])
         elif isinstance(
@@ -43,28 +43,23 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
             raise AlignerTransformException(
                     "no method to represent input tform %s in solve as %s" % (
                         input_tform.__class__, self.__class__))
-
         vec = vec.reshape((vec.size, 1))
         return vec
 
     def from_solve_vec(self, vec):
-        tforms = []
-        n = vec.size
-        for i in range(n):
-            self.M = aff_matrix(vec[i], offs=[0.0, 0.0])
-            tforms.append(
-                    renderapi.transform.AffineModel(
-                        json=self.to_dict()))
-        return tforms
+        newr = aff_matrix(vec[0], offs=[0.0, 0.0])
+        self.M = newr.dot(self.M)
 
-    def create_regularization(self, sz, regdict):
+    @staticmethod
+    def create_regularization(sz, regdict):
         reg = np.ones(sz).astype('float64') * regdict['default_lambda']
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
         return outr
 
+    @staticmethod
     def CSR_from_tilepair(
-            self, match, tile_ind1, tile_ind2,
+            match, tile_ind1, tile_ind2,
             nmin, nmax, choose_random):
         if np.all(np.array(match['matches']['w']) == 0):
             # zero weights
@@ -95,6 +90,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         match_index = match_index[rfilt == False]
          
         npts = match_index.size
+
         stride = np.arange(npts) * self.nnz_per_row
 
         # empty arrays
@@ -117,7 +113,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         # u=x+dx
         data[0 + stride] = 1.0
         data[1 + stride] = -1.0
-        b[0: npts, 0] = np.array(newangs)
+        b[0: npts, 0] = newangs
         uindices = np.array([
             tile_ind1 * self.DOF_per_tile,
             tile_ind2 * self.DOF_per_tile])

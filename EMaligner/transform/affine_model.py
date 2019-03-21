@@ -28,28 +28,14 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         if self.fullsize:
             self.rows_per_ptmatch = 2
 
-    def to_solve_vec(self, input_tform):
-        if isinstance(input_tform, renderapi.transform.AffineModel):
-            vec = np.array([
-                input_tform.M[0, 0],
-                input_tform.M[0, 1],
-                input_tform.M[0, 2],
-                input_tform.M[1, 0],
-                input_tform.M[1, 1],
-                input_tform.M[1, 2]])
-        elif isinstance(
-                input_tform, renderapi.transform.Polynomial2DTransform):
-            vec = np.array([
-                input_tform.params[0, 1],
-                input_tform.params[0, 2],
-                input_tform.params[0, 0],
-                input_tform.params[1, 1],
-                input_tform.params[1, 2],
-                input_tform.params[1, 0]])
-        else:
-            raise AlignerTransformException(
-                    "no method to represent input tform %s in solve as %s" % (
-                        input_tform.__class__, self.__class__))
+    def to_solve_vec(self):
+        vec = np.array([
+            self.M[0, 0],
+            self.M[0, 1],
+            self.M[0, 2],
+            self.M[1, 0],
+            self.M[1, 1],
+            self.M[1, 2]])
         if not self.fullsize:
             # split in half for half-size solve
             # transpose into Nx2

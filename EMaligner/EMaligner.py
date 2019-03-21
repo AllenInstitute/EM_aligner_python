@@ -2,15 +2,7 @@ import numpy as np
 import renderapi
 import argschema
 from .schemas import EMA_Schema
-from .utils import (
-    make_dbconnection,
-    get_tileids_and_tforms,
-    get_matches,
-    write_chunk_to_file,
-    write_reg_and_tforms,
-    write_to_new_stack,
-    EMalignerException,
-    logger2)
+import utils
 from .transform.transform import AlignerTransform
 import time
 import scipy.sparse as sparse
@@ -33,7 +25,7 @@ def calculate_processing_chunk(fargs):
     # set up for calling using multiprocessing pool
     [pair, zloc, args, tile_ids] = fargs
 
-    dbconnection = make_dbconnection(args['pointmatch'])
+    dbconnection = utils.make_dbconnection(args['pointmatch'])
     sorter = np.argsort(tile_ids)
 
     # this dict will get returned
@@ -50,7 +42,7 @@ def calculate_processing_chunk(fargs):
 
     # get point matches
     t0 = time.time()
-    matches = get_matches(
+    matches = utils.get_matches(
             pair['section1'],
             pair['section2'],
             args['pointmatch'],
@@ -207,7 +199,6 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def run(self):
         logger.setLevel(self.args['log_level'])
-        logger2.setLevel(self.args['log_level'])
         t0 = time.time()
         zvals = np.arange(
             self.args['first_section'],
@@ -216,7 +207,7 @@ class EMaligner(argschema.ArgSchemaParser):
         ingestconn = None
         # make a connection to the new stack
         if self.args['output_mode'] == 'stack':
-            ingestconn = make_dbconnection(self.args['output_stack'])
+            ingestconn = utils.make_dbconnection(self.args['output_stack'])
             renderapi.stack.create_stack(
                 self.args['output_stack']['name'][0],
                 render=ingestconn)
@@ -226,7 +217,7 @@ class EMaligner(argschema.ArgSchemaParser):
             # check for zvalues in stack
             tmp = self.args['input_stack']['db_interface']
             self.args['input_stack']['db_interface'] = 'render'
-            conn = make_dbconnection(self.args['input_stack'])
+            conn = utils.make_dbconnection(self.args['input_stack'])
             self.args['input_stack']['db_interface'] = tmp
             z_in_stack = renderapi.stack.get_z_values_for_stack(
                 self.args['input_stack']['name'][0],
@@ -425,20 +416,16 @@ class EMaligner(argschema.ArgSchemaParser):
     def assemble_from_db(self, zvals):
         assemble_result = dict(self.assemble_struct)
 
-        from_stack = get_tileids_and_tforms(
+        assemble_result['resolved'] = utils.get_resolved_tilespecs(
             self.args['input_stack'],
             self.args['transformation'],
+            self.args['n_parallel_jobs'],
             zvals,
             fullsize=self.args['fullsize_transform'],
             order=self.args['poly_order'])
-        assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
         # create A matrix in compressed sparse row (CSR) format
-        CSR_A = self.create_CSR_A(
-                from_stack['tids'],
-                from_stack['zvals'],
-                from_stack['sectionIds'])
-
+        CSR_A = self.create_CSR_A(assemble_result['resolved'])
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
 
@@ -479,21 +466,6 @@ class EMaligner(argschema.ArgSchemaParser):
 
         return assemble_result
 
-    def determine_zvalue_pairs(self, zvals, sectionIds):
-        # create all possible pairs, given zvals and depth
-        pairs = []
-        for i in range(len(zvals)):
-            for j in self.args['matrix_assembly']['depth']:
-                # need to get rid of duplicates
-                z2 = zvals[i] + j
-                if z2 in zvals:
-                    ind2 = np.argwhere(zvals == z2)[0][0]
-                    pairs.append({
-                        'z1': zvals[i],
-                        'z2': z2,
-                        'section1': sectionIds[i],
-                        'section2': sectionIds[ind2]})
-        return pairs
 
     def concatenate_chunks(self, chunks):
         i = 0
@@ -511,7 +483,35 @@ class EMaligner(argschema.ArgSchemaParser):
                 c0[ckey] = np.append(c0[ckey], c[ckey][1:] + lastptr)
         return c0
 
-    def create_CSR_A(self, tile_ids, zvals, sectionIds):
+
+    def concatenate_results(self, results):
+        result = {}
+        result['data'] = np.concatenate([
+            results[i]['data'] for i in range(len(results))
+            if results[i]['data'] is not None]).astype('float64')
+        result['weights'] = np.concatenate([
+            results[i]['weights'] for i in range(len(results))
+            if results[i]['data'] is not None]).astype('float64')
+        result['indices'] = np.concatenate([
+            results[i]['indices'] for i in range(len(results))
+            if results[i]['data'] is not None]).astype('int64')
+        result['zlist'] = np.concatenate([
+            results[i]['zlist'] for i in range(len(results))
+            if results[i]['data'] is not None])
+        # Pointers need to be handled differently,
+        # since you need to sum the arrays
+        result['indptr'] = [results[i]['indptr']
+                  for i in range(len(results))
+                  if results[i]['data'] is not None]
+        indptr_cumends = np.cumsum([i[-1] for i in result['indptr']])
+        result['indptr'] = np.concatenate(
+            [j if i == 0 else j[1:]+indptr_cumends[i-1] for i, j
+             in enumerate(result['indptr'])]).astype('int64')
+
+        return result
+
+
+    def create_CSR_A(self, resolved):
         func_result = {
             'A': None,
             'weights': None,
@@ -520,82 +520,56 @@ class EMaligner(argschema.ArgSchemaParser):
 
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
-        pairs = self.determine_zvalue_pairs(zvals, sectionIds)
+        pairs = utils.determine_zvalue_pairs(
+                resolved.tilespecs,
+                self.args['matrix_assembly']['depth'])
 
         npairs = len(pairs)
+        tile_ids = np.array([t.tileId for t in resolved.tilespecs])
+        fargs = [[pairs[i], i, self.args, tile_ids] for i in range(npairs)]
 
-        # split up the work
-        if self.args['hdf5_options']['chunks_per_file'] == -1:
-            proc_chunks = [np.arange(npairs)]
-        else:
-            proc_chunks = np.array_split(
-                np.arange(npairs),
-                np.ceil(
-                    float(npairs) /
-                    self.args['hdf5_options']['chunks_per_file']))
+        with renderapi.client.WithPool(self.args['n_parallel_jobs']) as pool:
+            results = np.array(pool.map(calculate_processing_chunk, fargs))
 
-        fargs = []
-        for i in np.arange(npairs):
-            fargs.append([
-                pairs[i],
-                i,
-                self.args,
-                tile_ids])
-        results = pool.map(calculate_processing_chunk, fargs)
-        pool.close()
-        pool.join()
+        func_result['tiles_used'] = np.unique(np.array(
+                [item for result in results for item in result['tiles_used']]))
 
-        tiles_used = []
-        for i in np.arange(len(results)):
-            tiles_used += results[i]['tiles_used']
-        func_result['tiles_used'] = np.array(tiles_used)
-
-        func_result['metadata'] = []
         if self.args['output_mode'] == 'hdf5':
-            results = np.array(results)
-            for pchunk in proc_chunks:
-                cat_chunk = self.concatenate_chunks(results[pchunk])
-                if cat_chunk['data'] is not None:
-                    c = csr_matrix((
-                        cat_chunk['data'],
-                        cat_chunk['indices'],
-                        cat_chunk['indptr']))
-                    fname = self.args['hdf5_options']['output_dir'] + \
-                        '/%d_%d.h5' % (
-                        cat_chunk['zlist'].min(),
-                        cat_chunk['zlist'].max())
-                    func_result['metadata'].append(
-                        write_chunk_to_file(
-                            fname,
-                            c,
-                            cat_chunk['weights']))
+            func_result['metadata'] = self.write_chunks_to_files(results)
 
         else:
-            data = np.concatenate([
-                results[i]['data'] for i in range(len(results))
-                if results[i]['data'] is not None]).astype('float64')
-            weights = np.concatenate([
-                results[i]['weights'] for i in range(len(results))
-                if results[i]['data'] is not None]).astype('float64')
-            indices = np.concatenate([
-                results[i]['indices'] for i in range(len(results))
-                if results[i]['data'] is not None]).astype('int64')
-            # Pointers need to be handled differently,
-            # since you need to sum the arrays
-            indptr = [results[i]['indptr']
-                      for i in range(len(results))
-                      if results[i]['data'] is not None]
-            indptr_cumends = np.cumsum([i[-1] for i in indptr])
-            indptr = np.concatenate(
-                [j if i == 0 else j[1:]+indptr_cumends[i-1] for i, j
-                 in enumerate(indptr)]).astype('int64')
-            A = csr_matrix((data, indices, indptr))
-            outw = sparse.eye(weights.size, format='csr')
-            outw.data = weights
-            func_result['A'] = A
+            func_result['x'] = np.concatenate([
+                t.tforms[-1].to_solve_vec() for t in resolved.tilespecs
+                if t.tileId in func_result['tiles_used']])
+            result = self.concatenate_results(results)
+            print('x shape', func_result['x'].shape)
+            print('w shape', result['weights'].shape)
+            print(result['data'])
+            print(result['data'].shape)
+            print(result['indices'])
+            print(result['indices'].min(), result['indices'].max())
+            print(result['indices'].shape)
+            print(result['indptr'])
+            print(result['indptr'].shape)
+            A = csr_matrix((
+                result['data'],
+                result['indices'],
+                result['indptr']))
+            outw = sparse.eye(result['weights'].size, format='csr')
+            outw.data = result['weights']
+            tile_ind = np.in1d(tile_ids, func_result['tiles_used'])
+            slice_ind = np.repeat(
+                tile_ind,
+                self.transform.DOF_per_tile / self.transform.rows_per_ptmatch)
+            print(self.transform.rows_per_ptmatch)
+            print(tile_ids.shape)
+            print(A.shape)
+            print(slice_ind.shape)
+            func_result['A'] = A[:, slice_ind]
             func_result['weights'] = outw
 
         return func_result
+
 
     def solve_or_not(self, A, weights, reg, filt_tforms):
         t0 = time.time()

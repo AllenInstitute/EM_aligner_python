@@ -9,6 +9,7 @@ import warnings
 import os
 import sys
 import json
+from functools import partial
 from .transform.transform import AlignerTransform
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -80,109 +81,77 @@ def get_unused_tspecs(stack, tids):
     return np.array(tspecs)
 
 
-def get_tileids_and_tforms(stack, tform_name, zvals, fullsize=False, order=2):
+def determine_zvalue_pairs(tilespecs, depths):
+    # create all possible pairs, given zvals and depth
+    zvals = np.array([t.z for t in tilespecs])
+    pairs = []
+    for i in range(len(tilespecs)):
+        for j in depths:
+            # need to get rid of duplicates
+            z2 = tilespecs[i].z + j
+            if z2 in zvals:
+                i2 = np.argwhere(zvals == z2)[0][0]
+                pairs.append({
+                    'z1': tilespecs[i].z,
+                    'z2': tilespecs[i2].z,
+                    'section1': tilespecs[i].layout.sectionId,
+                    'section2': tilespecs[i2].layout.sectionId})
+    return pairs
+
+
+def get_resolved_from_z(stack, tform_name, fullsize, order, z):
+    resolved = renderapi.resolvedtiles.ResolvedTiles()
     dbconnection = make_dbconnection(stack)
+    if stack['db_interface'] == 'render':
+        try:
+            resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
+                    stack['name'][0],
+                    float(z),
+                    render=dbconnection,
+                    owner=stack['owner'],
+                    project=stack['project'])
+        except renderapi.errors.RenderError:
+            pass
+    if stack['db_interface'] == 'mongo':
+        filt = {'z': float(z)}
+        if dbconnection.count_documents(filt) != 0:
+            # this sort ordering is the same as render, I think
+            cursor = dbconnection.find(filt).sort([
+                    ('layout.imageRow', 1),
+                    ('layout.imageCol', 1)])
+            tspecs = [renderapi.tilespec.TileSpec(json=c) for c in cursor]
+            refids = np.unique([
+                [tf.refId for tf in t.tforms if
+                    isinstance(tf, renderapi.transform.ReferenceTransform)]
+                for t in tspecs])
+            # don't perpetuate unused reference transforms
+            dbconnection2 = make_dbconnection(stack, which='transform')
+            tfjson = lambda refid: list(dbconnection2.find({"id": refid}))[0]
+            shared_tforms = [renderapi.transform.load_transform_json(
+                tfjson(refid)) for refid in refids]
+            resolved.tilespecs = tspecs
+            resolved.transformList = shared_tforms
 
-    tile_ids = []
-    tile_tforms = []
-    tile_tspecs = []
-    shared_tforms = []
-    sectionIds = []
-    z_present = []
+    # turn the last transform of every tilespec into an AlignerTransform
+    for t in resolved.tilespecs:
+        t.tforms[-1] = AlignerTransform(
+            name=tform_name,
+            transform=t.tforms[-1],
+            fullsize=fullsize,
+            order=order)
+
+    return resolved
+
+
+def get_resolved_tilespecs(stack, tform_name, pool_size, zvals, fullsize=False, order=2):
     t0 = time.time()
-
-    for z in zvals:
-        # load tile specs from the database
-        if stack['db_interface'] == 'render':
-            try:
-                tmp = renderapi.resolvedtiles.get_resolved_tiles_from_z(
-                        stack['name'][0],
-                        float(z),
-                        render=dbconnection,
-                        owner=stack['owner'],
-                        project=stack['project'])
-                tspecs = tmp.tilespecs
-                for st in tmp.transforms:
-                    shared_tforms.append(st)
-                try:
-                    sectionId = renderapi.stack.get_sectionId_for_z(
-                        stack['name'][0],
-                        float(z),
-                        render=dbconnection,
-                        owner=stack['owner'],
-                        project=stack['project'])
-                except renderapi.errors.RenderError:
-                    sectionId = collections.Counter([
-                        ts.layout.sectionId for ts in tspecs]
-                        ).most_common()[0][0]
-            except renderapi.errors.RenderError:
-                # missing section
-                sectionId = None
-                pass
-
-        if stack['db_interface'] == 'mongo':
-            filt = {'z': float(z)}
-            if dbconnection.count_documents(filt) == 0:
-                sectionId = None
-            else:
-                cursor = dbconnection.find(filt).sort([
-                        ('layout.imageRow', 1),
-                        ('layout.imageCol', 1)])
-                tspecs = list(cursor)
-                refids = []
-                for ts in tspecs:
-                    for m in np.arange(len(ts['transforms']['specList'])):
-                        if 'refId' in ts['transforms']['specList'][m]:
-                            refids.append(
-                                    ts['transforms']['specList'][m]['refId'])
-                refids = np.unique(np.array(refids))
-                # be selective of which transforms to pass on to the new stack
-                dbconnection2 = make_dbconnection(stack, which='transform')
-                for refid in refids:
-                    shared_tforms.append(
-                            renderapi.transform.load_transform_json(
-                                list(dbconnection2.find({"id": refid}))[0]))
-                sectionId = dbconnection.find(
-                        {"z": float(z)}).distinct("layout.sectionId")[0]
-
-        if sectionId is not None:
-            sectionIds.append(sectionId)
-            z_present.append(z)
-
-            # make lists of IDs and transforms
-            solve_tf = AlignerTransform(
-                    name=tform_name, fullsize=fullsize, order=order)
-            for k in np.arange(len(tspecs)):
-                if stack['db_interface'] == 'mongo':
-                    tspecs[k] = renderapi.tilespec.TileSpec(json=tspecs[k])
-                tile_ids.append(tspecs[k].tileId)
-                tile_tspecs.append(tspecs[k])
-                # make space in the solve vector
-                # for a solve-type transform
-                # with input transform as values (constraints)
-                tile_tforms.append(
-                        solve_tf.to_solve_vec(tspecs[k].tforms[-1]))
-
-    logger2.info(
-            "\n loaded %d tile specs from %d zvalues in "
-            "%0.1f sec using interface: %s (%d zvalues in input range)" % (
-                len(tile_ids),
-                len(z_present),
-                time.time() - t0,
-                stack['db_interface'],
-                len(zvals)))
-
-    tile_tforms = np.concatenate(tile_tforms, axis=0)
-
-    return {
-            'tids': np.array(tile_ids),
-            'tforms': tile_tforms,
-            'tspecs': np.array(tile_tspecs).flatten(),
-            'shared_tforms': shared_tforms,
-            'sectionIds': sectionIds,
-            'zvals': z_present
-            }
-
+    resolved = renderapi.resolvedtiles.ResolvedTiles()
+    getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
+    with renderapi.client.WithPool(pool_size) as pool:
+        for rz in pool.map(getz, zvals):
+            resolved.tilespecs += rz.tilespecs
+            resolved.transforms += rz.transforms
+    return resolved
 
 def get_matches(iId, jId, collection, dbconnection):
     matches = []

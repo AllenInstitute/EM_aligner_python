@@ -51,42 +51,45 @@ def calculate_processing_chunk(fargs):
     # get point matches
     t0 = time.time()
     matches = get_matches(
-            pair['section1'],
-            pair['section2'],
-            args['pointmatch'],
-            dbconnection)
+        pair['section1'],
+        pair['section2'],
+        args['pointmatch'],
+        dbconnection)
 
     if len(matches) == 0:
         return chunk
 
-    # extract IDs for fast checking
+    pid_set = set(m['pId'] for m in matches)
+    qid_set = set(m['qId'] for m in matches)
+
+    tile_set = set(tile_ids)
+
+    pid_set.intersection_update(tile_set)
+    qid_set.intersection_update(tile_set)
+
+    matches = [m for m in matches if m['pId']
+               in pid_set and m['qId'] in qid_set]
     pids = np.array([m['pId'] for m in matches])
     qids = np.array([m['qId'] for m in matches])
 
-    # remove matches that don't have both IDs in tile_ids
-    instack = np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids)
-    matches = np.array(matches)[instack].tolist()
-    pids = pids[instack]
-    qids = qids[instack]
-
     if len(matches) == 0:
         logger.debug(
-                "%sno tile pairs in "
-                "stack for pointmatch groupIds %s and %s" % (
-                    pstr, pair['section1'], pair['section2']))
+            "%sno tile pairs in "
+            "stack for pointmatch groupIds %s and %s" % (
+                pstr, pair['section1'], pair['section2']))
         return chunk
 
     logger.debug(
-            "%sloaded %d matches, using %d, "
-            "for groupIds %s and %s in %0.1f sec "
-            "using interface: %s" % (
-                pstr,
-                instack.size,
-                len(matches),
-                pair['section1'],
-                pair['section2'],
-                time.time() - t0,
-                args['pointmatch']['db_interface']))
+        "%sloaded %d matches, using %d, "
+        "for groupIds %s and %s in %0.1f sec "
+        "using interface: %s" % (
+            pstr,
+            len(pid_set.union(qid_set)),
+            len(matches),
+            pair['section1'],
+            pair['section2'],
+            time.time() - t0,
+            args['pointmatch']['db_interface']))
 
     t0 = time.time()
     # for the given point matches, these are the indices in tile_ids
@@ -123,9 +126,9 @@ def calculate_processing_chunk(fargs):
     nrows = 0
 
     tilepair_weightfac = tilepair_weight(
-            pair['z1'],
-            pair['z2'],
-            args['matrix_assembly'])
+        pair['z1'],
+        pair['z2'],
+        args['matrix_assembly'])
 
     for k in np.arange(nmatches):
         # create the CSR sub-matrix for this tile pair
@@ -431,13 +434,14 @@ class EMaligner(argschema.ArgSchemaParser):
             zvals,
             fullsize=self.args['fullsize_transform'],
             order=self.args['poly_order'])
+
         assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
         # create A matrix in compressed sparse row (CSR) format
         CSR_A = self.create_CSR_A(
-                from_stack['tids'],
-                from_stack['zvals'],
-                from_stack['sectionIds'])
+            from_stack['tids'],
+            from_stack['zvals'],
+            from_stack['sectionIds'])
 
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
@@ -481,18 +485,18 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def determine_zvalue_pairs(self, zvals, sectionIds):
         # create all possible pairs, given zvals and depth
+        zSection = {}
+        for i, z in enumerate(zvals):
+            zSection[z] = sectionIds[i]
         pairs = []
-        for i in range(len(zvals)):
+        for z in zvals:
             for j in self.args['matrix_assembly']['depth']:
-                # need to get rid of duplicates
-                z2 = zvals[i] + j
-                if z2 in zvals:
-                    ind2 = np.argwhere(zvals == z2)[0][0]
+                if z+j in zSection:
                     pairs.append({
-                        'z1': zvals[i],
-                        'z2': z2,
-                        'section1': sectionIds[i],
-                        'section2': sectionIds[ind2]})
+                        'z1': z,
+                        'z2': z+j,
+                        'section1': zSection[z],
+                        'section2': zSection[z+j]})
         return pairs
 
     def concatenate_chunks(self, chunks):

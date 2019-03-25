@@ -2,7 +2,7 @@ import collections
 import numpy as np
 import renderapi
 from ..schemas import *
-from ..EMaligner import make_dbconnection, get_matches
+from ..utils import make_dbconnection, get_matches
 import time
 import matplotlib
 matplotlib.use('Agg')

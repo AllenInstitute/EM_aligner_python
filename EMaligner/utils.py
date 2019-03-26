@@ -10,10 +10,12 @@ import os
 import sys
 import json
 from functools import partial
+from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
+import copy
 
 logger2 = logging.getLogger(__name__)
 
@@ -81,21 +83,23 @@ def get_unused_tspecs(stack, tids):
     return np.array(tspecs)
 
 
-def determine_zvalue_pairs(tilespecs, depths):
+def determine_zvalue_pairs(resolved, depths):
     # create all possible pairs, given zvals and depth
-    zvals = np.array([t.z for t in tilespecs])
+    zvals = [t.z for t in resolved.tilespecs]
+    zvals, uind = np.unique(zvals, return_index=True)
+    sections = [resolved.tilespecs[i].layout.sectionId for i in uind]
     pairs = []
-    for i in range(len(tilespecs)):
+    for i in range(len(zvals)):
         for j in depths:
             # need to get rid of duplicates
-            z2 = tilespecs[i].z + j
+            z2 = zvals[i] + j
             if z2 in zvals:
                 i2 = np.argwhere(zvals == z2)[0][0]
                 pairs.append({
-                    'z1': tilespecs[i].z,
-                    'z2': tilespecs[i2].z,
-                    'section1': tilespecs[i].layout.sectionId,
-                    'section2': tilespecs[i2].layout.sectionId})
+                    'z1': zvals[i],
+                    'z2': zvals[i2],
+                    'section1': sections[i],
+                    'section2': sections[i2]})
     return pairs
 
 
@@ -130,7 +134,7 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             shared_tforms = [renderapi.transform.load_transform_json(
                 tfjson(refid)) for refid in refids]
             resolved.tilespecs = tspecs
-            resolved.transformList = shared_tforms
+            resolved.transforms = shared_tforms
 
     # turn the last transform of every tilespec into an AlignerTransform
     for t in resolved.tilespecs:
@@ -338,30 +342,14 @@ def get_stderr_stdout(outarg):
 
 
 def write_to_new_stack(
-        input_stack,
+        resolved,
         outputname,
-        tform_name,
-        fullsize,
-        order,
-        tspecs,
-        shared_tforms,
-        x,
         ingestconn,
-        unused_tids,
         outarg,
         use_rest,
         overwrite_zlayer):
 
-    # replace the last transform in the tilespec with the new one
-    solve_tf = AlignerTransform(
-            name=tform_name, fullsize=fullsize, order=order)
-    render_tforms = solve_tf.from_solve_vec(x)
-    for m in np.arange(len(tspecs)):
-        tspecs[m].tforms[-1] = render_tforms[m]
-
-    tspecs = tspecs.tolist()
-    unused_tspecs = get_unused_tspecs(input_stack, unused_tids)
-    tspecs = tspecs + unused_tspecs.tolist()
+    logger2.setLevel('INFO')
     logger2.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
             ingestconn.DEFAULT_HOST,
@@ -369,11 +357,10 @@ def write_to_new_stack(
             ingestconn.DEFAULT_OWNER,
             ingestconn.DEFAULT_PROJECT,
             outputname))
-
     stdeo = get_stderr_stdout(outarg)
 
     if overwrite_zlayer:
-        zvalues = np.unique(np.array([t.z for t in tspecs]))
+        zvalues = np.unique(np.array([t.z for t in resolved.tilespecs]))
         for zvalue in zvalues:
             renderapi.stack.delete_section(
                     outputname,
@@ -382,11 +369,68 @@ def write_to_new_stack(
 
     renderapi.client.import_tilespecs_parallel(
             outputname,
-            tspecs,
-            sharedTransforms=shared_tforms,
+            resolved.tilespecs,
+            sharedTransforms=resolved.transforms,
             render=ingestconn,
             close_stack=False,
             mpPool=pool_pathos.PathosWithPool,
             stderr=stdeo,
             stdout=stdeo,
             use_rest=use_rest)
+
+def solve(A, weights, reg, x0):
+    time0 = time.time()
+    # regularized least squares
+    # ensure symmetry of K
+    weights.data = np.sqrt(weights.data)
+    rtWA = weights.dot(A)
+    K = rtWA.transpose().dot(rtWA) + reg
+
+    del weights, rtWA
+
+    # factorize, then solve, efficient for large affine
+    x = np.zeros_like(x0)
+    err = np.zeros((A.shape[0], x.shape[1]))
+    precision = [0] * x.shape[1]
+
+    solve = factorized(K)
+    for i in range(x0.shape[1]):
+        # can solve for same A, but multiple x0's
+        Lm = reg.dot(x0[:, i])
+        x[:, i] = solve(Lm)
+        err[:, i] = A.dot(x[:, i])
+        precision[i] = \
+                np.linalg.norm(K.dot(x[:, i]) - Lm) / np.linalg.norm(Lm)
+        del Lm
+    del K
+
+    results = {}
+    results['precision'] = precision
+    results['error'] = np.linalg.norm(err, axis=0).tolist()
+    results['err'] = [np.abs(err).mean(axis=0), np.abs(err).std(axis=0)]
+    results['x'] = x
+    results['time'] = time.time() - time0
+
+    return results
+
+
+def message_from_solve_results(results):
+    message = ' solved in %0.1f sec\n' % results['time']
+    message += " precision [norm(Kx-Lm)/norm(Lm)] = "
+    message += ", ".join(["%0.1e" % ix for ix in results['precision']])
+    message += "\n error     [norm(Ax-b)] = "
+    message += ", ".join(["%0.3f" % ix for ix in results['error']])
+    message += "\n [mean(|Ax|)+/-std(|Ax|)] : "
+    message += ", ".join([
+        "%0.1f +/- %0.1f" % (e[0], e[1]) for e in results['err']])
+    return message
+
+
+def update_tilespecs(resolved, x, used):
+    up_resolved = copy.deepcopy(resolved)
+    index = 0
+    for i in range(len(up_resolved.tilespecs)):
+        if used[i]:
+            index += up_resolved.tilespecs[i].tforms[-1].from_solve_vec(
+                    x[index:, :])
+    return up_resolved

@@ -30,7 +30,7 @@ def calculate_processing_chunk(fargs):
 
     # this dict will get returned
     chunk = {}
-    chunk['tiles_used'] = []
+    chunk['tiles_used'] = np.zeros(tile_ids.size).astype(bool)
     chunk['data'] = None
     chunk['indices'] = None
     chunk['indptr'] = None
@@ -132,9 +132,9 @@ def calculate_processing_chunk(fargs):
         if d is None:
             continue  # if npts<nmin, or all weights=0
 
-        # add both tile ids to the list
-        chunk['tiles_used'].append(matches[k]['pId'])
-        chunk['tiles_used'].append(matches[k]['qId'])
+        # note both as used
+        chunk['tiles_used'][pinds[k]] = True
+        chunk['tiles_used'][qinds[k]] = True
 
         # add sub-matrix to global matrix
         global_dind = np.arange(
@@ -246,10 +246,10 @@ class EMaligner(argschema.ArgSchemaParser):
     def assemble_and_solve(self, zvals, ingestconn):
         t0 = time.time()
 
-        self.transform = AlignerTransform(
-            name=self.args['transformation'],
-            order=self.args['poly_order'],
-            fullsize=self.args['fullsize_transform'])
+        #self.transform = AlignerTransform(
+        #    name=self.args['transformation'],
+        #    order=self.args['poly_order'],
+        #    fullsize=self.args['fullsize_transform'])
 
         if self.args['ingest_from_file'] != '':
             assemble_result = self.assemble_from_hdf5(
@@ -271,7 +271,7 @@ class EMaligner(argschema.ArgSchemaParser):
             if assemble_result['A'] is not None:
                 mat_stats(assemble_result['A'], 'A')
 
-            self.ntiles_used = assemble_result['tids'].size
+            self.ntiles_used = np.count_nonzero(assemble_result['tiles_used'])
             logger.info(' A created in %0.1f seconds' % (time.time() - t0))
 
             if self.args['profile_data_load']:
@@ -279,35 +279,30 @@ class EMaligner(argschema.ArgSchemaParser):
                     "exiting after timing profile")
 
             # solve
-            message, x, results = \
+            message, results = \
                 self.solve_or_not(
                     assemble_result['A'],
                     assemble_result['weights'],
                     assemble_result['reg'],
-                    assemble_result['tforms'])
+                    assemble_result['x'])
             logger.info('\n' + message)
             if assemble_result['A'] is not None:
                 results['Ashape'] = assemble_result['A'].shape
             del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':
-            write_to_new_stack(
-                self.args['input_stack'],
-                self.args['output_stack']['name'][0],
-                self.args['transformation'],
-                self.args['fullsize_transform'],
-                self.args['poly_order'],
-                assemble_result['tspecs'],
-                assemble_result['shared_tforms'],
-                x,
-                ingestconn,
-                assemble_result['unused_tids'],
-                self.args['render_output'],
-                self.args['output_stack']['use_rest'],
-                self.args['overwrite_zlayer'])
+            solved_resolved = utils.update_tilespecs(
+                    assemble_result['resolved'], results['x'], assemble_result['tiles_used'])
+            utils.write_to_new_stack(
+                    solved_resolved,
+                    self.args['output_stack']['name'][0],
+                    ingestconn,
+                    self.args['render_output'],
+                    self.args['output_stack']['use_rest'],
+                    self.args['overwrite_zlayer'])
             if self.args['render_output'] == 'stdout':
                 logger.info(message)
-        del assemble_result['shared_tforms'], assemble_result['tspecs'], x
+        del assemble_result['shared_tforms'], assemble_result['tspecs'], assemble_result['x']
 
         return results
 
@@ -428,31 +423,34 @@ class EMaligner(argschema.ArgSchemaParser):
         CSR_A = self.create_CSR_A(assemble_result['resolved'])
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
+        assemble_result['tiles_used'] = CSR_A.pop('tiles_used')
+        assemble_result['reg'] = CSR_A.pop('reg')
+        assemble_result['x'] = CSR_A.pop('x')
 
         # some book-keeping if there were some unused tiles
-        tile_ind = np.in1d(from_stack['tids'], CSR_A['tiles_used'])
-        assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
-        assemble_result['tids'] = \
-            from_stack['tids'][tile_ind]
-        assemble_result['unused_tids'] = \
-            from_stack['tids'][np.invert(tile_ind)]
+        #tile_ind = np.in1d(from_stack['tids'], CSR_A['tiles_used'])
+        #assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
+        #assemble_result['tids'] = \
+        #    from_stack['tids'][tile_ind]
+        #assemble_result['unused_tids'] = \
+        #    from_stack['tids'][np.invert(tile_ind)]
 
         # remove columns in A for unused tiles
-        slice_ind = np.repeat(
-            tile_ind,
-            self.transform.DOF_per_tile / from_stack['tforms'].shape[1])
-        if self.args['output_mode'] != 'hdf5':
-            # for large matrices,
-            # this might be expensive to perform on CSR format
-            assemble_result['A'] = assemble_result['A'][:, slice_ind]
+        #slice_ind = np.repeat(
+        #    tile_ind,
+        #    self.transform.DOF_per_tile / from_stack['tforms'].shape[1])
+        #if self.args['output_mode'] != 'hdf5':
+        #    # for large matrices,
+        #    # this might be expensive to perform on CSR format
+        #    assemble_result['A'] = assemble_result['A'][:, slice_ind]
 
-        assemble_result['tforms'] = from_stack['tforms'][slice_ind, :]
-        del from_stack, CSR_A['tiles_used'], tile_ind
+        #assemble_result['tforms'] = from_stack['tforms'][slice_ind, :]
+        #del from_stack, CSR_A['tiles_used'], tile_ind
 
         # create the regularization vectors
-        assemble_result['reg'] = self.transform.create_regularization(
-            assemble_result['tforms'].shape[0],
-            self.args['regularization'])
+        #assemble_result['reg'] = self.transform.create_regularization(
+        #    assemble_result['tforms'].shape[0],
+        #    self.args['regularization'])
 
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
@@ -514,6 +512,8 @@ class EMaligner(argschema.ArgSchemaParser):
     def create_CSR_A(self, resolved):
         func_result = {
             'A': None,
+            'x': None,
+            'reg': None,
             'weights': None,
             'tiles_used': None,
             'metadata': None}
@@ -521,7 +521,7 @@ class EMaligner(argschema.ArgSchemaParser):
         pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
         pairs = utils.determine_zvalue_pairs(
-                resolved.tilespecs,
+                resolved,
                 self.args['matrix_assembly']['depth'])
 
         npairs = len(pairs)
@@ -531,8 +531,10 @@ class EMaligner(argschema.ArgSchemaParser):
         with renderapi.client.WithPool(self.args['n_parallel_jobs']) as pool:
             results = np.array(pool.map(calculate_processing_chunk, fargs))
 
-        func_result['tiles_used'] = np.unique(np.array(
-                [item for result in results for item in result['tiles_used']]))
+        func_result['tiles_used'] = results[0]['tiles_used']
+        for result in results[1:]:
+            func_result['tiles_used'] = \
+                    func_result['tiles_used'] | result['tiles_used']
 
         if self.args['output_mode'] == 'hdf5':
             func_result['metadata'] = self.write_chunks_to_files(results)
@@ -540,38 +542,33 @@ class EMaligner(argschema.ArgSchemaParser):
         else:
             func_result['x'] = np.concatenate([
                 t.tforms[-1].to_solve_vec() for t in resolved.tilespecs
-                if t.tileId in func_result['tiles_used']])
+                if t.tileId in tile_ids[func_result['tiles_used']]])
+            reg = np.concatenate([
+                t.tforms[-1].regularization(self.args['regularization']) for t in resolved.tilespecs
+                if t.tileId in tile_ids[func_result['tiles_used']]])
             result = self.concatenate_results(results)
-            print('x shape', func_result['x'].shape)
-            print('w shape', result['weights'].shape)
-            print(result['data'])
-            print(result['data'].shape)
-            print(result['indices'])
-            print(result['indices'].min(), result['indices'].max())
-            print(result['indices'].shape)
-            print(result['indptr'])
-            print(result['indptr'].shape)
             A = csr_matrix((
                 result['data'],
                 result['indices'],
                 result['indptr']))
             outw = sparse.eye(result['weights'].size, format='csr')
             outw.data = result['weights']
+            func_result['reg'] = sparse.eye(reg.size, format='csr')
+            func_result['reg'].data = reg
             tile_ind = np.in1d(tile_ids, func_result['tiles_used'])
-            slice_ind = np.repeat(
-                tile_ind,
-                self.transform.DOF_per_tile / self.transform.rows_per_ptmatch)
-            print(self.transform.rows_per_ptmatch)
-            print(tile_ids.shape)
-            print(A.shape)
-            print(slice_ind.shape)
+            slice_ind = np.concatenate(
+                    [np.repeat(func_result['tiles_used'][i], resolved.tilespecs[i].tforms[-1].DOF_per_tile)
+                     for i in range(tile_ids.size)])
+            #slice_ind = np.repeat(
+            #    tile_ind,
+            #    self.transform.DOF_per_tile / self.transform.rows_per_ptmatch)
             func_result['A'] = A[:, slice_ind]
             func_result['weights'] = outw
 
         return func_result
 
 
-    def solve_or_not(self, A, weights, reg, filt_tforms):
+    def solve_or_not(self, A, weights, reg, x0):
         t0 = time.time()
         # not
         if self.args['output_mode'] in ['hdf5']:
@@ -591,92 +588,30 @@ class EMaligner(argschema.ArgSchemaParser):
             x = None
             results = None
         else:
-            # regularized least squares
-            # ensure symmetry of K
-            weights.data = np.sqrt(weights.data)
-            rtWA = weights.dot(A)
-            K = rtWA.transpose().dot(rtWA) + reg
+            results = utils.solve(A, weights, reg, x0)
+            message = utils.message_from_solve_results(results)
 
-            logger.info(' K created in %0.1f seconds' % (time.time() - t0))
-            t0 = time.time()
-            del weights, rtWA
+            ## get the scales (quick way to look for distortion)
+            #tforms = self.transform.from_solve_vec(x)
+            #if isinstance(
+            #        self.transform,
+            #        renderapi.transform.Polynomial2DTransform):
+            #    # renderapi does not have scale property
+            #    if self.transform.order > 0:
+            #        scales = np.array(
+            #            [[t.params[0, 1], t.params[1, 2]]
+            #             for t in tforms]).flatten()
+            #    else:
+            #        scales = np.array([0])
+            #else:
+            #    scales = np.array([
+            #        np.array(t.scale) for t in tforms]).flatten()
 
-            # factorize, then solve, efficient for large affine
-            solve = factorized(K)
-            if filt_tforms.shape[1] == 2:
-                # certain transforms have redundant matrices
-                # then applies the LU decomposition to
-                # the u and v transforms separately
-                Lm = reg.dot(filt_tforms[:, 0])
-                xu = solve(Lm)
-                erru = A.dot(xu)
-                precisionu = \
-                    np.linalg.norm(K.dot(xu) - Lm) / np.linalg.norm(Lm)
+            #results['scale'] = scales.mean()
+            #message += '\n avg scale = %0.2f +/- %0.2f' % (
+            #    scales.mean(), scales.std())
 
-                Lm = reg.dot(filt_tforms[:, 1])
-                xv = solve(Lm)
-                errv = A.dot(xv)
-                precisionv = \
-                    np.linalg.norm(K.dot(xv) - Lm) / np.linalg.norm(Lm)
-                precision = np.sqrt(precisionu ** 2 + precisionv ** 2)
-
-                # recombine
-                x = np.transpose(np.vstack((xu, xv)))
-                err = np.hstack((erru, errv))
-                del xu, xv, erru, errv, precisionu, precisionv
-            else:
-                # simpler case for similarity, or
-                # affine_fullsize, but 2x larger than affine
-
-                Lm = reg.dot(filt_tforms[:, 0])
-                x = solve(Lm)
-                err = A.dot(x)
-                precision = \
-                    np.linalg.norm(K.dot(x) - Lm) / np.linalg.norm(Lm)
-            del K, Lm
-
-            error = np.linalg.norm(err)
-
-            results = {}
-            results['time'] = time.time()-t0
-            results['precision'] = precision
-            results['error'] = error
-            results['err'] = [np.abs(err).mean(), np.abs(err).std()]
-
-            message = ' solved in %0.1f sec\n' % (time.time() - t0)
-            message += (
-                " precision [norm(Kx-Lm)/norm(Lm)] "
-                "= %0.1e\n" % precision)
-            message += (
-                " error     [norm(Ax-b)] "
-                "= %0.3f\n" % error)
-            message += (
-                " [mean(|Ax|)+/-std(|Ax|)] : "
-                "%0.1f +/- %0.1f pixels" % (
-                    np.abs(err).mean(),
-                    np.abs(err).std()))
-
-            # get the scales (quick way to look for distortion)
-            tforms = self.transform.from_solve_vec(x)
-            if isinstance(
-                    self.transform,
-                    renderapi.transform.Polynomial2DTransform):
-                # renderapi does not have scale property
-                if self.transform.order > 0:
-                    scales = np.array(
-                        [[t.params[0, 1], t.params[1, 2]]
-                         for t in tforms]).flatten()
-                else:
-                    scales = np.array([0])
-            else:
-                scales = np.array([
-                    np.array(t.scale) for t in tforms]).flatten()
-
-            results['scale'] = scales.mean()
-            message += '\n avg scale = %0.2f +/- %0.2f' % (
-                scales.mean(), scales.std())
-
-        return message, x, results
+        return message, results
 
 
 if __name__ == '__main__':

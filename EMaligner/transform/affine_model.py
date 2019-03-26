@@ -22,10 +22,11 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         else:
             self.from_dict(renderapi.transform.AffineModel().to_dict())
 
-        self.DOF_per_tile = 6
+        self.DOF_per_tile = 3
         self.nnz_per_row = 6
         self.rows_per_ptmatch = 1
         if self.fullsize:
+            self.DOF_per_tile = 6
             self.rows_per_ptmatch = 2
 
     def to_solve_vec(self):
@@ -45,39 +46,38 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         return vec
 
     def from_solve_vec(self, vec):
-        tforms = []
-        if self.fullsize:
-            n = int(vec.shape[0] / 6)
-            for i in range(n):
-                self.M[0, 0] = vec[i * 6 + 0]
-                self.M[0, 1] = vec[i * 6 + 1]
-                self.M[0, 2] = vec[i * 6 + 2]
-                self.M[1, 0] = vec[i * 6 + 3]
-                self.M[1, 1] = vec[i * 6 + 4]
-                self.M[1, 2] = vec[i * 6 + 5]
-                tforms.append(
-                        renderapi.transform.AffineModel(
-                            json=self.to_dict()))
-        else:
-            n = int(vec.shape[0] / 3)
-            for i in range(n):
-                self.M[0, 0] = vec[i * 3 + 0, 0]
-                self.M[0, 1] = vec[i * 3 + 1, 0]
-                self.M[0, 2] = vec[i * 3 + 2, 0]
-                self.M[1, 0] = vec[i * 3 + 0, 1]
-                self.M[1, 1] = vec[i * 3 + 1, 1]
-                self.M[1, 2] = vec[i * 3 + 2, 1]
-                tforms.append(
-                        renderapi.transform.AffineModel(
-                            json=self.to_dict()))
-        return tforms
+        vsh = vec.shape
+        if not (
+                ((vsh[1] == 1) & (vsh[0] >= 6)) |
+                ((vsh[1] == 2) & (vsh[0] >= 3))):
+            raise ValueError(
+                    "AlignerAffineModel.from_solve_vec expects "
+                    " input shape (n, 1) (n >= 6) or (n, 2) (n >= 3)."
+                    " Recevied {}". format(vsh))
 
-    def create_regularization(self, sz, regdict):
-        reg = np.ones(sz).astype('float64') * regdict['default_lambda']
+        if vsh[1] == 1:
+            self.M[0, 0] = vec[0]
+            self.M[0, 1] = vec[1]
+            self.M[0, 2] = vec[2]
+            self.M[1, 0] = vec[3]
+            self.M[1, 1] = vec[4]
+            self.M[1, 2] = vec[5]
+            n = 6
+        else:
+            self.M[0, 0] = vec[0, 0]
+            self.M[0, 1] = vec[1, 0]
+            self.M[0, 2] = vec[2, 0]
+            self.M[1, 0] = vec[0, 1]
+            self.M[1, 1] = vec[1, 1]
+            self.M[1, 2] = vec[2, 1]
+            n = 3
+        return n
+
+
+    def regularization(self, regdict):
+        reg = np.ones(self.DOF_per_tile).astype('float64') * regdict['default_lambda']
         reg[2::3] *= regdict['translation_factor']
-        outr = sparse.eye(reg.size, format='csr')
-        outr.data = reg
-        return outr
+        return reg
 
     def CSR_from_tilepair(
             self, match, tile_ind1, tile_ind2,
@@ -183,8 +183,8 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
             np.array(match['matches']['q'][1])[match_index]
         data[5 + stride] = -1.0
         uindices = np.hstack((
-            tile_ind1 * self.DOF_per_tile / 2 + np.array([0, 1, 2]),
-            tile_ind2 * self.DOF_per_tile / 2 + np.array([0, 1, 2])))
+            tile_ind1 * self.DOF_per_tile + np.array([0, 1, 2]),
+            tile_ind2 * self.DOF_per_tile + np.array([0, 1, 2])))
         indices[0: npts * self.nnz_per_row] = np.tile(uindices, npts)
         indptr[0: npts] = np.arange(1, npts + 1) * self.nnz_per_row
         weights[0: npts] = np.array(match['matches']['w'])[match_index]

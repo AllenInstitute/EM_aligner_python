@@ -35,7 +35,7 @@ def test_transform():
     assert(t.__class__ == AlignerAffineModel)
     del t
     rt = renderapi.transform.AffineModel()
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='AffineModel', transform=rt)
     assert(t.__class__ == AlignerAffineModel)
 
     # two ways to load similarity
@@ -43,7 +43,7 @@ def test_transform():
     assert(t.__class__ == AlignerSimilarityModel)
     del t
     rt = renderapi.transform.SimilarityModel()
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='SimilarityModel', transform=rt)
     assert(t.__class__ == AlignerSimilarityModel)
 
     # two ways to load polynomial
@@ -51,7 +51,7 @@ def test_transform():
     assert(t.__class__ == AlignerPolynomial2DTransform)
     del t
     rt = renderapi.transform.Polynomial2DTransform(identity=True)
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
     assert(t.__class__ == AlignerPolynomial2DTransform)
 
     # specifying something not real
@@ -115,15 +115,15 @@ def test_affine_model():
 
     # check args
     rt = renderapi.transform.AffineModel()
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='AffineModel', transform=rt)
     assert(t.__class__ == AlignerAffineModel)
     assert(not t.fullsize)
-    t = AlignerTransform(transform=rt, fullsize=True)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
     assert(t.__class__ == AlignerAffineModel)
     assert(t.fullsize)
 
     # make CSR (fullsize)
-    t = AlignerTransform(transform=rt, fullsize=True)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
     match = example_match(100)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
@@ -134,7 +134,7 @@ def test_affine_model():
     assert npts == 100
 
     # make CSR (halfsize)
-    t = AlignerTransform(transform=rt, fullsize=False)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
     match = example_match(100)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
@@ -145,73 +145,67 @@ def test_affine_model():
     assert npts == 100
 
     # make CSR zero weights
-    t = AlignerTransform(transform=rt, fullsize=False)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
     match = example_match(100)
     match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
-    t = AlignerTransform(transform=rt, fullsize=True)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
 
     # minimum size
-    t = AlignerTransform(transform=rt, fullsize=False)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
     match = example_match(100)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
-    t = AlignerTransform(transform=rt, fullsize=True)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
 
     # to vec
-    rt = renderapi.transform.AffineModel()
-    t = AlignerTransform(transform=rt, fullsize=True)
-    v = t.to_solve_vec(rt)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
+    v = t.to_solve_vec()
     assert np.all(v == np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]).reshape(6, 1))
     t.fullsize = False
-    rt = renderapi.transform.AffineModel()
-    v = t.to_solve_vec(rt)
+    v = t.to_solve_vec()
     assert np.all(v == np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]))
-    rt = renderapi.transform.Polynomial2DTransform(identity=True)
-    v = t.to_solve_vec(rt)
-    assert np.all(v == np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]))
-    rt = renderapi.transform.NonLinearCoordinateTransform()
-    with pytest.raises(AlignerTransformException):
-        v = t.to_solve_vec(rt)
 
     # from vec
-    vec = np.tile([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], 6)
     t.fullsize = True
-    tforms = t.from_solve_vec(vec)
-    assert len(tforms) == 6
-    for rt in tforms:
-        assert np.all(np.isclose(
-            rt.M, renderapi.transform.AffineModel().M))
+    ntiles = 6
+    vi = [1.0, 0.2, 0.0, -0.1, 1.0, 0.0]
+    vec = np.tile(vi, ntiles)
+    vec = vec.reshape(-1, 1)
+    index = 0
+    for i in range(ntiles):
+        index = t.from_solve_vec(vec[index:, :])
+        assert np.all(np.isclose(t.M[0:2, :].flatten(), vi))
 
     t.fullsize = False
-    vec = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
-    vec = np.concatenate((vec, vec))
-    tforms = t.from_solve_vec(vec)
-    assert len(tforms) == 2
-    for rt in tforms:
-        assert np.all(np.isclose(
-            rt.M, renderapi.transform.AffineModel().M))
+    vi = np.array([[1.0, 0.2, 0.0], [-0.1, 1.0, 0.0]]).transpose()
+    vec = np.tile(vi, reps=[ntiles, 1])
+    index = 0
+    for i in range(ntiles):
+        index = t.from_solve_vec(vec[index:, :])
+        assert np.all(np.isclose(t.M[0:2, :], vi.transpose()))
 
     # reg
     rdict = {
             "default_lambda": 1.0,
             "translation_factor": 0.1}
-    r = t.create_regularization(96, rdict)
-    assert np.all(r.data[0::6] == 1.0)
-    assert np.all(r.data[1::6] == 1.0)
-    assert np.all(r.data[2::6] == 0.1)
-    assert np.all(r.data[3::6] == 1.0)
-    assert np.all(r.data[4::6] == 1.0)
-    assert np.all(r.data[5::6] == 0.1)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
+    r = t.regularization(rdict)
+    assert np.all(r[[0, 1, 3, 4]] == 1.0)
+    assert np.all(r[[2, 5]] == 0.1)
+    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
+    r = t.regularization(rdict)
+    assert np.all(r[[0, 1]] == 1.0)
+    assert np.all(r[[2]] == 0.1)
 
 
 def test_similarity_model():
@@ -222,11 +216,11 @@ def test_similarity_model():
 
     # check args
     rt = renderapi.transform.SimilarityModel()
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='SimilarityModel', transform=rt)
     assert(t.__class__ == AlignerSimilarityModel)
 
     # make CSR
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='SimilarityModel', transform=rt)
     match = example_match(100)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
@@ -237,68 +231,64 @@ def test_similarity_model():
     assert npts == 100
 
     # make CSR zero weights
-    t = AlignerTransform(transform=rt, fullsize=False)
+    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=False)
     match = example_match(100)
     match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
-    t = AlignerTransform(transform=rt, fullsize=True)
+    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=True)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 5, 500, True)
     assert data is None
 
     # minimum size
-    t = AlignerTransform(transform=rt, fullsize=False)
+    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=False)
     match = example_match(100)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
-    t = AlignerTransform(transform=rt, fullsize=True)
+    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=True)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
     assert data is None
 
     # to vec
-    rt = renderapi.transform.SimilarityModel()
-    t = AlignerTransform(transform=rt)
-    v = t.to_solve_vec(rt)
-    assert np.all(v == np.array([1, 0, 0, 0]).reshape(4, 1))
-    rt = renderapi.transform.Polynomial2DTransform(identity=True)
-    v = t.to_solve_vec(rt)
-    assert np.all(v == np.array([1, 0, 0, 0]).reshape(4, 1))
-    rt = renderapi.transform.NonLinearCoordinateTransform()
-    with pytest.raises(AlignerTransformException):
-        v = t.to_solve_vec(rt)
+    t = AlignerTransform(name='SimilarityModel')
+    v = t.to_solve_vec()
+    assert np.all(v == np.array([1.0, 0.0, 0.0, 0.0]).reshape(-1, 1))
 
     # from vec
-    vec = np.tile([1.0, 0.0, 0.0, 0.0], 6)
-    tforms = t.from_solve_vec(vec)
-    assert len(tforms) == 6
-    for rt in tforms:
-        assert np.all(np.isclose(
-            rt.M, renderapi.transform.SimilarityModel().M))
+    ntiles = 6
+    vi = [1.0, 0.02, -10.0, 12.1]
+    vec = np.tile(vi, ntiles)
+    vec = vec.reshape(-1, 1)
+    index = 0
+    for i in range(ntiles):
+        index = t.from_solve_vec(vec[index:, :])
+        msub = t.M.flatten()[[0, 1, 2, 5]]
+        assert np.all(np.isclose(msub, vi))
 
     # reg
     rdict = {
             "default_lambda": 1.0,
             "translation_factor": 0.1}
-    r = t.create_regularization(96, rdict)
-    assert np.all(r.data[0::4] == 1.0)
-    assert np.all(r.data[1::4] == 1.0)
-    assert np.all(r.data[2::4] == 0.1)
-    assert np.all(r.data[3::4] == 0.1)
+    t = AlignerTransform(name='SimilarityModel')
+    r = t.regularization(rdict)
+    assert np.all(r[[0, 1]] == 1.0)
+    assert np.all(r[[2, 3]] == 0.1)
 
 
 def test_polynomial_model():
-    # can't do this
-    rt = renderapi.transform.AffineModel()
-    with pytest.raises(AlignerTransformException):
-        t = AlignerPolynomial2DTransform(transform=rt)
-
     # check args
     for o in range(4):
         t = AlignerTransform(name="Polynomial2DTransform", order=o)
+        assert(t.__class__ == AlignerPolynomial2DTransform)
+        assert(t.order == o)
+
+    rt = renderapi.transform.AffineModel()
+    for o in range(4):
+        t = AlignerTransform(name="Polynomial2DTransform", order=o, transform=rt)
         assert(t.__class__ == AlignerPolynomial2DTransform)
         assert(t.order == o)
 
@@ -307,7 +297,7 @@ def test_polynomial_model():
         n = int((order + 1) * (order + 2) / 2)
         params = np.zeros((2, n))
         rt = renderapi.transform.Polynomial2DTransform(params=params)
-        t = AlignerTransform(transform=rt)
+        t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
         match = example_match(100)
         data, indices, indptr, weights, npts = t.CSR_from_tilepair(
                 match, 1, 2, 5, 500, True)
@@ -318,7 +308,7 @@ def test_polynomial_model():
         assert npts == 100
 
     # make CSR zero weights
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
     match = example_match(100)
     match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
@@ -326,7 +316,7 @@ def test_polynomial_model():
     assert data is None
 
     # minimum size
-    t = AlignerTransform(transform=rt)
+    t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
     match = example_match(100)
     data, indices, indptr, weights, npts = t.CSR_from_tilepair(
             match, 1, 2, 200, 500, True)
@@ -335,91 +325,55 @@ def test_polynomial_model():
     # to vec
     for order in range(4):
         n = int((order + 1) * (order + 2) / 2)
-        params = np.zeros((2, n))
+        params = np.random.randn(2, n)
         rt = renderapi.transform.Polynomial2DTransform(params=params)
-        t = AlignerTransform(transform=rt)
-        v = t.to_solve_vec(rt)
-        assert np.all(v == np.transpose(params))
-        rt = renderapi.transform.AffineModel()
-        v = t.to_solve_vec(rt)
-        it = renderapi.transform.Polynomial2DTransform(identity=True)
-        if order == 0:
-            assert(np.all(v == 0))
-        else:
-            assert np.all(v[0:3, :] == np.transpose(it.params))
-        if v.shape[0] > 3:
-            assert np.all(v[3:, :] == 0)
-        rt = renderapi.transform.NonLinearCoordinateTransform()
-        with pytest.raises(AlignerTransformException):
-            v = t.to_solve_vec(rt)
-
-    # pass low-order input into a higher-order solve tform
-    osolve = 3
-    n = int((osolve + 1) * (osolve + 2) / 2)
-    params = np.zeros((2, n))
-    rt = renderapi.transform.Polynomial2DTransform(params=params)
-    t = AlignerTransform(transform=rt)
-    assert t.to_solve_vec(rt).shape == (n, 2)
-
-    oin = 2
-    n2 = int((oin + 1) * (oin + 2) / 2)
-    params = np.zeros((2, n2))
-    rt2 = renderapi.transform.Polynomial2DTransform(params=params)
-    assert t.to_solve_vec(rt2).shape == (n, 2)
-
-    # try to pass in an uninitialized transform
-    n = int((order + 1) * (order + 2) / 2)
-    params = np.zeros((2, n))
-    rt = renderapi.transform.Polynomial2DTransform(params=params)
-    t = AlignerTransform(transform=rt)
-    uninit = renderapi.transform.Polynomial2DTransform()
-    with pytest.raises(AlignerTransformException):
-        v = t.to_solve_vec(uninit)
+        t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
+        v = t.to_solve_vec()
+        assert np.all(np.isclose(v, np.transpose(params)))
 
     # from vec
     for order in range(4):
         n = int((order + 1) * (order + 2) / 2)
-        vec = np.zeros((n, 2))
-        rt0 = renderapi.transform.Polynomial2DTransform(params=vec)
-        t = AlignerTransform(transform=rt0)
-        vec = np.concatenate((vec, vec, vec, vec))
-        tforms = t.from_solve_vec(vec)
-        assert len(tforms) == 4
-        for rt in tforms:
-            assert np.all(np.isclose(
-                np.transpose(rt.params), rt0.params))
+        v0 = np.random.randn(n, 2)
+        rt0 = renderapi.transform.Polynomial2DTransform(params=np.zeros((2, n)))
+        t = AlignerTransform(name='Polynomial2DTransform', transform=rt0)
+        assert t.order == order
+        vec = np.concatenate((v0, v0, v0, v0))
+        index = 0
+        for i in range(4):
+            index = t.from_solve_vec(vec[index:, :])
+            assert np.all(np.isclose(t.params.transpose(), v0))
 
     # reg
     for order in range(4):
         n = int((order + 1) * (order + 2) / 2)
         vec = np.zeros((n, 2))
         rt0 = renderapi.transform.Polynomial2DTransform(params=vec)
-        t = AlignerTransform(transform=rt0)
+        t = AlignerTransform(name='Polynomial2DTransform', transform=rt0)
 
         rdict = {
                 "default_lambda": 1.0,
                 "translation_factor": 0.1,
                 "poly_factors": None}
-        r = t.create_regularization(n * 17, rdict)
-        assert np.all(r.data[0::n] == 0.1)
-        for j in range(1, n):
-            assert np.all(r.data[j::n] == 1.0)
+        r = t.regularization(rdict)
+        assert np.isclose(r[0], 0.1)
+        assert np.all(np.isclose(r[1:], 1.0))
 
     # reg
     for order in range(4):
         n = int((order + 1) * (order + 2) / 2)
         vec = np.zeros((n, 2))
         rt0 = renderapi.transform.Polynomial2DTransform(params=vec)
-        t = AlignerTransform(transform=rt0)
+        t = AlignerTransform(name='Polynomial2DTransform', transform=rt0)
 
         pf = np.random.randn(order + 1)
         rdict = {
                 "default_lambda": 1.0,
                 "translation_factor": 0.1,
                 "poly_factors": pf.tolist()}
-        r = t.create_regularization(n * 17, rdict)
+        r = t.regularization(rdict)
         ni = 0
         for i in range(order + 1):
             for j in range(i + 1):
-                assert np.all(r.data[ni::n] == pf[i])
+                assert np.all(r[ni::n] == pf[i])
                 ni += 1

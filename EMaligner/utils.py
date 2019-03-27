@@ -137,12 +137,14 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             resolved.transforms = shared_tforms
 
     # turn the last transform of every tilespec into an AlignerTransform
+    print(tform_name)
     for t in resolved.tilespecs:
         t.tforms[-1] = AlignerTransform(
             name=tform_name,
             transform=t.tforms[-1],
             fullsize=fullsize,
             order=order)
+    print(t.tforms[-1].__class__)
 
     return resolved
 
@@ -379,6 +381,7 @@ def write_to_new_stack(
             use_rest=use_rest)
 
 def solve(A, weights, reg, x0):
+    print('x0 shape', x0.shape)
     time0 = time.time()
     # regularized least squares
     # ensure symmetry of K
@@ -407,7 +410,7 @@ def solve(A, weights, reg, x0):
     results = {}
     results['precision'] = precision
     results['error'] = np.linalg.norm(err, axis=0).tolist()
-    results['err'] = [np.abs(err).mean(axis=0), np.abs(err).std(axis=0)]
+    results['err'] = [[m, e] for m, e in zip(np.abs(err).mean(axis=0), np.abs(err).std(axis=0))]
     results['x'] = x
     results['time'] = time.time() - time0
 

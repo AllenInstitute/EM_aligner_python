@@ -559,9 +559,6 @@ class EMaligner(argschema.ArgSchemaParser):
             slice_ind = np.concatenate(
                     [np.repeat(func_result['tiles_used'][i], resolved.tilespecs[i].tforms[-1].DOF_per_tile)
                      for i in range(tile_ids.size)])
-            #slice_ind = np.repeat(
-            #    tile_ind,
-            #    self.transform.DOF_per_tile / self.transform.rows_per_ptmatch)
             func_result['A'] = A[:, slice_ind]
             func_result['weights'] = outw
 

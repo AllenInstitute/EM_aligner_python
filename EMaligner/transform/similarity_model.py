@@ -25,50 +25,30 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         self.nnz_per_row = 6
         self.rows_per_ptmatch = 4
 
-    def to_solve_vec(self, input_tform):
-        if isinstance(input_tform, renderapi.transform.AffineModel):
-            vec = np.array([
-                input_tform.M[0, 0],
-                input_tform.M[0, 1],
-                input_tform.M[0, 2],
-                input_tform.M[1, 2]])
-        elif isinstance(
-                input_tform, renderapi.transform.Polynomial2DTransform):
-            vec = np.array([
-                input_tform.params[0, 1],
-                input_tform.params[0, 2],
-                input_tform.params[0, 0],
-                input_tform.params[1, 0]])
-        else:
-            raise AlignerTransformException(
-                    "no method to represent input tform %s in solve as %s" % (
-                        input_tform.__class__, self.__class__))
-
+    def to_solve_vec(self):
+        vec = np.array([
+            self.M[0, 0],
+            self.M[0, 1],
+            self.M[0, 2],
+            self.M[1, 2]])
         vec = vec.reshape((vec.size, 1))
         return vec
 
     def from_solve_vec(self, vec):
-        tforms = []
-        n = int(vec.shape[0] / 4)
-        for i in range(n):
-            self.M[0, 0] = vec[i * 4 + 0]
-            self.M[0, 1] = vec[i * 4 + 1]
-            self.M[0, 2] = vec[i * 4 + 2]
-            self.M[1, 0] = -vec[i * 4 + 1]
-            self.M[1, 1] = vec[i * 4 + 0]
-            self.M[1, 2] = vec[i * 4 + 3]
-            tforms.append(
-                    renderapi.transform.AffineModel(
-                        json=self.to_dict()))
-        return tforms
+        self.M[0, 0] = vec[0]
+        self.M[0, 1] = vec[1]
+        self.M[0, 2] = vec[2]
+        self.M[1, 0] = -vec[1]
+        self.M[1, 1] = vec[0]
+        self.M[1, 2] = vec[3]
+        n = 4
+        return n
 
-    def create_regularization(self, sz, regdict):
-        reg = np.ones(sz).astype('float64') * regdict['default_lambda']
+    def regularization(self, regdict):
+        reg = np.ones(self.DOF_per_tile).astype('float64') * regdict['default_lambda']
         reg[2::4] *= regdict['translation_factor']
         reg[3::4] *= regdict['translation_factor']
-        outr = sparse.eye(reg.size, format='csr')
-        outr.data = reg
-        return outr
+        return reg
 
     def CSR_from_tilepair(
             self, match, tile_ind1, tile_ind2,

@@ -7,12 +7,12 @@ from .polynomial_model import AlignerPolynomial2DTransform
 class AlignerTransform(object):
 
     def __init__(self, name=None, transform=None, fullsize=False, order=2):
-        if (name is None) & (transform is None):
+        if (name is None):
             raise AlignerTransformException(
-                   'must specify transform name or provide a transform')
+                   'must specify transform name')
 
-        if transform is not None:
-            name = transform.__class__.__name__
+        #if transform is not None:
+        #    name = transform.__class__.__name__
 
         # backwards compatibility
         if name == 'affine':

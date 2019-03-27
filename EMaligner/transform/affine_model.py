@@ -47,14 +47,6 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
     def from_solve_vec(self, vec):
         vsh = vec.shape
-        if not (
-                ((vsh[1] == 1) & (vsh[0] >= 6)) |
-                ((vsh[1] == 2) & (vsh[0] >= 3))):
-            raise ValueError(
-                    "AlignerAffineModel.from_solve_vec expects "
-                    " input shape (n, 1) (n >= 6) or (n, 2) (n >= 3)."
-                    " Recevied {}". format(vsh))
-
         if vsh[1] == 1:
             self.M[0, 0] = vec[0]
             self.M[0, 1] = vec[1]

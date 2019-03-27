@@ -204,52 +204,28 @@ class EMaligner(argschema.ArgSchemaParser):
             self.args['first_section'],
             self.args['last_section'] + 1)
 
-        ingestconn = None
-        # make a connection to the new stack
         if self.args['output_mode'] == 'stack':
-            ingestconn = utils.make_dbconnection(self.args['output_stack'])
-            renderapi.stack.create_stack(
-                self.args['output_stack']['name'][0],
-                render=ingestconn)
+            utils.create_or_set_loading(self.args['output_stack'])
 
         # montage
         if self.args['solve_type'] == 'montage':
-            # check for zvalues in stack
-            tmp = self.args['input_stack']['db_interface']
-            self.args['input_stack']['db_interface'] = 'render'
-            conn = utils.make_dbconnection(self.args['input_stack'])
-            self.args['input_stack']['db_interface'] = tmp
-            z_in_stack = renderapi.stack.get_z_values_for_stack(
-                self.args['input_stack']['name'][0],
-                render=conn)
-            newzvals = []
+            zvals = utils.get_z_values_for_stack(
+                    self.args['input_stack'],
+                    zvals)
             for z in zvals:
-                if z in z_in_stack:
-                    newzvals.append(z)
-            zvals = np.array(newzvals)
-            for z in zvals:
-                self.results = self.assemble_and_solve(
-                    np.array([z]),
-                    ingestconn)
+                self.results = self.assemble_and_solve(np.array([z]))
+
         # 3D
         elif self.args['solve_type'] == '3D':
-            self.results = self.assemble_and_solve(zvals, ingestconn)
+            self.results = self.assemble_and_solve(zvals)
 
-        if ingestconn is not None:
-            if self.args['close_stack']:
-                renderapi.stack.set_stack_state(
-                    self.args['output_stack']['name'][0],
-                    state='COMPLETE',
-                    render=ingestconn)
+        if (self.args['output_mode'] == 'stack') & self.args['close_stack']:
+            utils.set_complete(self.args['output_stack'])
+
         logger.info(' total time: %0.1f' % (time.time() - t0))
 
-    def assemble_and_solve(self, zvals, ingestconn):
+    def assemble_and_solve(self, zvals):
         t0 = time.time()
-
-        #self.transform = AlignerTransform(
-        #    name=self.args['transformation'],
-        #    order=self.args['poly_order'],
-        #    fullsize=self.args['fullsize_transform'])
 
         if self.args['ingest_from_file'] != '':
             assemble_result = self.assemble_from_hdf5(
@@ -295,10 +271,8 @@ class EMaligner(argschema.ArgSchemaParser):
                     assemble_result['resolved'], results['x'], assemble_result['tiles_used'])
             utils.write_to_new_stack(
                     solved_resolved,
-                    self.args['output_stack']['name'][0],
-                    ingestconn,
+                    self.args['output_stack'],
                     self.args['render_output'],
-                    self.args['output_stack']['use_rest'],
                     self.args['overwrite_zlayer'])
             if self.args['render_output'] == 'stdout':
                 logger.info(message)

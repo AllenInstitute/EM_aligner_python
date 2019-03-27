@@ -25,8 +25,11 @@ class EMalignerException(Exception):
     pass
 
 
-def make_dbconnection(collection, which='tile'):
-    if collection['db_interface'] == 'mongo':
+def make_dbconnection(collection, which='tile', interface=None):
+    if interface is None:
+        interface = collection['db_interface']
+
+    if interface == 'mongo':
         if collection['mongo_userName'] != '':
             client = MongoClient(
                     host=collection['mongo_host'],
@@ -53,7 +56,7 @@ def make_dbconnection(collection, which='tile'):
                     '__' + name) for name in collection['name']]
             dbconnection = [
                     client.match[name] for name in mongo_collection_name]
-    elif collection['db_interface'] == 'render':
+    elif interface == 'render':
         dbconnection = renderapi.connect(**collection)
     else:
         raise EMalignerException(
@@ -349,32 +352,30 @@ def get_stderr_stdout(outarg):
 
 def write_to_new_stack(
         resolved,
-        outputname,
-        ingestconn,
+        output_stack,
         outarg,
-        use_rest,
         overwrite_zlayer):
 
-    logger.setLevel('INFO')
+    ingestconn = make_dbconnection(output_stack, interface='render')
     logger.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
             ingestconn.DEFAULT_HOST,
             ingestconn.DEFAULT_PORT,
             ingestconn.DEFAULT_OWNER,
             ingestconn.DEFAULT_PROJECT,
-            outputname))
+            output_stack['name'][0]))
     stdeo = get_stderr_stdout(outarg)
 
     if overwrite_zlayer:
         zvalues = np.unique(np.array([t.z for t in resolved.tilespecs]))
         for zvalue in zvalues:
             renderapi.stack.delete_section(
-                    outputname,
+                    output_stack['name'][0],
                     zvalue,
                     render=ingestconn)
 
     renderapi.client.import_tilespecs_parallel(
-            outputname,
+            output_stack['name'][0],
             resolved.tilespecs,
             sharedTransforms=resolved.transforms,
             render=ingestconn,
@@ -382,7 +383,7 @@ def write_to_new_stack(
             mpPool=pool_pathos.PathosWithPool,
             stderr=stdeo,
             stdout=stdeo,
-            use_rest=use_rest)
+            use_rest=output_stack['use_rest'])
 
 def solve(A, weights, reg, x0):
     time0 = time.time()
@@ -430,6 +431,39 @@ def message_from_solve_results(results):
     message += ", ".join([
         "%0.1f +/- %0.1f" % (e[0], e[1]) for e in results['err']])
     return message
+
+
+
+def create_or_set_loading(stack):
+    dbconnection = make_dbconnection(
+            stack,
+            interface='render')
+    renderapi.stack.create_stack(
+        stack['name'][0],
+        render=dbconnection)
+
+
+def set_complete(stack):
+    dbconnection = make_dbconnection(
+            stack,
+            interface='render')
+    renderapi.stack.set_stack_state(
+        stack['name'][0],
+        state='COMPLETE',
+        render=dbconnection)
+
+
+def get_z_values_for_stack(stack, zvals):
+    dbconnection = make_dbconnection(stack)
+    if stack['db_interface'] == 'render':
+        zstack = renderapi.stack.get_z_values_for_stack(
+                stack['name'][0],
+                render=dbconnection)
+    if stack['db_interface'] == 'mongo':
+        zstack = dbconnection.distinct('z')
+
+    ind = np.isin(zvals, zstack)
+    return zvals[ind]
 
 
 def update_tilespecs(resolved, x, used):

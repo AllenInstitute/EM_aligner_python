@@ -229,9 +229,6 @@ class EMA_Schema(ArgSchema):
     showtiming = Int(
         default=1,
         description='have the routine showhow long each process takes')
-    log_level = String(
-        default="INFO",
-        description='logging level')
 
     @post_load
     def validate_data(self, data):

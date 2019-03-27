@@ -17,8 +17,7 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
 import copy
 
-logger2 = logging.getLogger(__name__)
-
+logger = logging.getLogger(__name__)
 
 class EMalignerException(Exception):
     """Exception raised when there is a \
@@ -154,6 +153,14 @@ def get_resolved_tilespecs(stack, tform_name, pool_size, zvals, fullsize=False, 
         for rz in pool.map(getz, zvals):
             resolved.tilespecs += rz.tilespecs
             resolved.transforms += rz.transforms
+    logger.info(
+        "\n loaded %d tile specs from %d zvalues in "
+        "%0.1f sec using interface: %s" % (
+            len(resolved.tilespecs),
+            len(zvals),
+            time.time() - t0,
+            stack['db_interface']))
+
     return resolved
 
 def get_matches(iId, jId, collection, dbconnection):
@@ -192,9 +199,9 @@ def get_matches(iId, jId, collection, dbconnection):
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
     if len(matches) == 0:
-        logger2.debug(message)
+        logger.debug(message)
     else:
-        logger2.debug(message)
+        logger.info(message)
     return matches
 
 
@@ -227,7 +234,7 @@ def write_chunk_to_file(fname, c, file_weights):
     weights_dset[:] = file_weights
     fcsr.close()
 
-    logger2.info(
+    logger.info(
         "wrote %s %0.2fGB on disk" % (
             fname,
             os.path.getsize(fname)/(2.**30)))
@@ -320,12 +327,12 @@ def write_reg_and_tforms(
 def get_stderr_stdout(outarg):
     if outarg == 'null':
         stdeo = open(os.devnull, 'wb')
-        logger2.info('render output is going to /dev/null')
+        logger.info('render output is going to /dev/null')
     elif outarg == 'stdout':
         stdeo = sys.stdout
         if sys.version_info[0] >= 3:
             stdeo = sys.stdout.buffer
-        logger2.info('render output is going to stdout')
+        logger.info('render output is going to stdout')
     else:
         i = 0
         odir, oname = os.path.split(outarg)
@@ -348,8 +355,8 @@ def write_to_new_stack(
         use_rest,
         overwrite_zlayer):
 
-    logger2.setLevel('INFO')
-    logger2.info(
+    logger.setLevel('INFO')
+    logger.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
             ingestconn.DEFAULT_HOST,
             ingestconn.DEFAULT_PORT,
@@ -378,7 +385,6 @@ def write_to_new_stack(
             use_rest=use_rest)
 
 def solve(A, weights, reg, x0):
-    print('x0 shape', x0.shape)
     time0 = time.time()
     # regularized least squares
     # ensure symmetry of K

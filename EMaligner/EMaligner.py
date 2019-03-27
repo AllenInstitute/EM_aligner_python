@@ -20,7 +20,6 @@ warnings.resetwarnings()
 
 logger = logging.getLogger(__name__)
 
-
 def calculate_processing_chunk(fargs):
     # set up for calling using multiprocessing pool
     [pair, zloc, args, tile_ids] = fargs
@@ -199,6 +198,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def run(self):
         logger.setLevel(self.args['log_level'])
+        utils.logger.setLevel(self.args['log_level'])
         t0 = time.time()
         zvals = np.arange(
             self.args['first_section'],

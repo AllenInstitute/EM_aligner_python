@@ -9,6 +9,7 @@ from marshmallow import ValidationError
 import json
 import os
 import copy
+import numpy as np
 
 dname = os.path.dirname(os.path.abspath(__file__))
 FILE_ROUGH_TILES = os.path.join(
@@ -101,8 +102,8 @@ def test_rough_similarity_explicit_depth(
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
     with pytest.raises(ValidationError):
@@ -155,8 +156,8 @@ def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
 
@@ -174,8 +175,8 @@ def test_rough_similarity_split(
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
     rough_parameters2['pointmatch']['db_interface'] = "render"
@@ -186,8 +187,8 @@ def test_rough_similarity_split(
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
 
@@ -225,8 +226,8 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
     rough_parameters2['input_stack']['db_interface'] = 'mongo'
@@ -237,8 +238,8 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
 
@@ -260,8 +261,8 @@ def test_affine_on_similarity(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
 
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
 
 
 def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
@@ -273,8 +274,8 @@ def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
 
 
 def hdf5_fun(render, parameters, rough_pointmatches):
@@ -295,8 +296,8 @@ def hdf5_fun(render, parameters, rough_pointmatches):
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
-    assert mod.results['precision'] < 1e-7
-    assert mod.results['error'] < 1e6
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
 
     # check ingest from file
     try:

@@ -137,15 +137,12 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             resolved.transforms = shared_tforms
 
     # turn the last transform of every tilespec into an AlignerTransform
-    print(tform_name)
     for t in resolved.tilespecs:
         t.tforms[-1] = AlignerTransform(
             name=tform_name,
             transform=t.tforms[-1],
             fullsize=fullsize,
             order=order)
-    print(t.tforms[-1].__class__)
-
     return resolved
 
 

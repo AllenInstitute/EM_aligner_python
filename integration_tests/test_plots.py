@@ -132,6 +132,7 @@ def test_resplot(render, montage_pointmatches, raw_stack, tmpdir):
 def test_trplot(render, montage_pointmatches, raw_stack, tmpdir):
     p = copy.deepcopy(montage_parameters)
     p['input_stack']['name'] = raw_stack
+    p['output_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
     mod = CheckTransforms(input_data=p, args=[])
     mod.args['z1'] = 1015

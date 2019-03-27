@@ -256,8 +256,8 @@ class EMaligner(argschema.ArgSchemaParser):
                 self.args['ingest_from_file'],
                 zvals,
                 read_data=False)
-            x = assemble_result['tforms']
             results = {}
+            results['x'] = assemble_result['x']
 
         else:
             # assembly
@@ -275,7 +275,7 @@ class EMaligner(argschema.ArgSchemaParser):
             logger.info(' A created in %0.1f seconds' % (time.time() - t0))
 
             if self.args['profile_data_load']:
-                raise EMalignerException(
+                raise utils.EMalignerException(
                     "exiting after timing profile")
 
             # solve
@@ -319,14 +319,13 @@ class EMaligner(argschema.ArgSchemaParser):
     def assemble_from_hdf5(self, filename, zvals, read_data=True):
         assemble_result = dict(self.assemble_struct)
 
-        from_stack = get_tileids_and_tforms(
+        assemble_result['resolved'] = utils.get_resolved_tilespecs(
             self.args['input_stack'],
             self.args['transformation'],
+            self.args['n_parallel_jobs'],
             zvals,
             fullsize=self.args['fullsize_transform'],
             order=self.args['poly_order'])
-
-        assemble_result['shared_tforms'] = from_stack.pop('shared_tforms')
 
         with h5py.File(filename, 'r') as f:
             assemble_result['tids'] = np.array(
@@ -334,30 +333,32 @@ class EMaligner(argschema.ArgSchemaParser):
             assemble_result['unused_tids'] = np.array(
                 f.get('unused_tile_ids')[()]).astype('U')
             k = 0
-            assemble_result['tforms'] = []
+            assemble_result['x'] = []
             while True:
                 name = 'transforms_%d' % k
                 if name in f.keys():
-                    assemble_result['tforms'].append(f.get(name)[()])
+                    assemble_result['x'].append(f.get(name)[()])
                     k += 1
                 else:
                     break
 
-            if len(assemble_result['tforms']) == 1:
-                n = assemble_result['tforms'][0].size
-                assemble_result['tforms'] = np.array(
-                    assemble_result['tforms']).flatten().reshape((n, 1))
+            if len(assemble_result['x']) == 1:
+                n = assemble_result['x'][0].size
+                assemble_result['x'] = np.array(
+                    assemble_result['x']).flatten().reshape((n, 1))
             else:
-                assemble_result['tforms'] = np.transpose(
-                    np.array(assemble_result['tforms']))
+                assemble_result['x'] = np.transpose(
+                    np.array(assemble_result['x']))
 
             reg = f.get('lambda')[()]
             datafile_names = f.get('datafile_names')[()]
             file_args = json.loads(f.get('input_args')[()][0])
 
         # get the tile IDs and transforms
-        tile_ind = np.in1d(from_stack['tids'], assemble_result['tids'])
-        assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
+        tids = np.array([t.tileId for t in assemble_result['resolved'].tilespecs])
+        assemble_result['tiles_used'] = np.in1d(tids, assemble_result['tids'])
+        #tile_ind = np.in1d(from_stack['tids'], assemble_result['tids'])
+        #assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
 
         outr = sparse.eye(reg.size, format='csr')
         outr.data = reg
@@ -427,59 +428,36 @@ class EMaligner(argschema.ArgSchemaParser):
         assemble_result['reg'] = CSR_A.pop('reg')
         assemble_result['x'] = CSR_A.pop('x')
 
-        # some book-keeping if there were some unused tiles
-        #tile_ind = np.in1d(from_stack['tids'], CSR_A['tiles_used'])
-        #assemble_result['tspecs'] = from_stack['tspecs'][tile_ind]
-        #assemble_result['tids'] = \
-        #    from_stack['tids'][tile_ind]
-        #assemble_result['unused_tids'] = \
-        #    from_stack['tids'][np.invert(tile_ind)]
-
-        # remove columns in A for unused tiles
-        #slice_ind = np.repeat(
-        #    tile_ind,
-        #    self.transform.DOF_per_tile / from_stack['tforms'].shape[1])
-        #if self.args['output_mode'] != 'hdf5':
-        #    # for large matrices,
-        #    # this might be expensive to perform on CSR format
-        #    assemble_result['A'] = assemble_result['A'][:, slice_ind]
-
-        #assemble_result['tforms'] = from_stack['tforms'][slice_ind, :]
-        #del from_stack, CSR_A['tiles_used'], tile_ind
-
-        # create the regularization vectors
-        #assemble_result['reg'] = self.transform.create_regularization(
-        #    assemble_result['tforms'].shape[0],
-        #    self.args['regularization'])
-
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
-            write_reg_and_tforms(
+            alltids = np.array([t.tileId for t in assemble_result['resolved'].tilespecs])
+
+            utils.write_reg_and_tforms(
                 dict(self.args),
                 CSR_A['metadata'],
-                assemble_result['tforms'],
+                assemble_result['x'],
                 assemble_result['reg'],
-                assemble_result['tids'],
-                assemble_result['unused_tids'])
+                alltids[assemble_result['tiles_used']],
+                alltids[np.invert(assemble_result['tiles_used'])])
 
         return assemble_result
 
 
-    def concatenate_chunks(self, chunks):
-        i = 0
-        while chunks[i]['data'] is None:
-            if i == len(chunks) - 1:
-                break
-            i += 1
-        c0 = chunks[i]
-        for c in chunks[(i + 1):]:
-            if c['data'] is not None:
-                for ckey in ['data', 'weights', 'indices', 'zlist']:
-                    c0[ckey] = np.append(c0[ckey], c[ckey])
-                ckey = 'indptr'
-                lastptr = c0[ckey][-1]
-                c0[ckey] = np.append(c0[ckey], c[ckey][1:] + lastptr)
-        return c0
+    #def concatenate_chunks(self, chunks):
+    #    i = 0
+    #    while chunks[i]['data'] is None:
+    #        if i == len(chunks) - 1:
+    #            break
+    #        i += 1
+    #    c0 = chunks[i]
+    #    for c in chunks[(i + 1):]:
+    #        if c['data'] is not None:
+    #            for ckey in ['data', 'weights', 'indices', 'zlist']:
+    #                c0[ckey] = np.append(c0[ckey], c[ckey])
+    #            ckey = 'indptr'
+    #            lastptr = c0[ckey][-1]
+    #            c0[ckey] = np.append(c0[ckey], c[ckey][1:] + lastptr)
+    #    return c0
 
 
     def concatenate_results(self, results):
@@ -536,16 +514,52 @@ class EMaligner(argschema.ArgSchemaParser):
             func_result['tiles_used'] = \
                     func_result['tiles_used'] | result['tiles_used']
 
+        func_result['x'] = np.concatenate([
+            t.tforms[-1].to_solve_vec() for t in resolved.tilespecs
+            if t.tileId in tile_ids[func_result['tiles_used']]])
+        reg = np.concatenate([
+            t.tforms[-1].regularization(self.args['regularization']) for t in resolved.tilespecs
+            if t.tileId in tile_ids[func_result['tiles_used']]])
+        func_result['reg'] = sparse.eye(reg.size, format='csr')
+        func_result['reg'].data = reg
+
         if self.args['output_mode'] == 'hdf5':
-            func_result['metadata'] = self.write_chunks_to_files(results)
+            results = np.array(results)
+
+            if self.args['hdf5_options']['chunks_per_file'] == -1:
+                proc_chunks = [np.arange(npairs)]
+            else:
+                proc_chunks = np.array_split(
+                    np.arange(npairs),
+                    np.ceil(
+                        float(npairs) /
+                        self.args['hdf5_options']['chunks_per_file']))
+            func_result['metadata'] = []
+            for pchunk in proc_chunks:
+                cat_chunk = self.concatenate_results(results[pchunk])
+                if cat_chunk['data'] is not None:
+                    c = csr_matrix((
+                        cat_chunk['data'],
+                        cat_chunk['indices'],
+                        cat_chunk['indptr']))
+                    fname = self.args['hdf5_options']['output_dir'] + \
+                        '/%d_%d.h5' % (
+                        cat_chunk['zlist'].min(),
+                        cat_chunk['zlist'].max())
+                    func_result['metadata'].append(
+                        utils.write_chunk_to_file(
+                            fname,
+                            c,
+                            cat_chunk['weights']))
+
 
         else:
-            func_result['x'] = np.concatenate([
-                t.tforms[-1].to_solve_vec() for t in resolved.tilespecs
-                if t.tileId in tile_ids[func_result['tiles_used']]])
-            reg = np.concatenate([
-                t.tforms[-1].regularization(self.args['regularization']) for t in resolved.tilespecs
-                if t.tileId in tile_ids[func_result['tiles_used']]])
+            #func_result['x'] = np.concatenate([
+            #    t.tforms[-1].to_solve_vec() for t in resolved.tilespecs
+            #    if t.tileId in tile_ids[func_result['tiles_used']]])
+            #reg = np.concatenate([
+            #    t.tforms[-1].regularization(self.args['regularization']) for t in resolved.tilespecs
+            #    if t.tileId in tile_ids[func_result['tiles_used']]])
             result = self.concatenate_results(results)
             A = csr_matrix((
                 result['data'],
@@ -553,8 +567,6 @@ class EMaligner(argschema.ArgSchemaParser):
                 result['indptr']))
             outw = sparse.eye(result['weights'].size, format='csr')
             outw.data = result['weights']
-            func_result['reg'] = sparse.eye(reg.size, format='csr')
-            func_result['reg'].data = reg
             tile_ind = np.in1d(tile_ids, func_result['tiles_used'])
             slice_ind = np.concatenate(
                     [np.repeat(func_result['tiles_used'][i], resolved.tilespecs[i].tforms[-1].DOF_per_tile)

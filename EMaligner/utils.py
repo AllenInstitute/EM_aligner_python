@@ -2,7 +2,6 @@ from pymongo import MongoClient
 import numpy as np
 import renderapi
 from renderapi.external.processpools import pool_pathos
-import collections
 import logging
 import time
 import warnings
@@ -12,12 +11,13 @@ import json
 from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
-warnings.filterwarnings("ignore", message="numpy.dtype size changed")
-warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
 import copy
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 logger = logging.getLogger(__name__)
+
 
 class EMalignerException(Exception):
     """Exception raised when there is a \
@@ -132,7 +132,10 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
                 for t in tspecs])
             # don't perpetuate unused reference transforms
             dbconnection2 = make_dbconnection(stack, which='transform')
-            tfjson = lambda refid: list(dbconnection2.find({"id": refid}))[0]
+
+            def tfjson(refid):
+                return list(dbconnection2.find({"id": refid}))[0]
+
             shared_tforms = [renderapi.transform.load_transform_json(
                 tfjson(refid)) for refid in refids]
             resolved.tilespecs = tspecs
@@ -148,7 +151,8 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     return resolved
 
 
-def get_resolved_tilespecs(stack, tform_name, pool_size, zvals, fullsize=False, order=2):
+def get_resolved_tilespecs(
+        stack, tform_name, pool_size, zvals, fullsize=False, order=2):
     t0 = time.time()
     resolved = renderapi.resolvedtiles.ResolvedTiles()
     getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
@@ -165,6 +169,7 @@ def get_resolved_tilespecs(stack, tform_name, pool_size, zvals, fullsize=False, 
             stack['db_interface']))
 
     return resolved
+
 
 def get_matches(iId, jId, collection, dbconnection):
     matches = []
@@ -385,6 +390,7 @@ def write_to_new_stack(
             stdout=stdeo,
             use_rest=output_stack['use_rest'])
 
+
 def solve(A, weights, reg, x0):
     time0 = time.time()
     # regularized least squares
@@ -407,14 +413,16 @@ def solve(A, weights, reg, x0):
         x[:, i] = solve(Lm)
         err[:, i] = A.dot(x[:, i])
         precision[i] = \
-                np.linalg.norm(K.dot(x[:, i]) - Lm) / np.linalg.norm(Lm)
+            np.linalg.norm(K.dot(x[:, i]) - Lm) / np.linalg.norm(Lm)
         del Lm
     del K
 
     results = {}
     results['precision'] = precision
     results['error'] = np.linalg.norm(err, axis=0).tolist()
-    results['err'] = [[m, e] for m, e in zip(np.abs(err).mean(axis=0), np.abs(err).std(axis=0))]
+    results['err'] = [
+            [m, e] for m, e in
+            zip(np.abs(err).mean(axis=0), np.abs(err).std(axis=0))]
     results['x'] = x
     results['time'] = time.time() - time0
 
@@ -431,7 +439,6 @@ def message_from_solve_results(results):
     message += ", ".join([
         "%0.1f +/- %0.1f" % (e[0], e[1]) for e in results['err']])
     return message
-
 
 
 def create_or_set_loading(stack):

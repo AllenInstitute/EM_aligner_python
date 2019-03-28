@@ -2,7 +2,7 @@ import numpy as np
 import renderapi
 import argschema
 from .schemas import EMA_Schema
-import EMaligner.utils
+from . import utils
 from .transform.transform import AlignerTransform
 import time
 import scipy.sparse as sparse

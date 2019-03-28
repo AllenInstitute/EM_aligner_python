@@ -11,6 +11,7 @@ import warnings
 import os
 import sys
 import multiprocessing
+import itertools
 import logging
 import json
 import h5py
@@ -51,14 +52,18 @@ def calculate_processing_chunk(fargs):
         return chunk
 
     # extract IDs for fast checking
+    pid_set = set(m['pId'] for m in matches)
+    qid_set = set(m['qId'] for m in matches)
+    tile_set = set(tile_ids)
+
+    pid_set.intersection_update(tile_set)
+    qid_set.intersection_update(tile_set)
+
+    matches = [m for m in matches if m['pId']
+               in pid_set and m['qId'] in qid_set]
+
     pids = np.array([m['pId'] for m in matches])
     qids = np.array([m['qId'] for m in matches])
-
-    # remove matches that don't have both IDs in tile_ids
-    instack = np.in1d(pids, tile_ids) & np.in1d(qids, tile_ids)
-    matches = np.array(matches)[instack].tolist()
-    pids = pids[instack]
-    qids = qids[instack]
 
     if len(matches) == 0:
         logger.debug(
@@ -72,7 +77,7 @@ def calculate_processing_chunk(fargs):
             "for groupIds %s and %s in %0.1f sec "
             "using interface: %s" % (
                 pstr,
-                instack.size,
+                len(pid_set.union(qid_set)),
                 len(matches),
                 pair['section1'],
                 pair['section2'],
@@ -214,6 +219,7 @@ class EMaligner(argschema.ArgSchemaParser):
                     zvals)
             for z in zvals:
                 self.results = self.assemble_and_solve(np.array([z]))
+            t3 = time.time()
 
         # 3D
         elif self.args['solve_type'] == '3D':
@@ -473,13 +479,13 @@ class EMaligner(argschema.ArgSchemaParser):
             func_result['tiles_used'] = \
                     func_result['tiles_used'] | result['tiles_used']
 
-        func_result['x'] = np.concatenate([
-            t.tforms[-1].to_solve_vec() for t in resolved.tilespecs
-            if t.tileId in tile_ids[func_result['tiles_used']]])
-        reg = np.concatenate([
-            t.tforms[-1].regularization(self.args['regularization'])
-            for t in resolved.tilespecs
-            if t.tileId in tile_ids[func_result['tiles_used']]])
+        func_result['x'] = []
+        reg = []
+        for t in np.array(resolved.tilespecs)[func_result['tiles_used']]:
+            func_result['x'].append(t.tforms[-1].to_solve_vec())
+            reg.append(t.tforms[-1].regularization(self.args['regularization']))
+        func_result['x'] = np.concatenate(func_result['x'])
+        reg = np.concatenate(reg)
         func_result['reg'] = sparse.eye(reg.size, format='csr')
         func_result['reg'].data = reg
 

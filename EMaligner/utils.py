@@ -11,10 +11,11 @@ import json
 from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
-import h5py
 import copy
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+import h5py
+
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,7 @@ def get_resolved_tilespecs(
         for rz in pool.map(getz, zvals):
             resolved.tilespecs += rz.tilespecs
             resolved.transforms += rz.transforms
+
     logger.info(
         "\n loaded %d tile specs from %d zvalues in "
         "%0.1f sec using interface: %s" % (
@@ -206,10 +208,8 @@ def get_matches(iId, jId, collection, dbconnection):
                 matches.extend(list(cursor))
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
-    if len(matches) == 0:
-        logger.debug(message)
-    else:
-        logger.info(message)
+    logger.debug(message)
+
     return matches
 
 

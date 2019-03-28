@@ -176,7 +176,7 @@ class CheckResiduals(argschema.ArgSchemaParser):
                 color_choice='x',
                 colorbar=True,
                 projection=projection)
-        ax1.set_title('$\Delta x$ as p')
+        ax1.set_title(r'$\Delta x$ as p')
 
         ax2 = fig.add_subplot(142, projection=projection)
         self.make_plot(
@@ -185,7 +185,7 @@ class CheckResiduals(argschema.ArgSchemaParser):
                 color_choice='x',
                 colorbar=True,
                 projection=projection)
-        ax2.set_title('$\Delta x$ as q')
+        ax2.set_title(r'$\Delta x$ as q')
 
         ax3 = fig.add_subplot(143, projection=projection)
         self.make_plot(
@@ -194,7 +194,7 @@ class CheckResiduals(argschema.ArgSchemaParser):
                 color_choice='y',
                 colorbar=True,
                 projection=projection)
-        ax3.set_title('$\Delta y$ as p')
+        ax3.set_title(r'$\Delta y$ as p')
 
         ax4 = fig.add_subplot(144, projection=projection)
         self.make_plot(
@@ -203,7 +203,7 @@ class CheckResiduals(argschema.ArgSchemaParser):
                 color_choice='y',
                 colorbar=True,
                 projection=projection)
-        ax4.set_title('$\Delta y$ as q')
+        ax4.set_title(r'$\Delta y$ as q')
 
     def make_plots(self):
         fig = plt.figure(1, figsize=(12, 7.5))
@@ -228,11 +228,11 @@ class CheckResiduals(argschema.ArgSchemaParser):
                 color_choice='rss',
                 projection='scatter_density')
 
-        ax1.set_title(self.ident + '\n$\Delta x$', fontsize=10)
-        ax2.set_title(self.ident + '\n$\Delta y$', fontsize=10)
+        ax1.set_title(self.ident + r'\n$\Delta x$', fontsize=10)
+        ax2.set_title(self.ident + r'\n$\Delta y$', fontsize=10)
         ax3.set_title(
                 self.ident +
-                '\n$\sqrt{\Delta x^2+\Delta y^2}$',
+                r'\n$\sqrt{\Delta x^2+\Delta y^2}$',
                 fontsize=10)
 
         ax1.set_xlabel(self.mx, fontsize=12)

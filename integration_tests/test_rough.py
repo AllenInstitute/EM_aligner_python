@@ -31,8 +31,9 @@ def render():
 @pytest.fixture(scope='module')
 def rough_input_stack(render):
     test_rough_stack = 'rough_input_stack'
-    tilespecs = [renderapi.tilespec.TileSpec(json=d)
-                 for d in json.load(open(FILE_ROUGH_TILES, 'r'))]
+    with open(FILE_ROUGH_TILES, 'r') as f:
+        tilespecs = [renderapi.tilespec.TileSpec(json=d)
+                     for d in json.load(f)]
     renderapi.stack.create_stack(test_rough_stack, render=render)
     renderapi.client.import_tilespecs(
             test_rough_stack, tilespecs, render=render)
@@ -46,8 +47,9 @@ def rough_input_stack(render):
 @pytest.fixture(scope='module')
 def rough_input_stack_2(render):
     test_rough_stack = 'rough_input_stack_2'
-    tilespecs = [renderapi.tilespec.TileSpec(json=d)
-                 for d in json.load(open(FILE_ROUGH_TILES, 'r'))]
+    with open(FILE_ROUGH_TILES, 'r') as f:
+        tilespecs = [renderapi.tilespec.TileSpec(json=d)
+                     for d in json.load(f)]
     renderapi.stack.create_stack(
             test_rough_stack, render=render)
     renderapi.client.import_tilespecs(
@@ -65,7 +67,8 @@ def rough_input_stack_2(render):
 @pytest.fixture(scope='module')
 def rough_pointmatches(render):
     test_rough_collection = 'rough_collection'
-    pms_from_json = json.load(open(FILE_ROUGH_PMS, 'r'))
+    with open(FILE_ROUGH_PMS, 'r') as f:
+        pms_from_json = json.load(f)
     renderapi.pointmatch.import_matches(
             test_rough_collection, pms_from_json, render=render)
     yield test_rough_collection
@@ -75,10 +78,12 @@ def rough_pointmatches(render):
 def split_rough_pointmatches(render):
     test_rough_collection1 = 'rough_collection_split1'
     test_rough_collection2 = 'rough_collection_split2'
-    pms_from_json = json.load(open(FILE_ROUGH_PMS_S1, 'r'))
+    with open(FILE_ROUGH_PMS_S1, 'r') as f:
+        pms_from_json = json.load(f)
     renderapi.pointmatch.import_matches(
             test_rough_collection1, pms_from_json, render=render)
-    pms_from_json = json.load(open(FILE_ROUGH_PMS_S2, 'r'))
+    with open(FILE_ROUGH_PMS_S2, 'r') as f:
+        pms_from_json = json.load(f)
     renderapi.pointmatch.import_matches(
             test_rough_collection2, pms_from_json, render=render)
     yield [test_rough_collection1, test_rough_collection2]

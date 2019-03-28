@@ -3,8 +3,7 @@ import renderapi
 from test_data import (
         render_params,
         rough_parameters)
-from EMaligner import EMaligner
-from EMaligner.utils import EMalignerException
+from EMaligner import EMaligner, utils
 from marshmallow import ValidationError
 import json
 import os
@@ -138,7 +137,7 @@ def test_multi_profile_exception(
     rough_parameters2['transformation'] = 'SimilarityModel'
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
-    with pytest.raises(EMalignerException):
+    with pytest.raises(utils.EMalignerException):
         mod.args['profile_data_load'] = True
         mod.run()
 

@@ -124,53 +124,53 @@ def test_rough_similarity_explicit_depth(
     rough_parameters2['matrix_assembly']['depth'] = [0, 1, 2]
 
 
-#def test_multi_stack_name_exception(
-#        render, rough_pointmatches, rough_input_stack):
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack
-#    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    with pytest.raises(ValidationError):
-#        rough_parameters2['input_stack']['name'] = [
-#                rough_parameters2['input_stack']['name']] * 2
-#        # stacks should only have 1 name (so far)
-#        EMaligner.EMaligner(
-#                input_data=copy.deepcopy(rough_parameters2), args=[])
-#
-#
-#def test_multi_profile_exception(
-#        render, rough_pointmatches, rough_input_stack):
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack
-#    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    with pytest.raises(utils.EMalignerException):
-#        mod.args['profile_data_load'] = True
-#        mod.run()
-#
-#
-#def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack_2
-#    rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    tin = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['input_stack']['name'], render=render)
-#    tout = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['output_stack']['name'], render=render)
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#    assert len(tin) == len(tout)
-#
-#
+def test_multi_stack_name_exception(
+        render, rough_pointmatches, rough_input_stack):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    with pytest.raises(ValidationError):
+        rough_parameters2['input_stack']['name'] = [
+                rough_parameters2['input_stack']['name']] * 2
+        # stacks should only have 1 name (so far)
+        EMaligner.EMaligner(
+                input_data=copy.deepcopy(rough_parameters2), args=[])
+
+
+def test_multi_profile_exception(
+        render, rough_pointmatches, rough_input_stack):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    with pytest.raises(utils.EMalignerException):
+        mod.args['profile_data_load'] = True
+        mod.run()
+
+
+def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack_2
+    rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    assert len(tin) == len(tout)
+
+
 #def test_rough_similarity_split(
 #        render, split_rough_pointmatches, rough_input_stack_2):
 #    rough_parameters2 = copy.deepcopy(rough_parameters)

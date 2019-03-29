@@ -47,3 +47,5 @@ after_success:
 - codecov -t 31f0f992-618d-4d7d-9da2-69f45c32455e
 - BRANCHES_TO_MERGE_REGEX='develop' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=AllenInstitute/EM_aligner_python
   .travis/merge_script.sh
+after_failure:
+  docker logs --tail 20 $(docker-compose ps -q renderservice)

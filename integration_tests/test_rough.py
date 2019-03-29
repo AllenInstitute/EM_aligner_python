@@ -253,39 +253,39 @@ def test_rough_similarity_split(
 #    assert len(tin) == len(tout)
 #
 #
-def test_affine_on_similarity(
-        render, rough_pointmatches, rough_input_stack):
-    rough_parameters2 = copy.deepcopy(rough_parameters)
-    rough_parameters2['input_stack']['name'] = rough_input_stack
-    rough_parameters2['output_stack']['name'] = 'sim_out'
-    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['transformation'] = 'SimilarityModel'
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-
-    rough_parameters2['input_stack']['name'] = 'sim_out'
-    rough_parameters2['output_stack']['name'] = 'rough_affine'
-    rough_parameters2['transformation'] = 'AffineModel'
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-
-    assert np.all(np.array(mod.results['precision']) < 1e-7)
-    assert np.all(np.array(mod.results['error']) < 1e6)
-
-
-def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
-    rough_parameters2 = copy.deepcopy(rough_parameters)
-    rough_parameters2['input_stack']['name'] = rough_input_stack
-    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['transformation'] = 'AffineModel'
-    rough_parameters2['output_mode'] = 'none'
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-    assert np.all(np.array(mod.results['precision']) < 1e-7)
-    assert np.all(np.array(mod.results['error']) < 1e6)
+#def test_affine_on_similarity(
+#        render, rough_pointmatches, rough_input_stack):
+#    rough_parameters2 = copy.deepcopy(rough_parameters)
+#    rough_parameters2['input_stack']['name'] = rough_input_stack
+#    rough_parameters2['output_stack']['name'] = 'sim_out'
+#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+#    rough_parameters2['transformation'] = 'SimilarityModel'
+#    mod = EMaligner.EMaligner(
+#            input_data=copy.deepcopy(rough_parameters2), args=[])
+#    mod.run()
+#
+#    rough_parameters2['input_stack']['name'] = 'sim_out'
+#    rough_parameters2['output_stack']['name'] = 'rough_affine'
+#    rough_parameters2['transformation'] = 'AffineModel'
+#    mod = EMaligner.EMaligner(
+#            input_data=copy.deepcopy(rough_parameters2), args=[])
+#    mod.run()
+#
+#    assert np.all(np.array(mod.results['precision']) < 1e-7)
+#    assert np.all(np.array(mod.results['error']) < 1e6)
+#
+#
+#def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
+#    rough_parameters2 = copy.deepcopy(rough_parameters)
+#    rough_parameters2['input_stack']['name'] = rough_input_stack
+#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+#    rough_parameters2['transformation'] = 'AffineModel'
+#    rough_parameters2['output_mode'] = 'none'
+#    mod = EMaligner.EMaligner(
+#            input_data=copy.deepcopy(rough_parameters2), args=[])
+#    mod.run()
+#    assert np.all(np.array(mod.results['precision']) < 1e-7)
+#    assert np.all(np.array(mod.results['error']) < 1e6)
 
 
 #def hdf5_fun(render, parameters, rough_pointmatches):

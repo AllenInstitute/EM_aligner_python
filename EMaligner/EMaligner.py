@@ -11,7 +11,6 @@ import warnings
 import os
 import sys
 import multiprocessing
-import itertools
 import logging
 import json
 import h5py
@@ -219,7 +218,6 @@ class EMaligner(argschema.ArgSchemaParser):
                     zvals)
             for z in zvals:
                 self.results = self.assemble_and_solve(np.array([z]))
-            t3 = time.time()
 
         # 3D
         elif self.args['solve_type'] == '3D':
@@ -483,7 +481,8 @@ class EMaligner(argschema.ArgSchemaParser):
         reg = []
         for t in np.array(resolved.tilespecs)[func_result['tiles_used']]:
             func_result['x'].append(t.tforms[-1].to_solve_vec())
-            reg.append(t.tforms[-1].regularization(self.args['regularization']))
+            reg.append(
+                    t.tforms[-1].regularization(self.args['regularization']))
         func_result['x'] = np.concatenate(func_result['x'])
         reg = np.concatenate(reg)
         func_result['reg'] = sparse.eye(reg.size, format='csr')

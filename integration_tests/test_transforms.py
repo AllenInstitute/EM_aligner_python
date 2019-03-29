@@ -288,7 +288,8 @@ def test_polynomial_model():
 
     rt = renderapi.transform.AffineModel()
     for o in range(4):
-        t = AlignerTransform(name="Polynomial2DTransform", order=o, transform=rt)
+        t = AlignerTransform(
+                name="Polynomial2DTransform", order=o, transform=rt)
         assert(t.__class__ == AlignerPolynomial2DTransform)
         assert(t.order == o)
 
@@ -335,7 +336,8 @@ def test_polynomial_model():
     for order in range(4):
         n = int((order + 1) * (order + 2) / 2)
         v0 = np.random.randn(n, 2)
-        rt0 = renderapi.transform.Polynomial2DTransform(params=np.zeros((2, n)))
+        rt0 = renderapi.transform.Polynomial2DTransform(
+                params=np.zeros((2, n)))
         t = AlignerTransform(name='Polynomial2DTransform', transform=rt0)
         assert t.order == order
         vec = np.concatenate((v0, v0, v0, v0))

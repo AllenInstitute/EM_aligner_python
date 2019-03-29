@@ -288,8 +288,8 @@ def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
 #    assert np.all(np.array(mod.results['error']) < 1e6)
 
 
-def hdf5_fun(render, parameters, rough_pointmatches):
-    rough_parameters2 = copy.deepcopy(parameters)
+def hdf5_fun(x_render, x_parameters):
+    rough_parameters2 = copy.deepcopy(x_parameters)
 
     # check output mode HDF5
     mod = EMaligner.EMaligner(
@@ -313,7 +313,7 @@ def hdf5_fun(render, parameters, rough_pointmatches):
     try:
         renderapi.stack.delete_stack(
                 rough_parameters2['output_stack']['name'],
-                render=render)
+                render=x_render)
     except renderapi.errors.RenderError:
         pass
 
@@ -324,10 +324,10 @@ def hdf5_fun(render, parameters, rough_pointmatches):
     mod.run()
     tin = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['input_stack']['name'],
-            render=render)
+            render=x_render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'],
-            render=render)
+            render=x_render)
     assert len(tin) == len(tout)
     os.remove(indexfile)
 
@@ -344,22 +344,22 @@ def test_hdf5_mode_similarity(
     # specific tests
     parameters['transformation'] = 'SimilarityModel'
     parameters['fullsize_transform'] = False
-    hdf5_fun(render, parameters, rough_pointmatches)
+    hdf5_fun(render, parameters)
 
     parameters['transformation'] = 'AffineModel'
     parameters['fullsize_transform'] = False
-    hdf5_fun(render, parameters, rough_pointmatches)
+    hdf5_fun(render, parameters)
 
     parameters['transformation'] = 'AffineModel'
     parameters['fullsize_transform'] = True
-    hdf5_fun(render, parameters, rough_pointmatches)
+    hdf5_fun(render, parameters)
 
     parameters['transformation'] = 'AffineModel'
     parameters['fullsize_transform'] = True
     parameters['hdf5_options']['chunks_per_file'] = 2
-    hdf5_fun(render, parameters, rough_pointmatches)
+    hdf5_fun(render, parameters)
 
     parameters['transformation'] = 'AffineModel'
     parameters['fullsize_transform'] = False
     parameters['hdf5_options']['chunks_per_file'] = 2
-    hdf5_fun(render, parameters, rough_pointmatches)
+    hdf5_fun(render, parameters)

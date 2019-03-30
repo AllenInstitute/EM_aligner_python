@@ -202,164 +202,164 @@ def test_rough_similarity_split(
     assert len(tin) == len(tout)
 
 
-#def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack_2
-#    rough_parameters2['output_stack']['name'] = \
-#        rough_input_stack_2 + '_out_missing'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#
-#    # delete a section
-#    groups = renderapi.stack.get_z_values_for_stack(
-#            rough_input_stack_2,
-#            render=render)
-#    n = int(len(groups)/2)
-#    renderapi.stack.set_stack_state(
-#            rough_input_stack_2,
-#            state='LOADING',
-#            render=render)
-#    renderapi.stack.delete_section(
-#            rough_input_stack_2,
-#            groups[n],
-#            render=render)
-#    renderapi.stack.set_stack_state(
-#            rough_input_stack_2,
-#            state='COMPLETE',
-#            render=render)
-#
-#    rough_parameters2['input_stack']['db_interface'] = 'render'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    tin = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['input_stack']['name'], render=render)
-#    tout = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['output_stack']['name'], render=render)
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#    assert len(tin) == len(tout)
-#
-#    rough_parameters2['input_stack']['db_interface'] = 'mongo'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    tin = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['input_stack']['name'], render=render)
-#    tout = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['output_stack']['name'], render=render)
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#    assert len(tin) == len(tout)
-#
-#
-#def test_affine_on_similarity(
-#        render, rough_pointmatches, rough_input_stack):
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack
-#    rough_parameters2['output_stack']['name'] = 'sim_out'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#
-#    rough_parameters2['input_stack']['name'] = 'sim_out'
-#    rough_parameters2['output_stack']['name'] = 'rough_affine'
-#    rough_parameters2['transformation'] = 'AffineModel'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#
-#
-#def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'AffineModel'
-#    rough_parameters2['output_mode'] = 'none'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#
-#
-#def hdf5_fun(x_render, x_parameters):
-#    rough_parameters2 = copy.deepcopy(x_parameters)
-#
-#    # check output mode HDF5
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    indexfile = os.path.join(
-#            rough_parameters2['hdf5_options']['output_dir'],
-#            'solution_input.h5')
-#    assert os.path.exists(indexfile)
-#
-#    # check assemble from file
-#    rough_parameters2['output_mode'] = 'none'
-#    rough_parameters2['assemble_from_file'] = indexfile
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#
-#    # check ingest from file
-#    try:
-#        renderapi.stack.delete_stack(
-#                rough_parameters2['output_stack']['name'],
-#                render=x_render)
-#    except renderapi.errors.RenderError:
-#        pass
-#
-#    rough_parameters2['ingest_from_file'] = indexfile
-#    rough_parameters2['output_mode'] = 'stack'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-#    tin = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['input_stack']['name'],
-#            render=x_render)
-#    tout = renderapi.tilespec.get_tile_specs_from_stack(
-#            rough_parameters2['output_stack']['name'],
-#            render=x_render)
-#    assert len(tin) == len(tout)
-#    os.remove(indexfile)
-#
-#
-#def test_hdf5_mode_similarity(
-#        render, rough_input_stack, rough_pointmatches, tmpdir):
-#    # general parameters
-#    parameters = copy.deepcopy(rough_parameters)
-#    parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
-#    parameters['input_stack']['name'] = rough_input_stack
-#    parameters['pointmatch']['name'] = rough_pointmatches
-#    parameters['output_mode'] = 'hdf5'
-#
-#    # specific tests
-#    parameters['transformation'] = 'SimilarityModel'
-#    parameters['fullsize_transform'] = False
-#    hdf5_fun(render, parameters)
-#
-#    parameters['transformation'] = 'AffineModel'
-#    parameters['fullsize_transform'] = False
-#    hdf5_fun(render, parameters)
-#
-#    parameters['transformation'] = 'AffineModel'
-#    parameters['fullsize_transform'] = True
-#    hdf5_fun(render, parameters)
-#
-#    parameters['transformation'] = 'AffineModel'
-#    parameters['fullsize_transform'] = True
-#    parameters['hdf5_options']['chunks_per_file'] = 2
-#    hdf5_fun(render, parameters)
-#
-#    parameters['transformation'] = 'AffineModel'
-#    parameters['fullsize_transform'] = False
-#    parameters['hdf5_options']['chunks_per_file'] = 2
-#    hdf5_fun(render, parameters)
+def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack_2
+    rough_parameters2['output_stack']['name'] = \
+        rough_input_stack_2 + '_out_missing'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+
+    # delete a section
+    groups = renderapi.stack.get_z_values_for_stack(
+            rough_input_stack_2,
+            render=render)
+    n = int(len(groups)/2)
+    renderapi.stack.set_stack_state(
+            rough_input_stack_2,
+            state='LOADING',
+            render=render)
+    renderapi.stack.delete_section(
+            rough_input_stack_2,
+            groups[n],
+            render=render)
+    renderapi.stack.set_stack_state(
+            rough_input_stack_2,
+            state='COMPLETE',
+            render=render)
+
+    rough_parameters2['input_stack']['db_interface'] = 'render'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    assert len(tin) == len(tout)
+
+    rough_parameters2['input_stack']['db_interface'] = 'mongo'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    assert len(tin) == len(tout)
+
+
+def test_affine_on_similarity(
+        render, rough_pointmatches, rough_input_stack):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = 'sim_out'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+
+    rough_parameters2['input_stack']['name'] = 'sim_out'
+    rough_parameters2['output_stack']['name'] = 'rough_affine'
+    rough_parameters2['transformation'] = 'AffineModel'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+
+
+def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'AffineModel'
+    rough_parameters2['output_mode'] = 'none'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+
+
+def hdf5_fun(x_render, x_parameters):
+    rough_parameters2 = copy.deepcopy(x_parameters)
+
+    # check output mode HDF5
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    indexfile = os.path.join(
+            rough_parameters2['hdf5_options']['output_dir'],
+            'solution_input.h5')
+    assert os.path.exists(indexfile)
+
+    # check assemble from file
+    rough_parameters2['output_mode'] = 'none'
+    rough_parameters2['assemble_from_file'] = indexfile
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+
+    # check ingest from file
+    try:
+        renderapi.stack.delete_stack(
+                rough_parameters2['output_stack']['name'],
+                render=x_render)
+    except renderapi.errors.RenderError:
+        pass
+
+    rough_parameters2['ingest_from_file'] = indexfile
+    rough_parameters2['output_mode'] = 'stack'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'],
+            render=x_render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'],
+            render=x_render)
+    assert len(tin) == len(tout)
+    os.remove(indexfile)
+
+
+def test_hdf5_mode_similarity(
+        render, rough_input_stack, rough_pointmatches, tmpdir):
+    # general parameters
+    parameters = copy.deepcopy(rough_parameters)
+    parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
+    parameters['input_stack']['name'] = rough_input_stack
+    parameters['pointmatch']['name'] = rough_pointmatches
+    parameters['output_mode'] = 'hdf5'
+
+    # specific tests
+    parameters['transformation'] = 'SimilarityModel'
+    parameters['fullsize_transform'] = False
+    hdf5_fun(render, parameters)
+
+    parameters['transformation'] = 'AffineModel'
+    parameters['fullsize_transform'] = False
+    hdf5_fun(render, parameters)
+
+    parameters['transformation'] = 'AffineModel'
+    parameters['fullsize_transform'] = True
+    hdf5_fun(render, parameters)
+
+    parameters['transformation'] = 'AffineModel'
+    parameters['fullsize_transform'] = True
+    parameters['hdf5_options']['chunks_per_file'] = 2
+    hdf5_fun(render, parameters)
+
+    parameters['transformation'] = 'AffineModel'
+    parameters['fullsize_transform'] = False
+    parameters['hdf5_options']['chunks_per_file'] = 2
+    hdf5_fun(render, parameters)

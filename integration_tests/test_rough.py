@@ -21,14 +21,14 @@ FILE_ROUGH_PMS_S2 = os.path.join(
         dname, 'test_files', 'rough_input_matches_split2.json')
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def render():
     render = renderapi.connect(**render_params)
     return render
 
 
 # raw stack tiles
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def rough_input_stack(render):
     test_rough_stack = 'rough_input_stack'
     with open(FILE_ROUGH_TILES, 'r') as f:
@@ -44,7 +44,7 @@ def rough_input_stack(render):
 
 
 # raw stack tiles with one z removed
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def rough_input_stack_2(render):
     test_rough_stack = 'rough_input_stack_2'
     with open(FILE_ROUGH_TILES, 'r') as f:
@@ -64,7 +64,7 @@ def rough_input_stack_2(render):
     # renderapi.stack.delete_stack(test_rough_stack, render=render)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def rough_pointmatches(render):
     test_rough_collection = 'rough_collection'
     with open(FILE_ROUGH_PMS, 'r') as f:
@@ -76,7 +76,7 @@ def rough_pointmatches(render):
     #         test_rough_collection, render=render)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def split_rough_pointmatches(render):
     test_rough_collection1 = 'rough_collection_split1'
     test_rough_collection2 = 'rough_collection_split2'
@@ -286,80 +286,3 @@ def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
-
-
-def hdf5_fun(x_render, x_parameters):
-    rough_parameters2 = copy.deepcopy(x_parameters)
-
-    # check output mode HDF5
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-    indexfile = os.path.join(
-            rough_parameters2['hdf5_options']['output_dir'],
-            'solution_input.h5')
-    assert os.path.exists(indexfile)
-
-    # check assemble from file
-    rough_parameters2['output_mode'] = 'none'
-    rough_parameters2['assemble_from_file'] = indexfile
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-    assert np.all(np.array(mod.results['precision']) < 1e-7)
-    assert np.all(np.array(mod.results['error']) < 1e6)
-
-    # check ingest from file
-    try:
-        renderapi.stack.delete_stack(
-                rough_parameters2['output_stack']['name'],
-                render=x_render)
-    except renderapi.errors.RenderError:
-        pass
-
-    rough_parameters2['ingest_from_file'] = indexfile
-    rough_parameters2['output_mode'] = 'stack'
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-    tin = renderapi.tilespec.get_tile_specs_from_stack(
-            rough_parameters2['input_stack']['name'],
-            render=x_render)
-    tout = renderapi.tilespec.get_tile_specs_from_stack(
-            rough_parameters2['output_stack']['name'],
-            render=x_render)
-    assert len(tin) == len(tout)
-    os.remove(indexfile)
-
-
-def test_hdf5_mode_similarity(
-        render, rough_input_stack, rough_pointmatches, tmpdir):
-    # general parameters
-    parameters = copy.deepcopy(rough_parameters)
-    parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
-    parameters['input_stack']['name'] = rough_input_stack
-    parameters['pointmatch']['name'] = rough_pointmatches
-    parameters['output_mode'] = 'hdf5'
-
-    # specific tests
-    parameters['transformation'] = 'SimilarityModel'
-    parameters['fullsize_transform'] = False
-    hdf5_fun(render, parameters)
-
-    parameters['transformation'] = 'AffineModel'
-    parameters['fullsize_transform'] = False
-    hdf5_fun(render, parameters)
-
-    parameters['transformation'] = 'AffineModel'
-    parameters['fullsize_transform'] = True
-    hdf5_fun(render, parameters)
-
-    parameters['transformation'] = 'AffineModel'
-    parameters['fullsize_transform'] = True
-    parameters['hdf5_options']['chunks_per_file'] = 2
-    hdf5_fun(render, parameters)
-
-    parameters['transformation'] = 'AffineModel'
-    parameters['fullsize_transform'] = False
-    parameters['hdf5_options']['chunks_per_file'] = 2
-    hdf5_fun(render, parameters)

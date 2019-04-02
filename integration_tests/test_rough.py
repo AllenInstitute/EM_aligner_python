@@ -45,8 +45,8 @@ def rough_input_stack():
     render = renderapi.connect(**render_params)
     test_rough_stack = 'rough_input_stack'
     with open(FILE_ROUGH_TILES, 'r') as f:
-        tilespecs = [renderapi.tilespec.TileSpec(json=d)
-                     for d in json.load(f)]
+        j = json.load(f)
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
     renderapi.stack.create_stack(test_rough_stack, render=render, session=mysession())
     renderapi.client.import_tilespecs(
             test_rough_stack, tilespecs, render=render, session=mysession())
@@ -62,8 +62,8 @@ def rough_input_stack_2():
     render = renderapi.connect(**render_params)
     test_rough_stack = 'rough_input_stack_2'
     with open(FILE_ROUGH_TILES, 'r') as f:
-        tilespecs = [renderapi.tilespec.TileSpec(json=d)
-                     for d in json.load(f)]
+        j = json.load(f)
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
     renderapi.stack.create_stack(
             test_rough_stack, render=render, session=mysession())
     renderapi.client.import_tilespecs(

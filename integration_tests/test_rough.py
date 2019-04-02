@@ -29,7 +29,8 @@ def render():
 
 # raw stack tiles
 @pytest.fixture()
-def rough_input_stack(render):
+def rough_input_stack():
+    render = renderapi.connect(**render_params)
     test_rough_stack = 'rough_input_stack'
     with open(FILE_ROUGH_TILES, 'r') as f:
         tilespecs = [renderapi.tilespec.TileSpec(json=d)
@@ -45,7 +46,8 @@ def rough_input_stack(render):
 
 # raw stack tiles with one z removed
 @pytest.fixture()
-def rough_input_stack_2(render):
+def rough_input_stack_2():
+    render = renderapi.connect(**render_params)
     test_rough_stack = 'rough_input_stack_2'
     with open(FILE_ROUGH_TILES, 'r') as f:
         tilespecs = [renderapi.tilespec.TileSpec(json=d)
@@ -65,7 +67,8 @@ def rough_input_stack_2(render):
 
 
 @pytest.fixture()
-def rough_pointmatches(render):
+def rough_pointmatches():
+    render = renderapi.connect(**render_params)
     test_rough_collection = 'rough_collection'
     with open(FILE_ROUGH_PMS, 'r') as f:
         pms_from_json = json.load(f)
@@ -77,7 +80,8 @@ def rough_pointmatches(render):
 
 
 @pytest.fixture()
-def split_rough_pointmatches(render):
+def split_rough_pointmatches():
+    render = renderapi.connect(**render_params)
     test_rough_collection1 = 'rough_collection_split1'
     test_rough_collection2 = 'rough_collection_split2'
     with open(FILE_ROUGH_PMS_S1, 'r') as f:
@@ -96,7 +100,8 @@ def split_rough_pointmatches(render):
 
 
 def test_rough_similarity_explicit_depth(
-        render, rough_pointmatches, rough_input_stack):
+        rough_pointmatches, rough_input_stack):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
@@ -125,7 +130,8 @@ def test_rough_similarity_explicit_depth(
 
 
 def test_multi_stack_name_exception(
-        render, rough_pointmatches, rough_input_stack):
+        rough_pointmatches, rough_input_stack):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
@@ -140,7 +146,8 @@ def test_multi_stack_name_exception(
 
 
 def test_multi_profile_exception(
-        render, rough_pointmatches, rough_input_stack):
+        rough_pointmatches, rough_input_stack):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
@@ -153,7 +160,8 @@ def test_multi_profile_exception(
         mod.run()
 
 
-def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
+def test_rough_similarity_2(rough_pointmatches, rough_input_stack_2):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack_2
     rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
@@ -172,7 +180,8 @@ def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
 
 
 def test_rough_similarity_split(
-        render, split_rough_pointmatches, rough_input_stack_2):
+        split_rough_pointmatches, rough_input_stack_2):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack_2
     rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
@@ -202,7 +211,8 @@ def test_rough_similarity_split(
     assert len(tin) == len(tout)
 
 
-def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
+def test_missing_section(rough_pointmatches, rough_input_stack_2):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack_2
     rough_parameters2['output_stack']['name'] = \

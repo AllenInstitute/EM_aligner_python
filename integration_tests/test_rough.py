@@ -91,24 +91,24 @@ def rough_pointmatches():
             test_rough_collection, render=render)
 
 
-#@pytest.fixture()
-#def split_rough_pointmatches():
-#    render = renderapi.connect(**render_params)
-#    test_rough_collection1 = 'rough_collection_split1'
-#    test_rough_collection2 = 'rough_collection_split2'
-#    with open(FILE_ROUGH_PMS_S1, 'r') as f:
-#        pms_from_json = json.load(f)
-#    renderapi.pointmatch.import_matches(
-#            test_rough_collection1, pms_from_json, render=render, session=mysession())
-#    with open(FILE_ROUGH_PMS_S2, 'r') as f:
-#        pms_from_json = json.load(f)
-#    renderapi.pointmatch.import_matches(
-#            test_rough_collection2, pms_from_json, render=render, session=mysession())
-#    yield [test_rough_collection1, test_rough_collection2]
-#    # renderapi.pointmatch.delete_collection(
-#    #         test_rough_collection1, render=render)
-#    # renderapi.pointmatch.delete_collection(
-#    #         test_rough_collection2, render=render)
+@pytest.fixture()
+def split_rough_pointmatches():
+    render = renderapi.connect(**render_params)
+    test_rough_collection1 = 'rough_collection_split1'
+    test_rough_collection2 = 'rough_collection_split2'
+    with open(FILE_ROUGH_PMS_S1, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_rough_collection1, pms_from_json, render=render, session=mysession())
+    with open(FILE_ROUGH_PMS_S2, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_rough_collection2, pms_from_json, render=render, session=mysession())
+    yield [test_rough_collection1, test_rough_collection2]
+    renderapi.pointmatch.delete_collection(
+            test_rough_collection1, render=render)
+    renderapi.pointmatch.delete_collection(
+            test_rough_collection2, render=render)
 
 
 def test_rough_similarity_explicit_depth(
@@ -199,37 +199,43 @@ def test_rough_similarity_2(rough_pointmatches, rough_input_stack_2):
     assert len(tin) == len(tout)
 
 
-#def test_rough_similarity_split(
-#        split_rough_pointmatches, rough_input_stack_2):
-#    render = renderapi.connect(**render_params)
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack_2
-#    rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
-#    rough_parameters2['pointmatch']['name'] = split_rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    rough_parameters2['n_parallel_jobs'] = 1
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-##    tin = renderapi.tilespec.get_tile_specs_from_stack(
-##            rough_parameters2['input_stack']['name'], render=render, session=mysession())
-##    tout = renderapi.tilespec.get_tile_specs_from_stack(
-##            rough_parameters2['output_stack']['name'], render=render, session=mysession())
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-##    assert len(tin) == len(tout)
-#
-#    rough_parameters2['pointmatch']['db_interface'] = "render"
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    mod.run()
-##    tin = renderapi.tilespec.get_tile_specs_from_stack(
-##            rough_parameters2['input_stack']['name'], render=render, session=mysession())
-##    tout = renderapi.tilespec.get_tile_specs_from_stack(
-##            rough_parameters2['output_stack']['name'], render=render, session=mysession())
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-##    assert len(tin) == len(tout)
+def test_rough_similarity_split(
+        split_rough_pointmatches, rough_input_stack_2):
+    render = renderapi.connect(**render_params)
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack_2
+    rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
+    rough_parameters2['pointmatch']['name'] = split_rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    rough_parameters2['n_parallel_jobs'] = 1
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render, session=mysession())
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render, session=mysession())
+
+    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
+
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    assert len(tin) == len(tout)
+
+    rough_parameters2['pointmatch']['db_interface'] = "render"
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render, session=mysession())
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render, session=mysession())
+
+    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
+
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    assert len(tin) == len(tout)
 
 
 #def test_missing_section(rough_pointmatches, rough_input_stack_2):

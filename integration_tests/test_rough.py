@@ -56,26 +56,26 @@ def rough_input_stack():
     renderapi.stack.delete_stack(test_rough_stack, render=render)
 
 
-## raw stack tiles with one z removed
-#@pytest.fixture()
-#def rough_input_stack_2():
-#    render = renderapi.connect(**render_params)
-#    test_rough_stack2 = 'rough_input_stack_2'
-#    with open(FILE_ROUGH_TILES, 'r') as f:
-#        j = json.load(f)
-#    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
-#    renderapi.stack.create_stack(
-#            test_rough_stack2, render=render, session=mysession())
-#    renderapi.client.import_tilespecs(
-#            test_rough_stack2, tilespecs, render=render, session=mysession())
-#    z_values = renderapi.stack.get_z_values_for_stack(
-#            test_rough_stack2, render=render, session=mysession())
-#    renderapi.stack.delete_section(
-#            test_rough_stack2, z_values[3], render=render, session=mysession())
-#    renderapi.stack.set_stack_state(
-#            test_rough_stack2, 'COMPLETE', render=render, session=mysession())
-#    yield test_rough_stack2
-#    renderapi.stack.delete_stack(test_rough_stack2, render=render)
+# raw stack tiles with one z removed
+@pytest.fixture()
+def rough_input_stack_2():
+    render = renderapi.connect(**render_params)
+    test_rough_stack2 = 'rough_input_stack_2'
+    with open(FILE_ROUGH_TILES, 'r') as f:
+        j = json.load(f)
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
+    renderapi.stack.create_stack(
+            test_rough_stack2, render=render, session=mysession())
+    renderapi.client.import_tilespecs(
+            test_rough_stack2, tilespecs, render=render, session=mysession())
+    z_values = renderapi.stack.get_z_values_for_stack(
+            test_rough_stack2, render=render, session=mysession())
+    renderapi.stack.delete_section(
+            test_rough_stack2, z_values[3], render=render, session=mysession())
+    renderapi.stack.set_stack_state(
+            test_rough_stack2, 'COMPLETE', render=render, session=mysession())
+    yield test_rough_stack2
+    renderapi.stack.delete_stack(test_rough_stack2, render=render)
 
 
 @pytest.fixture(scope='module')

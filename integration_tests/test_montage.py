@@ -1,0 +1,243 @@
+import pytest
+import renderapi
+from test_data import (render_params,
+                       montage_raw_tilespecs_json,
+                       montage_parameters)
+from EMaligner import EMaligner
+import json
+from marshmallow.exceptions import ValidationError
+import copy
+import os
+import numpy as np
+
+# https://www.peterbe.com/plog/be-careful-with-using-dict-to-create-a-copy
+
+dname = os.path.dirname(os.path.abspath(__file__))
+FILE_PMS = os.path.join(
+        dname, 'test_files', 'montage_pointmatches.json')
+FILE_PMS_S1 = os.path.join(
+        dname, 'test_files', 'montage_pointmatches_split1.json')
+FILE_PMS_S2 = os.path.join(
+        dname, 'test_files', 'montage_pointmatches_split2.json')
+
+
+@pytest.fixture(scope='module')
+def render():
+    render = renderapi.connect(**render_params)
+    return render
+
+
+@pytest.fixture(scope='module')
+def raw_stack(render):
+    test_raw_stack = 'input_raw_stack'
+    tilespecs = [
+            renderapi.tilespec.TileSpec(json=d)
+            for d in montage_raw_tilespecs_json]
+    renderapi.stack.create_stack(test_raw_stack, render=render)
+    renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
+    renderapi.stack.set_stack_state(test_raw_stack, 'COMPLETE', render=render)
+    yield test_raw_stack
+
+
+@pytest.fixture(scope='function')
+def loading_raw_stack(render):
+    test_raw_stack = 'input_raw_stack_loading'
+    tilespecs = [
+            renderapi.tilespec.TileSpec(json=d)
+            for d in montage_raw_tilespecs_json]
+    renderapi.stack.create_stack(test_raw_stack, render=render)
+    renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
+    yield test_raw_stack
+
+
+@pytest.fixture(scope='module')
+def montage_pointmatches(render):
+    test_montage_collection = 'montage_collection'
+    pms_from_json = []
+    with open(FILE_PMS, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_montage_collection, pms_from_json, render=render)
+    yield test_montage_collection
+
+
+@pytest.fixture(scope='module')
+def split_montage_pointmatches(render):
+    test_montage_collection1 = 'montage_collection_split_1'
+    test_montage_collection2 = 'montage_collection_split_2'
+    pms_from_json = []
+    with open(FILE_PMS_S1, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_montage_collection1, pms_from_json, render=render)
+    with open(FILE_PMS_S2, 'r') as f:
+        pms_from_json = json.load(f)
+    renderapi.pointmatch.import_matches(
+            test_montage_collection2, pms_from_json, render=render)
+    yield [test_montage_collection1, test_montage_collection2]
+
+
+@pytest.fixture(scope='module')
+def montage_pointmatches_weighted(render):
+    test_montage_collection2 = 'montage_collection2'
+    pms_from_json = []
+    with open(FILE_PMS, 'r') as f:
+        pms_from_json = json.load(f)
+    n = len(pms_from_json[0]['matches']['w'])
+    pms_from_json[0]['matches']['w'] = [0.0 for i in range(n)]
+
+    renderapi.pointmatch.import_matches(
+            test_montage_collection2, pms_from_json, render=render)
+    yield test_montage_collection2
+
+
+@pytest.fixture(scope='function')
+def output_stack_name(render):
+    name = 'solver_output_stack'
+    yield name
+    renderapi.stack.delete_stack(name, render=render)
+
+
+@pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
+def test_weighted(
+        render, montage_pointmatches_weighted, loading_raw_stack,
+        stack_state, tmpdir, output_stack_name):
+    renderapi.stack.set_stack_state(
+            loading_raw_stack, stack_state, render=render)
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches_weighted
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+
+def test_multi_pm(
+        render,
+        split_montage_pointmatches,
+        loading_raw_stack,
+        tmpdir,
+        output_stack_name):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = split_montage_pointmatches
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+
+@pytest.mark.parametrize(
+        "transform, fullsize, order",
+        [("AffineModel", True, 0),
+         ("AffineModel", False, 0),
+         ("SimilarityModel", False, 0),
+         ("Polynomial2DTransform", False, 0),
+         ("Polynomial2DTransform", False, 1)])
+def test_different_transforms(
+        render, montage_pointmatches, loading_raw_stack,
+        transform, fullsize, output_stack_name, order):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches
+    p['transformation'] = transform
+    p['fullsize'] = fullsize
+    p['poly_order'] = order
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+
+def test_polynomial(
+        render, montage_pointmatches, loading_raw_stack,
+        output_stack_name):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches
+    p['transformation'] = 'Polynomial2DTransform'
+    p['poly_order'] = 2
+    p['regularization'] = {
+            'default_lambda': 1000.0,
+            'translation_factor': 1e-5,
+            'poly_factors': [1e-5, 1000.0, 1e6]}
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-4)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+
+def test_poly_validation(output_stack_name):
+    p = copy.deepcopy(montage_parameters)
+    p['regularization'] = {
+            'default_lambda': 1000.0,
+            'translation_factor': 1e-5,
+            'poly_factors': [1e-5, 1000.0, 1e6, 1e3]}
+    p['output_stack']['name'] = output_stack_name
+    p['transformation'] = 'Polynomial2DTransform'
+    p['poly_order'] = 2
+    with pytest.raises(ValidationError):
+        # because poly_factors should be length 3
+        EMaligner.EMaligner(input_data=p, args=[])
+
+
+@pytest.mark.parametrize("stack_state", ["COMPLETE", "LOADING"])
+def test_stack_state(
+        render, montage_pointmatches, output_stack_name,
+        loading_raw_stack, stack_state, tmpdir):
+    renderapi.stack.set_stack_state(
+            loading_raw_stack, stack_state, render=render)
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+
+@pytest.mark.parametrize("db_intfc", ["render", "mongo"])
+def test_basic(
+        render, montage_pointmatches, output_stack_name,
+        loading_raw_stack, db_intfc):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches
+    p['transformation'] = 'AffineModel'
+    p['fullsize_transform'] = True
+    p['input_stack']['db_interface'] = db_intfc
+    p['output_stack']['db_interface'] = 'render'
+    p['pointmatch']['db_interface'] = db_intfc
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+
+@pytest.mark.parametrize("render_output", ["stdout", "file", "none"])
+def test_render_output(
+        render, montage_pointmatches, output_stack_name,
+        loading_raw_stack, render_output, tmpdir):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches
+    if render_output == 'file':
+        fout = str(tmpdir.join("myfile"))
+        p['render_output'] = fout
+    else:
+        p['render_output'] = render_output
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 200)
+
+    if render_output == 'file':
+        assert os.path.isfile(fout)

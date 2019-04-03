@@ -426,6 +426,10 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def concatenate_results(self, results):
         result = {}
+
+        if np.all([r['data'] is None for r in results]):
+            return {'data': None}
+        
         result['data'] = np.concatenate([
             results[i]['data'] for i in range(len(results))
             if results[i]['data'] is not None]).astype('float64')

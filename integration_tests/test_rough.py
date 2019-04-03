@@ -75,7 +75,7 @@ def rough_input_stack_2():
     renderapi.stack.set_stack_state(
             test_rough_stack, 'COMPLETE', render=render, session=mysession())
     yield test_rough_stack
-    # renderapi.stack.delete_stack(test_rough_stack, render=render)
+    renderapi.stack.delete_stack(test_rough_stack, render=render)
 
 
 @pytest.fixture()
@@ -87,8 +87,8 @@ def rough_pointmatches():
     renderapi.pointmatch.import_matches(
             test_rough_collection, pms_from_json, render=render, session=mysession())
     yield test_rough_collection
-    # renderapi.pointmatch.delete_collection(
-    #         test_rough_collection, render=render)
+    renderapi.pointmatch.delete_collection(
+            test_rough_collection, render=render)
 
 
 @pytest.fixture()
@@ -105,10 +105,10 @@ def split_rough_pointmatches():
     renderapi.pointmatch.import_matches(
             test_rough_collection2, pms_from_json, render=render, session=mysession())
     yield [test_rough_collection1, test_rough_collection2]
-    # renderapi.pointmatch.delete_collection(
-    #         test_rough_collection1, render=render)
-    # renderapi.pointmatch.delete_collection(
-    #         test_rough_collection2, render=render)
+    renderapi.pointmatch.delete_collection(
+            test_rough_collection1, render=render)
+    renderapi.pointmatch.delete_collection(
+            test_rough_collection2, render=render)
 
 
 def test_rough_similarity_explicit_depth(

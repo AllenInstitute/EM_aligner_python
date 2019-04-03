@@ -298,7 +298,8 @@ def test_missing_section(rough_pointmatches, rough_input_stack_2):
 
 
 def test_affine_on_similarity(
-        render, rough_pointmatches, rough_input_stack):
+        rough_pointmatches, rough_input_stack):
+    render = renderapi.connect(**render_params)
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['output_stack']['name'] = 'sim_out'

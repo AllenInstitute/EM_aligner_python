@@ -9,7 +9,7 @@ import json
 import os
 import copy
 import numpy as np
-import requests
+
 
 dname = os.path.dirname(os.path.abspath(__file__))
 FILE_ROUGH_TILES = os.path.join(
@@ -45,7 +45,7 @@ def rough_input_stack(render):
 
 
 # raw stack tiles with one z removed
-@pytest.fixture()
+@pytest.fixture(scope='module')
 def rough_input_stack_2(render):
     test_rough_stack2 = 'rough_input_stack_2'
     with open(FILE_ROUGH_TILES, 'r') as f:
@@ -77,7 +77,7 @@ def rough_pointmatches(render):
             test_rough_collection, render=render)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='module')
 def split_rough_pointmatches(render):
     test_rough_collection1 = 'rough_collection_split1'
     test_rough_collection2 = 'rough_collection_split2'
@@ -106,7 +106,6 @@ def test_rough_similarity_explicit_depth(
     rough_parameters2['matrix_assembly']['depth'] = [0, 1, 2]
     rough_parameters2['matrix_assembly']['explicit_weight_by_depth'] = \
         [0, 0.5, 0.33]
-    rough_parameters2['n_parallel_jobs'] = 1
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
@@ -135,7 +134,6 @@ def test_multi_stack_name_exception(
     rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
-    rough_parameters2['n_parallel_jobs'] = 1
     with pytest.raises(ValidationError):
         rough_parameters2['input_stack']['name'] = [
                 rough_parameters2['input_stack']['name']] * 2
@@ -151,7 +149,6 @@ def test_multi_profile_exception(
     rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
-    rough_parameters2['n_parallel_jobs'] = 1
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     with pytest.raises(utils.EMalignerException):
@@ -187,7 +184,6 @@ def test_rough_similarity_split(
     rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
     rough_parameters2['pointmatch']['name'] = split_rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
-    rough_parameters2['n_parallel_jobs'] = 1
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
@@ -225,7 +221,6 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
         rough_input_stack_2 + '_out_missing'
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
-    rough_parameters2['n_parallel_jobs'] = 1
 
     # delete a section
     groups = renderapi.stack.get_z_values_for_stack(

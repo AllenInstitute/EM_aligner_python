@@ -144,39 +144,39 @@ def test_rough_similarity_explicit_depth(
     rough_parameters2['matrix_assembly']['depth'] = [0, 1, 2]
 
 
-#def test_multi_stack_name_exception(
-#        rough_pointmatches, rough_input_stack):
-#    render = renderapi.connect(**render_params)
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack
-#    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    rough_parameters2['n_parallel_jobs'] = 1
-#    with pytest.raises(ValidationError):
-#        rough_parameters2['input_stack']['name'] = [
-#                rough_parameters2['input_stack']['name']] * 2
-#        # stacks should only have 1 name (so far)
-#        EMaligner.EMaligner(
-#                input_data=copy.deepcopy(rough_parameters2), args=[])
-#
-#
-#def test_multi_profile_exception(
-#        rough_pointmatches, rough_input_stack):
-#    render = renderapi.connect(**render_params)
-#    rough_parameters2 = copy.deepcopy(rough_parameters)
-#    rough_parameters2['input_stack']['name'] = rough_input_stack
-#    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
-#    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-#    rough_parameters2['transformation'] = 'SimilarityModel'
-#    rough_parameters2['n_parallel_jobs'] = 1
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(rough_parameters2), args=[])
-#    with pytest.raises(utils.EMalignerException):
-#        mod.args['profile_data_load'] = True
-#        mod.run()
-#
-#
+def test_multi_stack_name_exception(
+        rough_pointmatches, rough_input_stack):
+    render = renderapi.connect(**render_params)
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    rough_parameters2['n_parallel_jobs'] = 1
+    with pytest.raises(ValidationError):
+        rough_parameters2['input_stack']['name'] = [
+                rough_parameters2['input_stack']['name']] * 2
+        # stacks should only have 1 name (so far)
+        EMaligner.EMaligner(
+                input_data=copy.deepcopy(rough_parameters2), args=[])
+
+
+def test_multi_profile_exception(
+        rough_pointmatches, rough_input_stack):
+    render = renderapi.connect(**render_params)
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'SimilarityModel'
+    rough_parameters2['n_parallel_jobs'] = 1
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    with pytest.raises(utils.EMalignerException):
+        mod.args['profile_data_load'] = True
+        mod.run()
+
+
 #def test_rough_similarity_2(rough_pointmatches, rough_input_stack_2):
 #    render = renderapi.connect(**render_params)
 #    rough_parameters2 = copy.deepcopy(rough_parameters)

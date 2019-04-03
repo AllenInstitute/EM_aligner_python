@@ -28,6 +28,13 @@ def render():
     return render
 
 
+@pytest.fixture(scope='function')
+def output_stack_name(render):
+    name = 'solver_output_stack'
+    yield name
+    renderapi.stack.delete_stack(name, render=render)
+
+
 # raw stack tiles
 @pytest.fixture(scope='module')
 def rough_input_stack(render):
@@ -97,10 +104,13 @@ def split_rough_pointmatches(render):
 
 
 def test_rough_similarity_explicit_depth(
-        render, rough_pointmatches, rough_input_stack):
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
-    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
     rough_parameters2['matrix_assembly']['depth'] = [0, 1, 2]
@@ -117,21 +127,21 @@ def test_rough_similarity_explicit_depth(
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
-
     with pytest.raises(ValidationError):
         rough_parameters2['matrix_assembly']['depth'] = [0, 1]
         # not the same length as weights
         EMaligner.EMaligner(
                 input_data=copy.deepcopy(rough_parameters2), args=[])
-    rough_parameters2['matrix_assembly']['depth'] = [0, 1, 2]
 
 
 def test_multi_stack_name_exception(
-        render, rough_pointmatches, rough_input_stack):
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
-    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
     with pytest.raises(ValidationError):
@@ -143,10 +153,13 @@ def test_multi_stack_name_exception(
 
 
 def test_multi_profile_exception(
-        render, rough_pointmatches, rough_input_stack):
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
-    rough_parameters2['output_stack']['name'] = rough_input_stack + '_out'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
     mod = EMaligner.EMaligner(
@@ -156,10 +169,14 @@ def test_multi_profile_exception(
         mod.run()
 
 
-def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
+def test_rough_similarity_2(
+        render,
+        rough_pointmatches,
+        rough_input_stack_2,
+        output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack_2
-    rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
     mod = EMaligner.EMaligner(
@@ -170,19 +187,23 @@ def test_rough_similarity_2(render, rough_pointmatches, rough_input_stack_2):
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
 
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
-
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
 
+@pytest.mark.parametrize("pm_db_intfc", ['render', 'mongo'])
 def test_rough_similarity_split(
-        render, split_rough_pointmatches, rough_input_stack_2):
+        render,
+        split_rough_pointmatches,
+        rough_input_stack_2,
+        output_stack_name,
+        pm_db_intfc):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack_2
-    rough_parameters2['output_stack']['name'] = rough_input_stack_2 + '_out'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['pointmatch']['name'] = split_rough_pointmatches
+    rough_parameters2['pointmatch']['db_interface'] = pm_db_intfc
     rough_parameters2['transformation'] = 'SimilarityModel'
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
@@ -191,56 +212,25 @@ def test_rough_similarity_split(
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
-
-    assert np.all(np.array(mod.results['precision']) < 1e-7)
-    assert np.all(np.array(mod.results['error']) < 1e6)
-    assert len(tin) == len(tout)
-
-    rough_parameters2['pointmatch']['db_interface'] = "render"
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-    tin = renderapi.tilespec.get_tile_specs_from_stack(
-            rough_parameters2['input_stack']['name'], render=render)
-    tout = renderapi.tilespec.get_tile_specs_from_stack(
-            rough_parameters2['output_stack']['name'], render=render)
-
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
-
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
 
-def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
+@pytest.mark.parametrize("pm_db_intfc", ['render', 'mongo'])
+def test_missing_section(
+        render,
+        rough_pointmatches,
+        rough_input_stack_2,
+        output_stack_name,
+        pm_db_intfc):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack_2
-    rough_parameters2['output_stack']['name'] = \
-        rough_input_stack_2 + '_out_missing'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
     rough_parameters2['transformation'] = 'SimilarityModel'
+    rough_parameters2['input_stack']['db_interface'] = pm_db_intfc
 
-    # delete a section
-    groups = renderapi.stack.get_z_values_for_stack(
-            rough_input_stack_2,
-            render=render)
-    n = int(len(groups)/2)
-    renderapi.stack.set_stack_state(
-            rough_input_stack_2,
-            state='LOADING',
-            render=render)
-    renderapi.stack.delete_section(
-            rough_input_stack_2,
-            groups[n],
-            render=render)
-    renderapi.stack.set_stack_state(
-            rough_input_stack_2,
-            state='COMPLETE',
-            render=render)
-
-    rough_parameters2['input_stack']['db_interface'] = 'render'
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
@@ -248,31 +238,16 @@ def test_missing_section(render, rough_pointmatches, rough_input_stack_2):
             rough_parameters2['input_stack']['name'], render=render)
     tout = renderapi.tilespec.get_tile_specs_from_stack(
             rough_parameters2['output_stack']['name'], render=render)
-
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
-
-    assert np.all(np.array(mod.results['precision']) < 1e-7)
-    assert np.all(np.array(mod.results['error']) < 1e6)
-    assert len(tin) == len(tout)
-
-    rough_parameters2['input_stack']['db_interface'] = 'mongo'
-    mod = EMaligner.EMaligner(
-            input_data=copy.deepcopy(rough_parameters2), args=[])
-    mod.run()
-    tin = renderapi.tilespec.get_tile_specs_from_stack(
-            rough_parameters2['input_stack']['name'], render=render)
-    tout = renderapi.tilespec.get_tile_specs_from_stack(
-            rough_parameters2['output_stack']['name'], render=render)
-
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
-
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
 
 
 def test_affine_on_similarity(
-        render, rough_pointmatches, rough_input_stack):
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['output_stack']['name'] = 'sim_out'
@@ -283,20 +258,23 @@ def test_affine_on_similarity(
     mod.run()
 
     rough_parameters2['input_stack']['name'] = 'sim_out'
-    rough_parameters2['output_stack']['name'] = 'rough_affine'
+    rough_parameters2['output_stack']['name'] = output_stack_name
     rough_parameters2['transformation'] = 'AffineModel'
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
-    
-    renderapi.stack.delete_stack(rough_parameters2['input_stack']['name'], render=render)
-    renderapi.stack.delete_stack(rough_parameters2['output_stack']['name'], render=render)
 
+    renderapi.stack.delete_stack(
+            rough_parameters2['input_stack']['name'], render=render)
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
 
 
-def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
+def test_output_mode_none(
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
     rough_parameters2['input_stack']['name'] = rough_input_stack
     rough_parameters2['pointmatch']['name'] = rough_pointmatches
@@ -307,3 +285,5 @@ def test_output_mode_none(render, rough_pointmatches, rough_input_stack):
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
+    stacks = renderapi.render.get_stacks_by_owner_project(render=render)
+    assert output_stack_name not in stacks

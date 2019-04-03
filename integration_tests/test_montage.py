@@ -10,8 +10,6 @@ import copy
 import os
 import numpy as np
 
-# https://www.peterbe.com/plog/be-careful-with-using-dict-to-create-a-copy
-
 dname = os.path.dirname(os.path.abspath(__file__))
 FILE_PMS = os.path.join(
         dname, 'test_files', 'montage_pointmatches.json')
@@ -221,7 +219,7 @@ def test_basic(
     assert np.all(np.array(mod.results['error']) < 200)
 
 
-@pytest.mark.parametrize("render_output", ["stdout", "file", "none"])
+@pytest.mark.parametrize("render_output", ["stdout", "file", "null"])
 def test_render_output(
         render, montage_pointmatches, output_stack_name,
         loading_raw_stack, render_output, tmpdir):

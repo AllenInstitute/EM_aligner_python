@@ -157,10 +157,15 @@ def get_resolved_tilespecs(
     t0 = time.time()
     resolved = renderapi.resolvedtiles.ResolvedTiles()
     getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
-    with renderapi.client.WithPool(pool_size) as pool:
-        for rz in pool.map(getz, zvals):
-            resolved.tilespecs += rz.tilespecs
-            resolved.transforms += rz.transforms
+    #with renderapi.client.WithPool(pool_size) as pool:
+    #    for rz in pool.map(getz, zvals):
+    #        resolved.tilespecs += rz.tilespecs
+    #        resolved.transforms += rz.transforms
+    for z in zvals:
+        rz = getz(z)
+        resolved.tilespecs += rz.tilespecs
+        resolved.transforms += rz.transforms
+
 
     logger.info(
         "\n loaded %d tile specs from %d zvalues in "

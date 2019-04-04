@@ -1,6 +1,7 @@
 {
     "first_section": 1015, 
     "last_section": 1015,
+    "n_parallel_jobs": 1,
     "solve_type": "montage",
     "close_stack": "True",
     "transformation": "AffineModel",

@@ -10,6 +10,8 @@ services:
 dist: xenial
 addons:
   apt:
+    sources:
+      - ppa:webupd8team/java
     packages:
       - libblas-dev
       - liblapack-dev

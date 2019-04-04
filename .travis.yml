@@ -8,6 +8,8 @@ python:
 services:
   - docker
 dist: xenial
+jdk:
+  - oraclejdk8
 before_install:
   - git clone --depth 1 https://github.com/saalfeldlab/render.git render -b master
   - mvn package -pl render-ws-java-client -am -DskipTests -f render/pom.xml

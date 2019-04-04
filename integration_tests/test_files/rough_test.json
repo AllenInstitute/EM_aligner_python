@@ -1,7 +1,7 @@
 {
     "first_section": 154, 
     "last_section": 250,
-    "n_parallel_jobs": 1,
+    "n_parallel_jobs": 2,
     "solve_type": "3D",
     "close_stack": "True",
     "transformation": "SimilarityModel",

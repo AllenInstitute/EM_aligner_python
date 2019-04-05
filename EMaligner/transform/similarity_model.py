@@ -4,7 +4,7 @@ from .utils import (
         ptpair_indices,
         arrays_for_tilepair)
 import numpy as np
-import scipy.sparse as sparse
+__all__ = ['AlignerSimilarityModel']
 
 
 class AlignerSimilarityModel(renderapi.transform.AffineModel):
@@ -45,7 +45,8 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         return n
 
     def regularization(self, regdict):
-        reg = np.ones(self.DOF_per_tile).astype('float64') * regdict['default_lambda']
+        reg = np.ones(self.DOF_per_tile).astype('float64') * \
+                regdict['default_lambda']
         reg[2::4] *= regdict['translation_factor']
         reg[3::4] *= regdict['translation_factor']
         return reg

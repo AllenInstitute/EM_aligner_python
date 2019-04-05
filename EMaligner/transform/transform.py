@@ -2,6 +2,7 @@ from .utils import AlignerTransformException
 from .affine_model import AlignerAffineModel
 from .similarity_model import AlignerSimilarityModel
 from .polynomial_model import AlignerPolynomial2DTransform
+__all__ = ['AlignerTransform']
 
 
 class AlignerTransform(object):
@@ -10,9 +11,6 @@ class AlignerTransform(object):
         if (name is None):
             raise AlignerTransformException(
                    'must specify transform name')
-
-        #if transform is not None:
-        #    name = transform.__class__.__name__
 
         # backwards compatibility
         if name == 'affine':

@@ -1,10 +1,9 @@
 import renderapi
 from .utils import (
-        AlignerTransformException,
         ptpair_indices,
         arrays_for_tilepair)
 import numpy as np
-import scipy.sparse as sparse
+__all__ = ['AlignerPolynomial2DTransform']
 
 
 class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
@@ -51,7 +50,8 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         return n
 
     def regularization(self, regdict):
-        reg = np.ones(self.DOF_per_tile).astype('float64') * regdict['default_lambda']
+        reg = np.ones(self.DOF_per_tile).astype('float64') * \
+                regdict['default_lambda']
         n = int((self.order + 1) * (self.order + 2) / 2)
         if regdict['poly_factors'] is None:
             reg[0] *= regdict['translation_factor']

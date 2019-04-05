@@ -188,15 +188,6 @@ def tilepair_weight(z1, z2, matrix_assembly):
     return tp_weight
 
 
-def mat_stats(m, name):
-    shape = m.get_shape()
-    mesg = "\n matrix: %s\n" % name
-    mesg += " format: %s\n" % m.getformat()
-    mesg += " shape: (%d, %d)\n" % (shape[0], shape[1])
-    mesg += " nnz: %d" % m.nnz
-    logger.debug(mesg)
-
-
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
 
@@ -208,6 +199,17 @@ class EMaligner(argschema.ArgSchemaParser):
             self.args['first_section'],
             self.args['last_section'] + 1)
 
+
+        # read in the tilespecs
+        self.resolvedtiles = utils.get_resolved_tilespecs(
+            self.args['input_stack'],
+            self.args['transformation'],
+            self.args['n_parallel_jobs'],
+            zvals,
+            fullsize=self.args['fullsize_transform'],
+            order=self.args['poly_order'])
+
+        # the parallel workers will need this stack ready
         if self.args['output_mode'] == 'stack':
             utils.create_or_set_loading(self.args['output_stack'])
 
@@ -230,7 +232,6 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def assemble_and_solve(self, zvals):
         t0 = time.time()
-
         if self.args['ingest_from_file'] != '':
             assemble_result = self.assemble_from_hdf5(
                 self.args['ingest_from_file'],
@@ -240,16 +241,12 @@ class EMaligner(argschema.ArgSchemaParser):
             results['x'] = assemble_result['x']
 
         else:
-            # assembly
             if self.args['assemble_from_file'] != '':
                 assemble_result = self.assemble_from_hdf5(
                     self.args['assemble_from_file'],
                     zvals)
             else:
                 assemble_result = self.assemble_from_db(zvals)
-
-            if assemble_result['A'] is not None:
-                mat_stats(assemble_result['A'], 'A')
 
             self.ntiles_used = np.count_nonzero(assemble_result['tiles_used'])
             logger.info(' A created in %0.1f seconds' % (time.time() - t0))
@@ -266,13 +263,11 @@ class EMaligner(argschema.ArgSchemaParser):
                     assemble_result['reg'],
                     assemble_result['x'])
             logger.info('\n' + message)
-            if assemble_result['A'] is not None:
-                results['Ashape'] = assemble_result['A'].shape
             del assemble_result['A']
 
         if self.args['output_mode'] == 'stack':
             solved_resolved = utils.update_tilespecs(
-                    assemble_result['resolved'],
+                    self.resolvedtiles,
                     results['x'],
                     assemble_result['tiles_used'])
             utils.write_to_new_stack(
@@ -282,32 +277,12 @@ class EMaligner(argschema.ArgSchemaParser):
                     self.args['overwrite_zlayer'])
             if self.args['render_output'] == 'stdout':
                 logger.info(message)
-        del (assemble_result['shared_tforms'],
-             assemble_result['tspecs'],
-             assemble_result['x'])
+        del assemble_result['x']
 
         return results
 
-    assemble_struct = {
-        'A': None,
-        'weights': None,
-        'reg': None,
-        'tspecs': None,
-        'tforms': None,
-        'tids': None,
-        'shared_tforms': None,
-        'unused_tids': None}
-
     def assemble_from_hdf5(self, filename, zvals, read_data=True):
-        assemble_result = dict(self.assemble_struct)
-
-        assemble_result['resolved'] = utils.get_resolved_tilespecs(
-            self.args['input_stack'],
-            self.args['transformation'],
-            self.args['n_parallel_jobs'],
-            zvals,
-            fullsize=self.args['fullsize_transform'],
-            order=self.args['poly_order'])
+        assemble_result = {}
 
         with h5py.File(filename, 'r') as f:
             assemble_result['tids'] = np.array(
@@ -338,7 +313,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         # get the tile IDs and transforms
         tids = np.array([
-            t.tileId for t in assemble_result['resolved'].tilespecs])
+            t.tileId for t in self.resolvedtiles.tilespecs])
         assemble_result['tiles_used'] = np.in1d(tids, assemble_result['tids'])
 
         outr = sparse.eye(reg.size, format='csr')
@@ -391,18 +366,10 @@ class EMaligner(argschema.ArgSchemaParser):
         return assemble_result
 
     def assemble_from_db(self, zvals):
-        assemble_result = dict(self.assemble_struct)
-
-        assemble_result['resolved'] = utils.get_resolved_tilespecs(
-            self.args['input_stack'],
-            self.args['transformation'],
-            self.args['n_parallel_jobs'],
-            zvals,
-            fullsize=self.args['fullsize_transform'],
-            order=self.args['poly_order'])
+        assemble_result = {}
 
         # create A matrix in compressed sparse row (CSR) format
-        CSR_A = self.create_CSR_A(assemble_result['resolved'])
+        CSR_A = self.create_CSR_A(self.resolvedtiles)
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
         assemble_result['tiles_used'] = CSR_A.pop('tiles_used')
@@ -412,7 +379,7 @@ class EMaligner(argschema.ArgSchemaParser):
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
             alltids = np.array([
-                t.tileId for t in assemble_result['resolved'].tilespecs])
+                t.tileId for t in self.resolvedtiles.tilespecs])
 
             utils.write_reg_and_tforms(
                 dict(self.args),
@@ -429,7 +396,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         if np.all([r['data'] is None for r in results]):
             return {'data': None}
-        
+
         result['data'] = np.concatenate([
             results[i]['data'] for i in range(len(results))
             if results[i]['data'] is not None]).astype('float64')

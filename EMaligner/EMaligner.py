@@ -41,6 +41,7 @@ def calculate_processing_chunk(fargs):
 
     # get point matches
     t0 = time.time()
+
     matches = utils.get_matches(
             pair['section1'],
             pair['section2'],
@@ -53,6 +54,7 @@ def calculate_processing_chunk(fargs):
     # extract IDs for fast checking
     pid_set = set(m['pId'] for m in matches)
     qid_set = set(m['qId'] for m in matches)
+
     tile_set = set(tile_ids)
 
     pid_set.intersection_update(tile_set)
@@ -66,9 +68,9 @@ def calculate_processing_chunk(fargs):
 
     if len(matches) == 0:
         logger.debug(
-                "%sno tile pairs in "
-                "stack for pointmatch groupIds %s and %s" % (
-                    pstr, pair['section1'], pair['section2']))
+            "%sno tile pairs in "
+            "stack for pointmatch groupIds %s and %s" % (
+                pstr, pair['section1'], pair['section2']))
         return chunk
 
     logger.debug(
@@ -118,9 +120,9 @@ def calculate_processing_chunk(fargs):
     nrows = 0
 
     tilepair_weightfac = tilepair_weight(
-            pair['z1'],
-            pair['z2'],
-            args['matrix_assembly'])
+        pair['z1'],
+        pair['z2'],
+        args['matrix_assembly'])
 
     for k in np.arange(nmatches):
         # create the CSR sub-matrix for this tile pair
@@ -366,10 +368,9 @@ class EMaligner(argschema.ArgSchemaParser):
         return assemble_result
 
     def assemble_from_db(self, zvals):
-        assemble_result = {}
-
         # create A matrix in compressed sparse row (CSR) format
         CSR_A = self.create_CSR_A(self.resolvedtiles)
+
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
         assemble_result['tiles_used'] = CSR_A.pop('tiles_used')

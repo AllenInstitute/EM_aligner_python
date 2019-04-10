@@ -371,6 +371,7 @@ class EMaligner(argschema.ArgSchemaParser):
         # create A matrix in compressed sparse row (CSR) format
         CSR_A = self.create_CSR_A(self.resolvedtiles)
 
+        assemble_result = {}
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
         assemble_result['tiles_used'] = CSR_A.pop('tiles_used')

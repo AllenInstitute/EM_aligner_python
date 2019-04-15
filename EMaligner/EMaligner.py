@@ -266,19 +266,20 @@ class EMaligner(argschema.ArgSchemaParser):
             logger.info('\n' + message)
             del assemble_result['A']
 
-        self.solved_resolved = utils.update_tilespecs(
-                self.resolvedtiles,
-                results['x'],
-                assemble_result['tiles_used'])
-        if self.args['output_mode'] == 'stack':
-            utils.write_to_new_stack(
-                    self.solved_resolved,
-                    self.args['output_stack'],
-                    self.args['render_output'],
-                    self.args['overwrite_zlayer'])
-            if self.args['render_output'] == 'stdout':
-                logger.info(message)
-        del assemble_result['x']
+        if results:
+            self.solved_resolved = utils.update_tilespecs(
+                    self.resolvedtiles,
+                    results['x'],
+                    assemble_result['tiles_used'])
+            if self.args['output_mode'] == 'stack':
+                utils.write_to_new_stack(
+                        self.solved_resolved,
+                        self.args['output_stack'],
+                        self.args['render_output'],
+                        self.args['overwrite_zlayer'])
+                if self.args['render_output'] == 'stdout':
+                    logger.info(message)
+            del assemble_result['x']
 
         return results
 

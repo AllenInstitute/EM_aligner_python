@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 from argschema import ArgSchema
-from argschema.fields import \
-        String, Int, Boolean, Nested, Float, NumpyArray, List
+from argschema.fields import (
+        String, Int, Boolean, Nested, Float, NumpyArray,
+        List, InputFile, OutputFile)
 from marshmallow import post_load, ValidationError, pre_load
 import numpy as np
 
@@ -62,6 +63,13 @@ class db_params(ArgSchema):
     def tolist(self, data):
         if not isinstance(data['name'], list):
             data['name'] = [data['name']]
+
+    @post_load
+    def check_interface(self, data):
+        options = ['render', 'mongo', 'file']
+        if data['db_interface'] not in options:
+            raise ValidationError(
+                    "db_interface must be one of {}".format(options))
 
 
 class hdf5_options(ArgSchema):
@@ -150,13 +158,58 @@ class regularization(ArgSchema):
         required=False)
 
 
-class pointmatch(db_params):
+class input_db(db_params):
+    input_file = InputFile(
+        required=False,
+        missing=None,
+        default=None,
+        description=("json or compressed representation of input stack"))
+
+    @post_load
+    def validate_file(self, data):
+        if data['db_interface'] == 'file':
+            if data['input_file'] is None:
+                raise ValidationError("with db_interface 'file', "
+                                      "'input_file' must be a file")
+
+
+class output_db(db_params):
+    output_file = OutputFile(
+        required=False,
+        missing=None,
+        default=None,
+        description=("json or compressed representation of input stack"))
+
+    @post_load
+    def validate_file(self, data):
+        if data['db_interface'] == 'file':
+            if data['output_file'] is None:
+                raise ValidationError("with db_interface 'file', "
+                                      "'output_file' must be a file")
+
+
+class pointmatch(input_db):
     collection_type = String(
         default='pointmatch',
         description="'stack' or 'pointmatch'")
 
 
-class stack(db_params):
+class input_stack(input_db):
+    collection_type = String(
+        default='stack',
+        description="'stack' or 'pointmatch'")
+    use_rest = Boolean(
+        default=False,
+        description="passed as arg in import_tilespecs_parallel")
+
+    @post_load
+    def validate_data(self, data):
+        if len(data['name']) != 1:
+            raise ValidationError("only one input or output "
+                                  "stack name is allowed")
+
+
+class output_stack(output_db):
     collection_type = String(
         default='stack',
         description="'stack' or 'pointmatch'")
@@ -220,8 +273,8 @@ class EMA_Schema(ArgSchema):
         default='null',
         description=("/path/to/file, null (devnull), or "
                      "stdout for where to redirect render output"))
-    input_stack = Nested(stack)
-    output_stack = Nested(stack)
+    input_stack = Nested(input_stack)
+    output_stack = Nested(output_stack)
     pointmatch = Nested(pointmatch)
     hdf5_options = Nested(hdf5_options)
     matrix_assembly = Nested(matrix_assembly)

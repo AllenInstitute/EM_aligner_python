@@ -59,6 +59,8 @@ def make_dbconnection(collection, which='tile', interface=None):
                     client.match[name] for name in mongo_collection_name]
     elif interface == 'render':
         dbconnection = renderapi.connect(**collection)
+    elif interface == 'file':
+        return None
     else:
         raise EMalignerException(
                 "invalid interface in make_dbconnection()")
@@ -106,6 +108,15 @@ def determine_zvalue_pairs(resolved, depths):
     return pairs
 
 
+def ready_transforms(tilespecs, tform_name, fullsize, order):
+    for t in tilespecs:
+        t.tforms[-1] = AlignerTransform(
+            name=tform_name,
+            transform=t.tforms[-1],
+            fullsize=fullsize,
+            order=order)
+
+
 def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     resolved = renderapi.resolvedtiles.ResolvedTiles()
     dbconnection = make_dbconnection(stack)
@@ -143,24 +154,27 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             resolved.transforms = shared_tforms
 
     # turn the last transform of every tilespec into an AlignerTransform
-    for t in resolved.tilespecs:
-        t.tforms[-1] = AlignerTransform(
-            name=tform_name,
-            transform=t.tforms[-1],
-            fullsize=fullsize,
-            order=order)
+    ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
+
     return resolved
 
 
 def get_resolved_tilespecs(
         stack, tform_name, pool_size, zvals, fullsize=False, order=2):
     t0 = time.time()
-    resolved = renderapi.resolvedtiles.ResolvedTiles()
-    getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
-    with renderapi.client.WithPool(pool_size) as pool:
-        for rz in pool.map(getz, zvals):
-            resolved.tilespecs += rz.tilespecs
-            resolved.transforms += rz.transforms
+    if stack['db_interface'] == 'file':
+        with open(stack['input_file'], 'r') as f:
+            resolved = renderapi.resolvedtiles.ResolvedTiles(
+                    json=json.load(f))
+        resolved.tilespecs = [t for t in resolved.tilespecs if t.z in zvals]
+        ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
+    else:
+        resolved = renderapi.resolvedtiles.ResolvedTiles()
+        getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
+        with renderapi.client.WithPool(pool_size) as pool:
+            for rz in pool.map(getz, zvals):
+                resolved.tilespecs += rz.tilespecs
+                resolved.transforms += rz.transforms
 
     logger.info(
         "\n loaded %d tile specs from %d zvalues in "
@@ -468,6 +482,11 @@ def get_z_values_for_stack(stack, zvals):
                 render=dbconnection)
     if stack['db_interface'] == 'mongo':
         zstack = dbconnection.distinct('z')
+    if stack['db_interface'] == 'file':
+        with open(stack['input_file'], 'r') as f:
+            resolved = renderapi.resolvedtiles.ResolvedTiles(
+                    json=json.load(f))
+        zstack = np.unique([t.z for t in resolved.tilespecs])
 
     ind = np.isin(zvals, zstack)
     return zvals[ind]

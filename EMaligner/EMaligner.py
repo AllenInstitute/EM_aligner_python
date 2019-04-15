@@ -201,7 +201,6 @@ class EMaligner(argschema.ArgSchemaParser):
             self.args['first_section'],
             self.args['last_section'] + 1)
 
-
         # read in the tilespecs
         self.resolvedtiles = utils.get_resolved_tilespecs(
             self.args['input_stack'],
@@ -267,13 +266,13 @@ class EMaligner(argschema.ArgSchemaParser):
             logger.info('\n' + message)
             del assemble_result['A']
 
+        self.solved_resolved = utils.update_tilespecs(
+                self.resolvedtiles,
+                results['x'],
+                assemble_result['tiles_used'])
         if self.args['output_mode'] == 'stack':
-            solved_resolved = utils.update_tilespecs(
-                    self.resolvedtiles,
-                    results['x'],
-                    assemble_result['tiles_used'])
             utils.write_to_new_stack(
-                    solved_resolved,
+                    self.solved_resolved,
                     self.args['output_stack'],
                     self.args['render_output'],
                     self.args['overwrite_zlayer'])

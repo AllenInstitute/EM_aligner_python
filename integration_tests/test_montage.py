@@ -120,6 +120,7 @@ def test_weighted(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 def test_multi_pm(
@@ -136,6 +137,7 @@ def test_multi_pm(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 @pytest.mark.parametrize(
@@ -159,6 +161,7 @@ def test_different_transforms(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 def test_polynomial(
@@ -178,6 +181,7 @@ def test_polynomial(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-4)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 def test_poly_validation(output_stack_name):
@@ -208,6 +212,7 @@ def test_stack_state(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 @pytest.mark.parametrize("db_intfc", ["render", "mongo"])
@@ -227,6 +232,7 @@ def test_basic(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 @pytest.mark.parametrize("render_output", ["stdout", "file", "null"])
@@ -246,6 +252,7 @@ def test_render_output(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
     if render_output == 'file':
         assert os.path.isfile(fout)

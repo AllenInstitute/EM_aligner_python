@@ -126,6 +126,7 @@ def test_rough_similarity_explicit_depth(
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
+    del mod
 
     with pytest.raises(ValidationError):
         rough_parameters2['matrix_assembly']['depth'] = [0, 1]
@@ -167,6 +168,7 @@ def test_multi_profile_exception(
     with pytest.raises(utils.EMalignerException):
         mod.args['profile_data_load'] = True
         mod.run()
+    del mod
 
 
 def test_rough_similarity_2(
@@ -190,6 +192,7 @@ def test_rough_similarity_2(
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
+    del mod
 
 
 @pytest.mark.parametrize("pm_db_intfc", ['render', 'mongo'])
@@ -215,6 +218,7 @@ def test_rough_similarity_split(
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
+    del mod
 
 
 @pytest.mark.parametrize("pm_db_intfc", ['render', 'mongo'])
@@ -241,6 +245,7 @@ def test_missing_section(
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
     assert len(tin) == len(tout)
+    del mod
 
 
 def test_affine_on_similarity(
@@ -256,6 +261,7 @@ def test_affine_on_similarity(
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
     mod.run()
+    del mod
 
     rough_parameters2['input_stack']['name'] = 'sim_out'
     rough_parameters2['output_stack']['name'] = output_stack_name
@@ -268,6 +274,7 @@ def test_affine_on_similarity(
             rough_parameters2['input_stack']['name'], render=render)
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
+    del mod
 
 
 def test_output_mode_none(
@@ -287,3 +294,4 @@ def test_output_mode_none(
     assert np.all(np.array(mod.results['error']) < 1e6)
     stacks = renderapi.render.get_stacks_by_owner_project(render=render)
     assert output_stack_name not in stacks
+    del mod

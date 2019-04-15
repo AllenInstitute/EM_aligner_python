@@ -35,6 +35,7 @@ def raw_stack(render):
     renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
     renderapi.stack.set_stack_state(test_raw_stack, 'COMPLETE', render=render)
     yield test_raw_stack
+    renderapi.stack.delete_stack(test_raw_stack, render=render)
 
 
 @pytest.fixture(scope='function')
@@ -46,6 +47,7 @@ def loading_raw_stack(render):
     renderapi.stack.create_stack(test_raw_stack, render=render)
     renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
     yield test_raw_stack
+    renderapi.stack.delete_stack(test_raw_stack, render=render)
 
 
 @pytest.fixture(scope='module')
@@ -57,6 +59,8 @@ def montage_pointmatches(render):
     renderapi.pointmatch.import_matches(
             test_montage_collection, pms_from_json, render=render)
     yield test_montage_collection
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection, render=render)
 
 
 @pytest.fixture(scope='module')
@@ -73,6 +77,10 @@ def split_montage_pointmatches(render):
     renderapi.pointmatch.import_matches(
             test_montage_collection2, pms_from_json, render=render)
     yield [test_montage_collection1, test_montage_collection2]
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection1, render=render)
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection2, render=render)
 
 
 @pytest.fixture(scope='module')
@@ -87,6 +95,8 @@ def montage_pointmatches_weighted(render):
     renderapi.pointmatch.import_matches(
             test_montage_collection2, pms_from_json, render=render)
     yield test_montage_collection2
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection2, render=render)
 
 
 @pytest.fixture(scope='function')

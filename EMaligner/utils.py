@@ -12,6 +12,7 @@ from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
 import copy
+import gzip
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
@@ -159,13 +160,32 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     return resolved
 
 
+def read_json_or_gz(f):
+    if os.path.splitext(f)[1] == '.json':
+        with open(f, 'r') as f:
+            d = json.load(f)
+    elif os.path.splitext(f)[1] == '.gz':
+        with gzip.GzipFile(f, 'r') as f:
+            d = json.loads(f.read().decode('utf-8'))
+    return d
+
+
+def write_json_or_gz(d, f):
+    ext = os.path.splitext(f)[1]
+    if ext == ".json":
+        with open(f, 'w') as f:
+            json.dump(d, f)
+    elif ext == ".gz":
+        with gzip.GzipFile(f, 'w') as f:
+            f.write(json.dumps(d).encode('utf-8'))
+
+
 def get_resolved_tilespecs(
         stack, tform_name, pool_size, zvals, fullsize=False, order=2):
     t0 = time.time()
     if stack['db_interface'] == 'file':
-        with open(stack['input_file'], 'r') as f:
-            resolved = renderapi.resolvedtiles.ResolvedTiles(
-                    json=json.load(f))
+        resolved = renderapi.resolvedtiles.ResolvedTiles(
+                json=read_json_or_gz(stack['input_file']))
         resolved.tilespecs = [t for t in resolved.tilespecs if t.z in zvals]
         ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
     else:
@@ -189,6 +209,10 @@ def get_resolved_tilespecs(
 
 def get_matches(iId, jId, collection, dbconnection):
     matches = []
+    if collection['db_interface'] == 'file':
+        matches = read_json_or_gz(collection['input_file'])
+        matches = [m for m in matches
+                   if set([m['pGroupId'], m['qGroupId']]) & set([iId, jId])]
     if collection['db_interface'] == 'render':
         if iId == jId:
             for name in collection['name']:
@@ -483,9 +507,8 @@ def get_z_values_for_stack(stack, zvals):
     if stack['db_interface'] == 'mongo':
         zstack = dbconnection.distinct('z')
     if stack['db_interface'] == 'file':
-        with open(stack['input_file'], 'r') as f:
-            resolved = renderapi.resolvedtiles.ResolvedTiles(
-                    json=json.load(f))
+        resolved = renderapi.resolvedtiles.ResolvedTiles(
+                json=read_json_or_gz(stack['input_file']))
         zstack = np.unique([t.z for t in resolved.tilespecs])
 
     ind = np.isin(zvals, zstack)

@@ -4,6 +4,7 @@ from test_data import (render_params,
                        montage_raw_tilespecs_json,
                        montage_parameters)
 from EMaligner import EMaligner
+from EMaligner.utils import write_json_or_gz
 import json
 from marshmallow.exceptions import ValidationError
 import copy
@@ -60,8 +61,10 @@ def solved_montage(render, raw_stack, montage_pointmatches):
     renderapi.stack.delete_stack('output_stack_name', render=render)
 
 
+@pytest.mark.parametrize("ext", [".json", ".json.gz"])
 def test_input_stack_file(
-        render, raw_stack, montage_pointmatches, tmpdir, solved_montage):
+        render, raw_stack, montage_pointmatches,
+        tmpdir, solved_montage, ext):
     p = copy.deepcopy(montage_parameters)
     resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
             raw_stack,
@@ -69,14 +72,68 @@ def test_input_stack_file(
             render=render)
     tmp_file_dir = str(tmpdir.mkdir('file_test_dir'))
     input_stack_file = os.path.join(
-            tmp_file_dir, "input_stack.json")
-    with open(input_stack_file, 'w') as f:
-        json.dump(resolved.to_dict(), f)
+            tmp_file_dir, "input_stack" + ext)
+    write_json_or_gz(resolved.to_dict(), input_stack_file)
 
     p['input_stack']['db_interface'] = 'file'
     p['input_stack']['input_file'] = input_stack_file
     p['output_mode'] = 'none'
     p['pointmatch']['name'] = montage_pointmatches
+
+    tmod = EMaligner.EMaligner(input_data=p, args=[])
+    tmod.run()
+
+    for k in ['precision', 'error', 'err']:
+        assert np.all(
+                np.isclose(
+                    np.array(tmod.results[k]),
+                    np.array(solved_montage.results[k])))
+
+    assert np.all(
+            np.isclose(
+                np.linalg.norm(solved_montage.results['x'], axis=0),
+                np.linalg.norm(tmod.results['x'], axis=0)))
+
+    orig_ids = np.array([
+        t.tileId for t in solved_montage.solved_resolved.tilespecs])
+    for t in tmod.solved_resolved.tilespecs:
+        i = np.argwhere(orig_ids == t.tileId).flatten()[0]
+        assert np.all(
+                np.isclose(
+                    solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
+                    t.tforms[-1].M))
+
+    shutil.rmtree(tmp_file_dir)
+
+
+@pytest.mark.parametrize("ext", [".json", ".json.gz"])
+def test_montage_file(
+        render, raw_stack, montage_pointmatches,
+        tmpdir, solved_montage, ext):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = raw_stack
+    p['pointmatch']['name'] = montage_pointmatches
+
+    # get the matches and write them to a file
+    sectionData = renderapi.stack.get_stack_sectionData(
+            p['input_stack']['name'],
+            render=render)
+    sections = [sd['sectionId'] for sd in sectionData]
+    print(sections)
+    matches = []
+    for s in sections:
+        matches += renderapi.pointmatch.get_matches_with_group(
+                p['pointmatch']['name'],
+                s,
+                render=render)
+    tmp_file_dir = str(tmpdir.mkdir('file_test_dir'))
+    match_file = os.path.join(
+            tmp_file_dir, "matches" + ext)
+    write_json_or_gz(matches, match_file)
+
+    p['pointmatch']['db_interface'] = 'file'
+    p['pointmatch']['input_file'] = match_file
+    p['output_mode'] = 'none'
 
     tmod = EMaligner.EMaligner(input_data=p, args=[])
     tmod.run()

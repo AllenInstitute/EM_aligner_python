@@ -400,6 +400,11 @@ def write_to_new_stack(
         overwrite_zlayer):
 
     ingestconn = make_dbconnection(output_stack, interface='render')
+    if output_stack['db_interface'] == 'file':
+        write_json_or_gz(resolved.to_dict(), output_stack['output_file'])
+        logger.info('wrote {}'.format(output_stack['output_file']))
+        return
+
     logger.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
             ingestconn.DEFAULT_HOST,
@@ -480,6 +485,8 @@ def message_from_solve_results(results):
 
 
 def create_or_set_loading(stack):
+    if stack['db_interface'] == 'file':
+        return
     dbconnection = make_dbconnection(
             stack,
             interface='render')
@@ -489,6 +496,8 @@ def create_or_set_loading(stack):
 
 
 def set_complete(stack):
+    if stack['db_interface'] == 'file':
+        return
     dbconnection = make_dbconnection(
             stack,
             interface='render')

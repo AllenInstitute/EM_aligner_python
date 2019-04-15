@@ -4,7 +4,8 @@ from test_data import (render_params,
                        montage_raw_tilespecs_json,
                        montage_parameters)
 from EMaligner import EMaligner
-from EMaligner.utils import write_json_or_gz
+from EMaligner.utils import (
+        write_json_or_gz, read_json_or_gz)
 import json
 from marshmallow.exceptions import ValidationError
 import copy
@@ -61,6 +62,31 @@ def solved_montage(render, raw_stack, montage_pointmatches):
     renderapi.stack.delete_stack('output_stack_name', render=render)
 
 
+def test_validation(raw_stack, montage_pointmatches):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['db_interface'] = 'file'
+    p['input_stack']['input_file'] = None
+    p['output_mode'] = 'none'
+    p['pointmatch']['name'] = montage_pointmatches
+    with pytest.raises(ValidationError):
+        tmod = EMaligner.EMaligner(input_data=p, args=[])
+        del tmod
+
+    p['input_stack']['db_interface'] = 'mongo'
+    p['input_stack']['name'] = raw_stack
+    p['output_stack']['db_interface'] = 'file'
+    p['output_stack']['output_file'] = None
+    with pytest.raises(ValidationError):
+        tmod = EMaligner.EMaligner(input_data=p, args=[])
+        del tmod
+
+    p['output_stack']['db_interface'] = 'render'
+    p['pointmatch']['db_interface'] = 'web'
+    with pytest.raises(ValidationError):
+        tmod = EMaligner.EMaligner(input_data=p, args=[])
+        del tmod
+
+
 @pytest.mark.parametrize("ext", [".json", ".json.gz"])
 def test_input_stack_file(
         render, raw_stack, montage_pointmatches,
@@ -103,11 +129,12 @@ def test_input_stack_file(
                     solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
                     t.tforms[-1].M))
 
+    del tmod
     shutil.rmtree(tmp_file_dir)
 
 
 @pytest.mark.parametrize("ext", [".json", ".json.gz"])
-def test_montage_file(
+def test_match_file(
         render, raw_stack, montage_pointmatches,
         tmpdir, solved_montage, ext):
     p = copy.deepcopy(montage_parameters)
@@ -158,4 +185,38 @@ def test_montage_file(
                     solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
                     t.tforms[-1].M))
 
+    del tmod
+    shutil.rmtree(tmp_file_dir)
+
+
+@pytest.mark.parametrize("ext", [".json", ".json.gz"])
+def test_output_file(
+        render, raw_stack, montage_pointmatches,
+        tmpdir, solved_montage, ext):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = raw_stack
+    p['pointmatch']['name'] = montage_pointmatches
+
+    tmp_file_dir = str(tmpdir.mkdir('file_test_dir'))
+    p['output_stack']['db_interface'] = 'file'
+    p['output_stack']['output_file'] = os.path.join(
+            tmp_file_dir,
+            "resolvedtiles" + ext)
+
+    tmod = EMaligner.EMaligner(input_data=p, args=[])
+    tmod.run()
+
+    solved = renderapi.resolvedtiles.ResolvedTiles(
+            json=read_json_or_gz(p['output_stack']['output_file']))
+
+    orig_ids = np.array([
+        t.tileId for t in solved_montage.solved_resolved.tilespecs])
+    for t in solved.tilespecs:
+        i = np.argwhere(orig_ids == t.tileId).flatten()[0]
+        assert np.all(
+                np.isclose(
+                    solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
+                    t.tforms[-1].M))
+
+    del tmod
     shutil.rmtree(tmp_file_dir)

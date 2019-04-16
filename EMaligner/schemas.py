@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from argschema import ArgSchema
+from argschema.schemas import DefaultSchema
 from argschema.fields import (
         String, Int, Boolean, Nested, Float, NumpyArray,
         List, InputFile, OutputFile)
@@ -8,7 +9,7 @@ from marshmallow import post_load, ValidationError, pre_load
 import numpy as np
 
 
-class db_params(ArgSchema):
+class db_params(DefaultSchema):
     owner = String(
         default='',
         required=False,
@@ -72,7 +73,7 @@ class db_params(ArgSchema):
                     "db_interface must be one of {}".format(options))
 
 
-class hdf5_options(ArgSchema):
+class hdf5_options(DefaultSchema):
     output_dir = String(
         default="")
     chunks_per_file = Int(
@@ -81,7 +82,7 @@ class hdf5_options(ArgSchema):
                      " cross section to write per .h5 file"))
 
 
-class matrix_assembly(ArgSchema):
+class matrix_assembly(DefaultSchema):
     depth = List(
         Int,
         cli_as_single_argument=True,
@@ -137,7 +138,7 @@ class matrix_assembly(ArgSchema):
         description='cross section point match weighting fades with z')
 
 
-class regularization(ArgSchema):
+class regularization(DefaultSchema):
     default_lambda = Float(
         default=0.005,
         description='regularization factor')

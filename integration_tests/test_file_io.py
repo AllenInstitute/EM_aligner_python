@@ -109,6 +109,8 @@ def test_input_stack_file(
     tmod = EMaligner.EMaligner(input_data=p, args=[])
     tmod.run()
 
+    print(json.dumps(tmod.resolvedtiles.tilespecs[1].to_dict(), indent=2))
+
     for k in ['precision', 'error', 'err']:
         assert np.all(
                 np.isclose(
@@ -121,12 +123,12 @@ def test_input_stack_file(
                 np.linalg.norm(tmod.results['x'], axis=0)))
 
     orig_ids = np.array([
-        t.tileId for t in solved_montage.solved_resolved.tilespecs])
-    for t in tmod.solved_resolved.tilespecs:
+        t.tileId for t in solved_montage.resolvedtiles.tilespecs])
+    for t in tmod.resolvedtiles.tilespecs:
         i = np.argwhere(orig_ids == t.tileId).flatten()[0]
         assert np.all(
                 np.isclose(
-                    solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
+                    solved_montage.resolvedtiles.tilespecs[i].tforms[-1].M,
                     t.tforms[-1].M))
 
     del tmod
@@ -177,12 +179,12 @@ def test_match_file(
                 np.linalg.norm(tmod.results['x'], axis=0)))
 
     orig_ids = np.array([
-        t.tileId for t in solved_montage.solved_resolved.tilespecs])
-    for t in tmod.solved_resolved.tilespecs:
+        t.tileId for t in solved_montage.resolvedtiles.tilespecs])
+    for t in tmod.resolvedtiles.tilespecs:
         i = np.argwhere(orig_ids == t.tileId).flatten()[0]
         assert np.all(
                 np.isclose(
-                    solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
+                    solved_montage.resolvedtiles.tilespecs[i].tforms[-1].M,
                     t.tforms[-1].M))
 
     del tmod
@@ -210,12 +212,12 @@ def test_output_file(
             json=read_json_or_gz(p['output_stack']['output_file']))
 
     orig_ids = np.array([
-        t.tileId for t in solved_montage.solved_resolved.tilespecs])
+        t.tileId for t in solved_montage.resolvedtiles.tilespecs])
     for t in solved.tilespecs:
         i = np.argwhere(orig_ids == t.tileId).flatten()[0]
         assert np.all(
                 np.isclose(
-                    solved_montage.solved_resolved.tilespecs[i].tforms[-1].M,
+                    solved_montage.resolvedtiles.tilespecs[i].tforms[-1].M,
                     t.tforms[-1].M))
 
     del tmod

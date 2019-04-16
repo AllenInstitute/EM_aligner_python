@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 import numpy as np
 import renderapi
-from renderapi.external.processpools import pool_pathos
+from renderapi.external.processpools import pool_pathos, stdlib_pool
 import logging
 import time
 import warnings
@@ -11,8 +11,8 @@ import json
 from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
-import copy
 import gzip
+import itertools
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
@@ -51,13 +51,13 @@ def make_dbconnection(collection, which='tile', interface=None):
                     '__' + collection['project'] +
                     '__' + collection['name'][0] +
                     '__'+which)
-            dbconnection = client.render[mongo_collection_name]
+            dbconnection = (client, client.render[mongo_collection_name])
         elif collection['collection_type'] == 'pointmatch':
             mongo_collection_name = [(
                     collection['owner'] +
                     '__' + name) for name in collection['name']]
-            dbconnection = [
-                    client.match[name] for name in mongo_collection_name]
+            dbconnection = [(client, client.match[name])
+                            for name in mongo_collection_name]
     elif interface == 'render':
         dbconnection = renderapi.connect(**collection)
     elif interface == 'file':
@@ -133,12 +133,14 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             pass
     if stack['db_interface'] == 'mongo':
         filt = {'z': float(z)}
-        if dbconnection.count_documents(filt) != 0:
+        if dbconnection[1].count_documents(filt) != 0:
             # this sort ordering is the same as render, I think
-            cursor = dbconnection.find(filt).sort([
+            cursor = dbconnection[1].find(filt).sort([
                     ('layout.imageRow', 1),
                     ('layout.imageCol', 1)])
             tspecs = [renderapi.tilespec.TileSpec(json=c) for c in cursor]
+            cursor.close()
+            dbconnection[0].close()
             refids = np.unique([
                 [tf.refId for tf in t.tforms if
                     isinstance(tf, renderapi.transform.ReferenceTransform)]
@@ -147,12 +149,17 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             dbconnection2 = make_dbconnection(stack, which='transform')
 
             def tfjson(refid):
-                return list(dbconnection2.find({"id": refid}))[0]
+                c = dbconnection2[1].find({"id": refid})
+                x = list(c)[0]
+                c.close()
+                return x
 
             shared_tforms = [renderapi.transform.load_transform_json(
                 tfjson(refid)) for refid in refids]
-            resolved.tilespecs = tspecs
-            resolved.transforms = shared_tforms
+            dbconnection2[0].close()
+            resolved = renderapi.resolvedtiles.ResolvedTiles(
+                    tilespecs=tspecs, transformList=shared_tforms)
+            del tspecs, shared_tforms
 
     # turn the last transform of every tilespec into an AlignerTransform
     ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
@@ -191,10 +198,12 @@ def get_resolved_tilespecs(
     else:
         resolved = renderapi.resolvedtiles.ResolvedTiles()
         getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
-        with renderapi.client.WithPool(pool_size) as pool:
-            for rz in pool.map(getz, zvals):
-                resolved.tilespecs += rz.tilespecs
-                resolved.transforms += rz.transforms
+        with stdlib_pool.WithThreadPool(pool_size) as pool:
+            results = pool.map(getz, zvals)
+        resolved.tilespecs = list(itertools.chain.from_iterable(
+            [r.__dict__.pop('tilespecs') for r in results]))
+        resolved.transforms = list(itertools.chain.from_iterable(
+            [r.__dict__.pop('transforms') for r in results]))
 
     logger.info(
         "\n loaded %d tile specs from %d zvalues in "
@@ -232,18 +241,21 @@ def get_matches(iId, jId, collection, dbconnection):
                             render=dbconnection))
     if collection['db_interface'] == 'mongo':
         for dbconn in dbconnection:
-            cursor = dbconn.find(
+            cursor = dbconn[1].find(
                     {'pGroupId': iId, 'qGroupId': jId},
                     {'_id': False})
             matches.extend(list(cursor))
+            cursor.close()
             if iId != jId:
                 # in principle, this does nothing if zi < zj, but, just in case
-                cursor = dbconn.find(
+                cursor = dbconn[1].find(
                         {
                             'pGroupId': jId,
                             'qGroupId': iId},
                         {'_id': False})
                 matches.extend(list(cursor))
+                cursor.close()
+        dbconn[0].close()
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
     logger.debug(message)
@@ -514,7 +526,8 @@ def get_z_values_for_stack(stack, zvals):
                 stack['name'][0],
                 render=dbconnection)
     if stack['db_interface'] == 'mongo':
-        zstack = dbconnection.distinct('z')
+        zstack = dbconnection[1].distinct('z')
+        dbconnection[0].close()
     if stack['db_interface'] == 'file':
         resolved = renderapi.resolvedtiles.ResolvedTiles(
                 json=read_json_or_gz(stack['input_file']))
@@ -525,10 +538,9 @@ def get_z_values_for_stack(stack, zvals):
 
 
 def update_tilespecs(resolved, x, used):
-    up_resolved = copy.deepcopy(resolved)
     index = 0
-    for i in range(len(up_resolved.tilespecs)):
+    for i in range(len(resolved.tilespecs)):
         if used[i]:
-            index += up_resolved.tilespecs[i].tforms[-1].from_solve_vec(
+            index += resolved.tilespecs[i].tforms[-1].from_solve_vec(
                     x[index:, :])
-    return up_resolved
+    return

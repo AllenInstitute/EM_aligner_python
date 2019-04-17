@@ -5,7 +5,7 @@ from argschema.schemas import DefaultSchema
 from argschema.fields import (
         String, Int, Boolean, Nested, Float, NumpyArray,
         List, InputFile, OutputFile)
-from marshmallow import post_load, ValidationError, pre_load
+import marshmallow as mm
 import numpy as np
 
 
@@ -53,24 +53,18 @@ class db_params(DefaultSchema):
         required=False,
         description='mongo pwd')
     db_interface = String(
-        default='mongo')
+        default='mongo',
+        validator=mm.validate.OneOf(['render', 'mongo', 'file']))
     client_scripts = String(
         default=("/allen/aibs/pipeline/image_processing/"
                  "volume_assembly/render-jars/production/scripts"),
         required=False,
         description='render bin path')
 
-    @pre_load
+    @mm.pre_load
     def tolist(self, data):
         if not isinstance(data['name'], list):
             data['name'] = [data['name']]
-
-    @post_load
-    def check_interface(self, data):
-        options = ['render', 'mongo', 'file']
-        if data['db_interface'] not in options:
-            raise ValidationError(
-                    "db_interface must be one of {}".format(options))
 
 
 class hdf5_options(DefaultSchema):
@@ -96,18 +90,18 @@ class matrix_assembly(DefaultSchema):
         missing=None,
         description='explicitly set solver weights by depth')
 
-    @pre_load
+    @mm.pre_load
     def tolist(self, data):
         if not isinstance(data['depth'], list):
             data['depth'] = np.arange(0, data['depth'] + 1).tolist()
 
-    @post_load
+    @mm.post_load
     def check_explicit(self, data):
         if data['explicit_weight_by_depth'] is not None:
             if (
                     len(data['explicit_weight_by_depth']) !=
                     len(data['depth'])):
-                raise ValidationError(
+                raise mm.ValidationError(
                         "matrix_assembly['explicit_weight_by_depth'] "
                         "must be the same length as matrix_assembly['depth']")
     cross_pt_weight = Float(
@@ -166,12 +160,12 @@ class input_db(db_params):
         default=None,
         description=("json or compressed representation of input stack"))
 
-    @post_load
+    @mm.post_load
     def validate_file(self, data):
         if data['db_interface'] == 'file':
             if data['input_file'] is None:
-                raise ValidationError("with db_interface 'file', "
-                                      "'input_file' must be a file")
+                raise mm.ValidationError("with db_interface 'file', "
+                                         "'input_file' must be a file")
 
 
 class pointmatch(input_db):
@@ -188,11 +182,11 @@ class input_stack(input_db):
         default=False,
         description="passed as arg in import_tilespecs_parallel")
 
-    @post_load
+    @mm.post_load
     def validate_data(self, data):
         if len(data['name']) != 1:
-            raise ValidationError("only one input or output "
-                                  "stack name is allowed")
+            raise mm.ValidationError("only one input or output "
+                                     "stack name is allowed")
 
 
 class output_stack(db_params):
@@ -213,18 +207,18 @@ class output_stack(db_params):
         default=False,
         description="passed as arg in import_tilespecs_parallel")
 
-    @post_load
+    @mm.post_load
     def validate_file(self, data):
         if data['db_interface'] == 'file':
             if data['output_file'] is None:
-                raise ValidationError("with db_interface 'file', "
-                                      "'output_file' must be a file")
+                raise mm.ValidationError("with db_interface 'file', "
+                                         "'output_file' must be a file")
 
-    @post_load
+    @mm.post_load
     def validate_data(self, data):
         if len(data['name']) != 1:
-            raise ValidationError("only one input or output "
-                                  "stack name is allowed")
+            raise mm.ValidationError("only one input or output "
+                                     "stack name is allowed")
 
 
 class EMA_Schema(ArgSchema):
@@ -286,13 +280,13 @@ class EMA_Schema(ArgSchema):
         default=1,
         description='have the routine showhow long each process takes')
 
-    @post_load
+    @mm.post_load
     def validate_data(self, data):
         if (data['regularization']['poly_factors'] is not None) & \
                 (data['transformation'] == 'Polynomial2DTransform'):
             n = len(data['regularization']['poly_factors'])
             if n != data['poly_order'] + 1:
-                raise ValidationError(
+                raise mm.ValidationError(
                         "regularization.poly_factors must be a list"
                         " of length poly_order + 1")
 

@@ -109,18 +109,16 @@ def test_input_stack_file(
     tmod = EMaligner.EMaligner(input_data=p, args=[])
     tmod.run()
 
-    print(json.dumps(tmod.resolvedtiles.tilespecs[1].to_dict(), indent=2))
-
     for k in ['precision', 'error', 'err']:
         assert np.all(
                 np.isclose(
                     np.array(tmod.results[k]),
-                    np.array(solved_montage.results[k])))
+                    np.array(solved_montage.results[k]), atol=1e-7))
 
     assert np.all(
             np.isclose(
                 np.linalg.norm(solved_montage.results['x'], axis=0),
-                np.linalg.norm(tmod.results['x'], axis=0)))
+                np.linalg.norm(tmod.results['x'], axis=0), atol=1e-7))
 
     orig_ids = np.array([
         t.tileId for t in solved_montage.resolvedtiles.tilespecs])
@@ -129,7 +127,7 @@ def test_input_stack_file(
         assert np.all(
                 np.isclose(
                     solved_montage.resolvedtiles.tilespecs[i].tforms[-1].M,
-                    t.tforms[-1].M))
+                    t.tforms[-1].M, atol=1e-7))
 
     del tmod
     shutil.rmtree(tmp_file_dir)
@@ -148,7 +146,6 @@ def test_match_file(
             p['input_stack']['name'],
             render=render)
     sections = [sd['sectionId'] for sd in sectionData]
-    print(sections)
     matches = []
     for s in sections:
         matches += renderapi.pointmatch.get_matches_with_group(
@@ -171,12 +168,12 @@ def test_match_file(
         assert np.all(
                 np.isclose(
                     np.array(tmod.results[k]),
-                    np.array(solved_montage.results[k])))
+                    np.array(solved_montage.results[k]), atol=1e-7))
 
     assert np.all(
             np.isclose(
                 np.linalg.norm(solved_montage.results['x'], axis=0),
-                np.linalg.norm(tmod.results['x'], axis=0)))
+                np.linalg.norm(tmod.results['x'], axis=0), atol=1e-7))
 
     orig_ids = np.array([
         t.tileId for t in solved_montage.resolvedtiles.tilespecs])
@@ -185,7 +182,7 @@ def test_match_file(
         assert np.all(
                 np.isclose(
                     solved_montage.resolvedtiles.tilespecs[i].tforms[-1].M,
-                    t.tforms[-1].M))
+                    t.tforms[-1].M, atol=1e-7))
 
     del tmod
     shutil.rmtree(tmp_file_dir)
@@ -218,7 +215,7 @@ def test_output_file(
         assert np.all(
                 np.isclose(
                     solved_montage.resolvedtiles.tilespecs[i].tforms[-1].M,
-                    t.tforms[-1].M))
+                    t.tforms[-1].M, atol=1e-7))
 
     del tmod
     shutil.rmtree(tmp_file_dir)

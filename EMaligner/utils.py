@@ -134,10 +134,7 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     if stack['db_interface'] == 'mongo':
         filt = {'z': float(z)}
         if dbconnection[1].count_documents(filt) != 0:
-            # this sort ordering is the same as render, I think
-            cursor = dbconnection[1].find(filt).sort([
-                    ('layout.imageRow', 1),
-                    ('layout.imageCol', 1)])
+            cursor = dbconnection[1].find(filt)
             tspecs = [renderapi.tilespec.TileSpec(json=c) for c in cursor]
             cursor.close()
             dbconnection[0].close()

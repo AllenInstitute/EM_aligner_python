@@ -12,6 +12,7 @@ from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
 from . import jsongz
+import collections
 import itertools
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -32,6 +33,10 @@ def make_dbconnection(collection, which='tile', interface=None):
         interface = collection['db_interface']
 
     if interface == 'mongo':
+        mongoconn = collections.namedtuple('mongoconn', 'client collection')
+        client = MongoClient(
+                host=collection['mongo_host'],
+                port=collection['mongo_port'])
         if collection['mongo_userName'] != '':
             client = MongoClient(
                     host=collection['mongo_host'],
@@ -39,10 +44,6 @@ def make_dbconnection(collection, which='tile', interface=None):
                     username=collection['mongo_userName'],
                     authSource=collection['mongo_authenticationDatabase'],
                     password=collection['mongo_password'])
-        else:
-            client = MongoClient(
-                    host=collection['mongo_host'],
-                    port=collection['mongo_port'])
 
         if collection['collection_type'] == 'stack':
             # for getting shared transforms, which='transform'
@@ -51,12 +52,16 @@ def make_dbconnection(collection, which='tile', interface=None):
                     '__' + collection['project'] +
                     '__' + collection['name'][0] +
                     '__'+which)
-            dbconnection = (client, client.render[mongo_collection_name])
+            dbconnection = mongoconn(
+                    client=client,
+                    collection=client.render[mongo_collection_name])
         elif collection['collection_type'] == 'pointmatch':
             mongo_collection_name = [(
                     collection['owner'] +
                     '__' + name) for name in collection['name']]
-            dbconnection = [(client, client.match[name])
+            dbconnection = [mongoconn(
+                                client=client,
+                                collection=client.match[name])
                             for name in mongo_collection_name]
     elif interface == 'render':
         dbconnection = renderapi.connect(**collection)
@@ -133,11 +138,11 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             pass
     if stack['db_interface'] == 'mongo':
         filt = {'z': float(z)}
-        if dbconnection[1].count_documents(filt) != 0:
-            cursor = dbconnection[1].find(filt)
+        if dbconnection.collection.count_documents(filt) != 0:
+            cursor = dbconnection.collection.find(filt)
             tspecs = [renderapi.tilespec.TileSpec(json=c) for c in cursor]
             cursor.close()
-            dbconnection[0].close()
+            dbconnection.client.close()
             refids = np.unique([
                 [tf.refId for tf in t.tforms if
                     isinstance(tf, renderapi.transform.ReferenceTransform)]
@@ -146,14 +151,14 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             dbconnection2 = make_dbconnection(stack, which='transform')
 
             def tfjson(refid):
-                c = dbconnection2[1].find({"id": refid})
+                c = dbconnection2.collection.find({"id": refid})
                 x = list(c)[0]
                 c.close()
                 return x
 
             shared_tforms = [renderapi.transform.load_transform_json(
                 tfjson(refid)) for refid in refids]
-            dbconnection2[0].close()
+            dbconnection2.client.close()
             resolved = renderapi.resolvedtiles.ResolvedTiles(
                     tilespecs=tspecs, transformList=shared_tforms)
             del tspecs, shared_tforms
@@ -218,21 +223,21 @@ def get_matches(iId, jId, collection, dbconnection):
                             render=dbconnection))
     if collection['db_interface'] == 'mongo':
         for dbconn in dbconnection:
-            cursor = dbconn[1].find(
+            cursor = dbconn.collection.find(
                     {'pGroupId': iId, 'qGroupId': jId},
                     {'_id': False})
             matches.extend(list(cursor))
             cursor.close()
             if iId != jId:
                 # in principle, this does nothing if zi < zj, but, just in case
-                cursor = dbconn[1].find(
+                cursor = dbconn.collection.find(
                         {
                             'pGroupId': jId,
                             'qGroupId': iId},
                         {'_id': False})
                 matches.extend(list(cursor))
                 cursor.close()
-        dbconn[0].close()
+        dbconn.client.close()
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
     logger.debug(message)
@@ -507,8 +512,8 @@ def get_z_values_for_stack(stack, zvals):
                 stack['name'][0],
                 render=dbconnection)
     if stack['db_interface'] == 'mongo':
-        zstack = dbconnection[1].distinct('z')
-        dbconnection[0].close()
+        zstack = dbconnection.collection.distinct('z')
+        dbconnection.client.close()
     if stack['db_interface'] == 'file':
         resolved = renderapi.resolvedtiles.ResolvedTiles(
                 json=jsongz.load(stack['input_file']))

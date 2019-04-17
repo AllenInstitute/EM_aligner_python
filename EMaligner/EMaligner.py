@@ -1,5 +1,5 @@
 import numpy as np
-from renderapi.external.processpools import stdlib_pool
+import renderapi
 import argschema
 from .schemas import EMA_Schema
 from . import utils
@@ -187,6 +187,8 @@ def tilepair_weight(z1, z2, matrix_assembly):
 
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
+    renderapi.client.WithPool = \
+            renderapi.external.processpools.stdlib_pool.WithThreadPool
 
     def run(self):
         logger.setLevel(self.args['log_level'])
@@ -428,7 +430,7 @@ class EMaligner(argschema.ArgSchemaParser):
         tile_ids = np.array([t.tileId for t in resolved.tilespecs])
         fargs = [[pairs[i], i, self.args, tile_ids] for i in range(npairs)]
 
-        with stdlib_pool.WithThreadPool(self.args['n_parallel_jobs']) as pool:
+        with renderapi.client.WithPool(self.args['n_parallel_jobs']) as pool:
             results = np.array(pool.map(calculate_processing_chunk, fargs))
 
         func_result['tiles_used'] = results[0]['tiles_used']

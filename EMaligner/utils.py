@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 import numpy as np
 import renderapi
-from renderapi.external.processpools import pool_pathos, stdlib_pool
+from renderapi.external.processpools import pool_pathos
 import logging
 import time
 import warnings
@@ -14,6 +14,7 @@ from .transform.transform import AlignerTransform
 from . import jsongz
 import collections
 import itertools
+import subprocess
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
@@ -180,7 +181,7 @@ def get_resolved_tilespecs(
     else:
         resolved = renderapi.resolvedtiles.ResolvedTiles()
         getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
-        with stdlib_pool.WithThreadPool(pool_size) as pool:
+        with renderapi.client.WithPool(pool_size) as pool:
             results = pool.map(getz, zvals)
         resolved.tilespecs = list(itertools.chain.from_iterable(
             [r.__dict__.pop('tilespecs') for r in results]))
@@ -366,24 +367,14 @@ def write_reg_and_tforms(
 
 def get_stderr_stdout(outarg):
     if outarg == 'null':
-        stdeo = open(os.devnull, 'wb')
-        logger.info('render output is going to /dev/null')
-    elif outarg == 'stdout':
-        stdeo = sys.stdout
         if sys.version_info[0] >= 3:
-            stdeo = sys.stdout.buffer
-        logger.info('render output is going to stdout')
+            stdeo = subprocess.DEVNULL
+        else:
+            stdeo = open(os.devnull, 'wb')
+        logger.info('render output is going to /dev/null')
     else:
-        i = 0
-        odir, oname = os.path.split(outarg)
-        while os.path.exists(outarg):
-            t = oname.split('.')
-            outarg = odir + '/'
-            for it in t[:-1]:
-                outarg += it
-            outarg += '%d.%s' % (i, t[-1])
-            i += 1
-        stdeo = open(outarg, 'a')
+        stdeo = None
+        logger.info('render output is going to stdout')
     return stdeo
 
 
@@ -409,7 +400,6 @@ def write_to_new_stack(
             ingestconn.DEFAULT_OWNER,
             ingestconn.DEFAULT_PROJECT,
             output_stack['name'][0]))
-    stdeo = get_stderr_stdout(outarg)
 
     if overwrite_zlayer:
         zvalues = np.unique(np.array([t.z for t in resolved.tilespecs]))
@@ -419,16 +409,21 @@ def write_to_new_stack(
                     zvalue,
                     render=ingestconn)
 
+    stdeo = get_stderr_stdout(outarg)
+    pool = renderapi.client.WithPool
+    if (sys.version_info[0] < 3) & (outarg == 'null'):
+        pool = pool_pathos.PathosWithPool
     renderapi.client.import_tilespecs_parallel(
             output_stack['name'][0],
             resolved.tilespecs,
             sharedTransforms=resolved.transforms,
             render=ingestconn,
             close_stack=False,
-            mpPool=pool_pathos.PathosWithPool,
+            mpPool=pool,
             stderr=stdeo,
             stdout=stdeo,
             use_rest=output_stack['use_rest'])
+
     return output_stack
 
 

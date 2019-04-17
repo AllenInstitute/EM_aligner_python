@@ -268,8 +268,8 @@ class EMA_Schema(ArgSchema):
         description='fullpath to solution_output.h5')
     render_output = String(
         default='null',
-        description=("/path/to/file, null (devnull), or "
-                     "stdout for where to redirect render output"))
+        description=("anything besides the default will "
+                     "show all the render stderr/stdout"))
     input_stack = Nested(input_stack)
     output_stack = Nested(output_stack)
     pointmatch = Nested(pointmatch)

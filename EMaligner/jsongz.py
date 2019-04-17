@@ -32,7 +32,7 @@ def dump(obj, filepath, compress=None, encoding='utf-8', *args, **kwargs):
         if None, file compressed or not according to filepath extension
     encoding : str
         encoding of json.dumps() before writing to .gz file.
-        or encoding passed into json.dump()
+        not passed into json.dump()
     *args
         json.dump args
     **kwargs
@@ -53,7 +53,7 @@ def dump(obj, filepath, compress=None, encoding='utf-8', *args, **kwargs):
             f.write(json.dumps(obj, *args, **kwargs).encode(encoding))
     else:
         with open(filepath, 'w') as f:
-            json.dump(obj, f, encoding=encoding, *args, **kwargs)
+            json.dump(obj, f, *args, **kwargs)
     return filepath
 
 
@@ -66,7 +66,7 @@ def load(filepath, encoding='utf-8', *args, **kwargs):
         path for source of load
     encoding : str
         encoding for decoding of json.dumps() after .gz read
-        or encoding passed into json.load()
+        not passed into json.load()
     *args
         json.load args
     **kwargs
@@ -85,5 +85,5 @@ def load(filepath, encoding='utf-8', *args, **kwargs):
             obj = json.loads(f.read().decode(encoding), *args, **kwargs)
     else:
         with open(filepath, 'r') as f:
-            obj = json.load(f, encoding=encoding, *args, **kwargs)
+            obj = json.load(f, *args, **kwargs)
     return obj

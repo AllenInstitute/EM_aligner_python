@@ -79,12 +79,6 @@ def test_validation(raw_stack, montage_pointmatches):
         tmod = EMaligner.EMaligner(input_data=p, args=[])
         del tmod
 
-    p['output_stack']['db_interface'] = 'render'
-    p['pointmatch']['db_interface'] = 'web'
-    with pytest.raises(ValidationError):
-        tmod = EMaligner.EMaligner(input_data=p, args=[])
-        del tmod
-
 
 @pytest.mark.parametrize("compress", [True, False])
 def test_input_stack_file(

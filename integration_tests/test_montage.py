@@ -235,7 +235,7 @@ def test_basic(
     del mod
 
 
-@pytest.mark.parametrize("render_output", ["stdout", "file", "null"])
+@pytest.mark.parametrize("render_output", ["null", "anything else"])
 def test_render_output(
         render, montage_pointmatches, output_stack_name,
         loading_raw_stack, render_output, tmpdir):
@@ -243,16 +243,9 @@ def test_render_output(
     p['input_stack']['name'] = loading_raw_stack
     p['output_stack']['name'] = output_stack_name
     p['pointmatch']['name'] = montage_pointmatches
-    if render_output == 'file':
-        fout = str(tmpdir.join("myfile"))
-        p['render_output'] = fout
-    else:
-        p['render_output'] = render_output
+    p['render_output'] = render_output
     mod = EMaligner.EMaligner(input_data=p, args=[])
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
     del mod
-
-    if render_output == 'file':
-        assert os.path.isfile(fout)

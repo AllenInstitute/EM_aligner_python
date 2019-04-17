@@ -268,7 +268,7 @@ class EMaligner(argschema.ArgSchemaParser):
                     results['x'],
                     assemble_result['tiles_used'])
             if self.args['output_mode'] == 'stack':
-                utils.write_to_new_stack(
+                self.args['output_stack'] = utils.write_to_new_stack(
                         self.resolvedtiles,
                         self.args['output_stack'],
                         self.args['render_output'],

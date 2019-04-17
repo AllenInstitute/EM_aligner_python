@@ -174,21 +174,6 @@ class input_db(db_params):
                                       "'input_file' must be a file")
 
 
-class output_db(db_params):
-    output_file = OutputFile(
-        required=False,
-        missing=None,
-        default=None,
-        description=("json or compressed representation of input stack"))
-
-    @post_load
-    def validate_file(self, data):
-        if data['db_interface'] == 'file':
-            if data['output_file'] is None:
-                raise ValidationError("with db_interface 'file', "
-                                      "'output_file' must be a file")
-
-
 class pointmatch(input_db):
     collection_type = String(
         default='pointmatch',
@@ -210,13 +195,30 @@ class input_stack(input_db):
                                   "stack name is allowed")
 
 
-class output_stack(output_db):
+class output_stack(db_params):
+    output_file = OutputFile(
+        required=False,
+        missing=None,
+        default=None,
+        description=("json or compressed representation of input stack"))
+    compress_output = Boolean(
+        required=False,
+        default=True,
+        missing=True,
+        description=("if writing file, write to .json.gz"))
     collection_type = String(
         default='stack',
         description="'stack' or 'pointmatch'")
     use_rest = Boolean(
         default=False,
         description="passed as arg in import_tilespecs_parallel")
+
+    @post_load
+    def validate_file(self, data):
+        if data['db_interface'] == 'file':
+            if data['output_file'] is None:
+                raise ValidationError("with db_interface 'file', "
+                                      "'output_file' must be a file")
 
     @post_load
     def validate_data(self, data):

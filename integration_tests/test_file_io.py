@@ -4,8 +4,7 @@ from test_data import (render_params,
                        montage_raw_tilespecs_json,
                        montage_parameters)
 from EMaligner import EMaligner
-from EMaligner.utils import (
-        write_json_or_gz, read_json_or_gz)
+from EMaligner import jsongz
 import json
 from marshmallow.exceptions import ValidationError
 import copy
@@ -87,10 +86,10 @@ def test_validation(raw_stack, montage_pointmatches):
         del tmod
 
 
-@pytest.mark.parametrize("ext", [".json", ".json.gz"])
+@pytest.mark.parametrize("compress", [True, False])
 def test_input_stack_file(
         render, raw_stack, montage_pointmatches,
-        tmpdir, solved_montage, ext):
+        tmpdir, solved_montage, compress):
     p = copy.deepcopy(montage_parameters)
     resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
             raw_stack,
@@ -98,8 +97,11 @@ def test_input_stack_file(
             render=render)
     tmp_file_dir = str(tmpdir.mkdir('file_test_dir'))
     input_stack_file = os.path.join(
-            tmp_file_dir, "input_stack" + ext)
-    write_json_or_gz(resolved.to_dict(), input_stack_file)
+            tmp_file_dir, "input_stack.json")
+    input_stack_file = jsongz.dump(
+            resolved.to_dict(),
+            input_stack_file,
+            compress=compress)
 
     p['input_stack']['db_interface'] = 'file'
     p['input_stack']['input_file'] = input_stack_file
@@ -133,10 +135,10 @@ def test_input_stack_file(
     shutil.rmtree(tmp_file_dir)
 
 
-@pytest.mark.parametrize("ext", [".json", ".json.gz"])
+@pytest.mark.parametrize("compress", [True, False])
 def test_match_file(
         render, raw_stack, montage_pointmatches,
-        tmpdir, solved_montage, ext):
+        tmpdir, solved_montage, compress):
     p = copy.deepcopy(montage_parameters)
     p['input_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
@@ -154,8 +156,8 @@ def test_match_file(
                 render=render)
     tmp_file_dir = str(tmpdir.mkdir('file_test_dir'))
     match_file = os.path.join(
-            tmp_file_dir, "matches" + ext)
-    write_json_or_gz(matches, match_file)
+            tmp_file_dir, "matches.json")
+    match_file = jsongz.dump(matches, match_file, compress=compress)
 
     p['pointmatch']['db_interface'] = 'file'
     p['pointmatch']['input_file'] = match_file
@@ -188,10 +190,10 @@ def test_match_file(
     shutil.rmtree(tmp_file_dir)
 
 
-@pytest.mark.parametrize("ext", [".json", ".json.gz"])
+@pytest.mark.parametrize("compress", [True, False])
 def test_output_file(
         render, raw_stack, montage_pointmatches,
-        tmpdir, solved_montage, ext):
+        tmpdir, solved_montage, compress):
     p = copy.deepcopy(montage_parameters)
     p['input_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
@@ -200,13 +202,14 @@ def test_output_file(
     p['output_stack']['db_interface'] = 'file'
     p['output_stack']['output_file'] = os.path.join(
             tmp_file_dir,
-            "resolvedtiles" + ext)
+            "resolvedtiles.json")
+    p['output_stack']['compress_output'] = compress
 
     tmod = EMaligner.EMaligner(input_data=p, args=[])
     tmod.run()
 
     solved = renderapi.resolvedtiles.ResolvedTiles(
-            json=read_json_or_gz(p['output_stack']['output_file']))
+            json=jsongz.load(tmod.args['output_stack']['output_file']))
 
     orig_ids = np.array([
         t.tileId for t in solved_montage.resolvedtiles.tilespecs])

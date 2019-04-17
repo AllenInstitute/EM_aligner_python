@@ -11,7 +11,7 @@ import json
 from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
-import gzip
+from . import jsongz
 import itertools
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -167,32 +167,12 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     return resolved
 
 
-def read_json_or_gz(f):
-    if os.path.splitext(f)[1] == '.json':
-        with open(f, 'r') as f:
-            d = json.load(f)
-    elif os.path.splitext(f)[1] == '.gz':
-        with gzip.GzipFile(f, 'r') as f:
-            d = json.loads(f.read().decode('utf-8'))
-    return d
-
-
-def write_json_or_gz(d, f):
-    ext = os.path.splitext(f)[1]
-    if ext == ".json":
-        with open(f, 'w') as f:
-            json.dump(d, f)
-    elif ext == ".gz":
-        with gzip.GzipFile(f, 'w') as f:
-            f.write(json.dumps(d).encode('utf-8'))
-
-
 def get_resolved_tilespecs(
         stack, tform_name, pool_size, zvals, fullsize=False, order=2):
     t0 = time.time()
     if stack['db_interface'] == 'file':
         resolved = renderapi.resolvedtiles.ResolvedTiles(
-                json=read_json_or_gz(stack['input_file']))
+                json=jsongz.load(stack['input_file']))
         resolved.tilespecs = [t for t in resolved.tilespecs if t.z in zvals]
         ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
     else:
@@ -219,7 +199,7 @@ def get_resolved_tilespecs(
 def get_matches(iId, jId, collection, dbconnection):
     matches = []
     if collection['db_interface'] == 'file':
-        matches = read_json_or_gz(collection['input_file'])
+        matches = jsongz.load(collection['input_file'])
         matches = [m for m in matches
                    if set([m['pGroupId'], m['qGroupId']]) & set([iId, jId])]
     if collection['db_interface'] == 'render':
@@ -413,9 +393,12 @@ def write_to_new_stack(
 
     ingestconn = make_dbconnection(output_stack, interface='render')
     if output_stack['db_interface'] == 'file':
-        write_json_or_gz(resolved.to_dict(), output_stack['output_file'])
+        output_stack['output_file'] = jsongz.dump(
+                resolved.to_dict(),
+                output_stack['output_file'],
+                compress=output_stack['compress_output'])
         logger.info('wrote {}'.format(output_stack['output_file']))
-        return
+        return output_stack
 
     logger.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
@@ -444,6 +427,7 @@ def write_to_new_stack(
             stderr=stdeo,
             stdout=stdeo,
             use_rest=output_stack['use_rest'])
+    return output_stack
 
 
 def solve(A, weights, reg, x0):
@@ -530,7 +514,7 @@ def get_z_values_for_stack(stack, zvals):
         dbconnection[0].close()
     if stack['db_interface'] == 'file':
         resolved = renderapi.resolvedtiles.ResolvedTiles(
-                json=read_json_or_gz(stack['input_file']))
+                json=jsongz.load(stack['input_file']))
         zstack = np.unique([t.z for t in resolved.tilespecs])
 
     ind = np.isin(zvals, zstack)

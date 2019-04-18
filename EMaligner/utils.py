@@ -435,7 +435,7 @@ def solve(A, weights, reg, x0):
     rtWA = weights.dot(A)
     K = rtWA.transpose().dot(rtWA) + reg
 
-    # save this for calcualting error
+    # save this for calculating error
     w = weights.diagonal() != 0
 
     del weights, rtWA

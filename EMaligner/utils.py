@@ -435,6 +435,9 @@ def solve(A, weights, reg, x0):
     rtWA = weights.dot(A)
     K = rtWA.transpose().dot(rtWA) + reg
 
+    # save this for calcualting error
+    w = weights.diagonal() != 0
+
     del weights, rtWA
 
     # factorize, then solve, efficient for large affine
@@ -453,12 +456,17 @@ def solve(A, weights, reg, x0):
         del Lm
     del K
 
+    # only report errors where weights != 0
+    err = err[w, :]
+
     results = {}
     results['precision'] = precision
     results['error'] = np.linalg.norm(err, axis=0).tolist()
+    mag = np.linalg.norm(err, axis=1)
+    results['mag'] = [mag.mean(), mag.std()]
     results['err'] = [
             [m, e] for m, e in
-            zip(np.abs(err).mean(axis=0), np.abs(err).std(axis=0))]
+            zip(err.mean(axis=0), err.std(axis=0))]
     results['x'] = x
     results['time'] = time.time() - time0
 
@@ -471,9 +479,11 @@ def message_from_solve_results(results):
     message += ", ".join(["%0.1e" % ix for ix in results['precision']])
     message += "\n error     [norm(Ax-b)] = "
     message += ", ".join(["%0.3f" % ix for ix in results['error']])
-    message += "\n [mean(|Ax|)+/-std(|Ax|)] : "
+    message += "\n [mean(Ax) +/- std(Ax)] : "
     message += ", ".join([
         "%0.1f +/- %0.1f" % (e[0], e[1]) for e in results['err']])
+    message += "\n [mean(error mag) +/- std(error mag)] : "
+    message += "%0.1f +/- %0.1f" % (results['mag'][0], results['mag'][1])
     return message
 
 

@@ -3,7 +3,7 @@
 from argschema import ArgSchema
 from argschema.schemas import DefaultSchema
 from argschema.fields import (
-        String, Int, Boolean, Nested, Float, NumpyArray,
+        String, Int, Boolean, Nested, Float,
         List, InputFile, OutputFile)
 import marshmallow as mm
 import numpy as np
@@ -139,7 +139,7 @@ class regularization(DefaultSchema):
     translation_factor = Float(
         default=0.005,
         description='regularization factor')
-    poly_factors = NumpyArray(
+    poly_factors = List(
         Float,
         required=False,
         default=None,

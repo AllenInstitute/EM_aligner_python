@@ -188,7 +188,7 @@ def tilepair_weight(z1, z2, matrix_assembly):
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
     renderapi.client.WithPool = \
-            renderapi.external.processpools.stdlib_pool.WithThreadPool
+        renderapi.external.processpools.stdlib_pool.WithThreadPool
 
     def run(self):
         logger.setLevel(self.args['log_level'])
@@ -270,11 +270,15 @@ class EMaligner(argschema.ArgSchemaParser):
                     results['x'],
                     assemble_result['tiles_used'])
             if self.args['output_mode'] == 'stack':
+                res_for_file = {a: b for a, b in results.items() if a != 'x'}
                 self.args['output_stack'] = utils.write_to_new_stack(
                         self.resolvedtiles,
                         self.args['output_stack'],
                         self.args['render_output'],
-                        self.args['overwrite_zlayer'])
+                        self.args['overwrite_zlayer'],
+                        # for file output, these go too
+                        self.args,
+                        res_for_file)
                 if self.args['render_output'] == 'stdout':
                     logger.info(message)
             del assemble_result['x']

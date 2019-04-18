@@ -382,12 +382,17 @@ def write_to_new_stack(
         resolved,
         output_stack,
         outarg,
-        overwrite_zlayer):
+        overwrite_zlayer,
+        args,
+        results):
 
     ingestconn = make_dbconnection(output_stack, interface='render')
     if output_stack['db_interface'] == 'file':
+        r = resolved.to_dict()
+        r['solver_args'] = dict(args)
+        r['results'] = dict(results)
         output_stack['output_file'] = jsongz.dump(
-                resolved.to_dict(),
+                r,
                 output_stack['output_file'],
                 compress=output_stack['compress_output'])
         logger.info('wrote {}'.format(output_stack['output_file']))
@@ -469,7 +474,6 @@ def solve(A, weights, reg, x0):
             zip(err.mean(axis=0), err.std(axis=0))]
     results['x'] = x
     results['time'] = time.time() - time0
-
     return results
 
 

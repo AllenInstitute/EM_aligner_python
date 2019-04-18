@@ -21,11 +21,10 @@ class db_params(DefaultSchema):
     name = List(
         String,
         cli_as_single_argument=True,
-        required=True,
+        required=False,
         many=True,
         description='stack name')
     host = String(
-        default=None,
         required=False,
         description='render host')
     port = Int(
@@ -63,8 +62,9 @@ class db_params(DefaultSchema):
 
     @mm.pre_load
     def tolist(self, data):
-        if not isinstance(data['name'], list):
-            data['name'] = [data['name']]
+        if 'name' in data:
+            if not isinstance(data['name'], list):
+                data['name'] = [data['name']]
 
 
 class hdf5_options(DefaultSchema):
@@ -184,9 +184,10 @@ class input_stack(input_db):
 
     @mm.post_load
     def validate_data(self, data):
-        if len(data['name']) != 1:
-            raise mm.ValidationError("only one input or output "
-                                     "stack name is allowed")
+        if 'name' in data:
+            if len(data['name']) != 1:
+                raise mm.ValidationError("only one input or output "
+                                         "stack name is allowed")
 
 
 class output_stack(db_params):
@@ -216,9 +217,10 @@ class output_stack(db_params):
 
     @mm.post_load
     def validate_data(self, data):
-        if len(data['name']) != 1:
-            raise mm.ValidationError("only one input or output "
-                                     "stack name is allowed")
+        if 'name' in data:
+            if len(data['name']) != 1:
+                raise mm.ValidationError("only one input or output "
+                                         "stack name is allowed")
 
 
 class EMA_Schema(ArgSchema):

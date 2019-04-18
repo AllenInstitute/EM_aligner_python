@@ -386,7 +386,6 @@ def write_to_new_stack(
         args,
         results):
 
-    ingestconn = make_dbconnection(output_stack, interface='render')
     if output_stack['db_interface'] == 'file':
         r = resolved.to_dict()
         r['solver_args'] = dict(args)
@@ -397,6 +396,8 @@ def write_to_new_stack(
                 compress=output_stack['compress_output'])
         logger.info('wrote {}'.format(output_stack['output_file']))
         return output_stack
+
+    ingestconn = make_dbconnection(output_stack, interface='render')
 
     logger.info(
         "\ningesting results to %s:%d %s__%s__%s" % (

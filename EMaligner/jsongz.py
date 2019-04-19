@@ -47,7 +47,8 @@ def dump(obj, filepath, compress=None, encoding='utf-8', *args, **kwargs):
 
     if not compress:
         compress = _check_ext(filepath)
-    filepath = _convert_ext(filepath, compress)
+    else:
+        filepath = _convert_ext(filepath, compress)
     if compress:
         with gzip.GzipFile(filepath, 'w') as f:
             f.write(json.dumps(obj, *args, **kwargs).encode(encoding))

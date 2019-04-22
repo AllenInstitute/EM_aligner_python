@@ -10,7 +10,6 @@ from scipy.sparse import csr_matrix
 import warnings
 import os
 import sys
-import multiprocessing
 import logging
 import json
 import h5py
@@ -42,26 +41,27 @@ def calculate_processing_chunk(fargs):
     # get point matches
     t0 = time.time()
 
-    matches = utils.get_matches(
+    nmatches = utils.get_matches(
             pair['section1'],
             pair['section2'],
             args['pointmatch'],
             dbconnection)
 
-    if len(matches) == 0:
+    if len(nmatches) == 0:
         return chunk
 
     # extract IDs for fast checking
-    pid_set = set(m['pId'] for m in matches)
-    qid_set = set(m['qId'] for m in matches)
+    pid_set = set(m['pId'] for m in nmatches)
+    qid_set = set(m['qId'] for m in nmatches)
 
     tile_set = set(tile_ids)
 
     pid_set.intersection_update(tile_set)
     qid_set.intersection_update(tile_set)
 
-    matches = [m for m in matches if m['pId']
+    matches = [m for m in nmatches if m['pId']
                in pid_set and m['qId'] in qid_set]
+    del nmatches
 
     pids = np.array([m['pId'] for m in matches])
     qids = np.array([m['qId'] for m in matches])
@@ -159,15 +159,10 @@ def calculate_processing_chunk(fargs):
 
     del matches
     # truncate, because we allocated conservatively
-    data = data[0: nrows * transform.nnz_per_row]
-    indices = indices[0: nrows * transform.nnz_per_row]
-    indptr = indptr[0: nrows + 1]
-    weights = weights[0: nrows]
-
-    chunk['data'] = np.copy(data)
-    chunk['weights'] = np.copy(weights)
-    chunk['indices'] = np.copy(indices)
-    chunk['indptr'] = np.copy(indptr)
+    chunk['data'] = data[0: nrows * transform.nnz_per_row]
+    chunk['indices'] = indices[0: nrows * transform.nnz_per_row]
+    chunk['indptr'] = indptr[0: nrows + 1]
+    chunk['weights'] = weights[0: nrows]
     chunk['zlist'].append(pair['z1'])
     chunk['zlist'].append(pair['z2'])
     chunk['zlist'] = np.array(chunk['zlist'])
@@ -192,6 +187,8 @@ def tilepair_weight(z1, z2, matrix_assembly):
 
 class EMaligner(argschema.ArgSchemaParser):
     default_schema = EMA_Schema
+    renderapi.client.WithPool = \
+        renderapi.external.processpools.stdlib_pool.WithThreadPool
 
     def run(self):
         logger.setLevel(self.args['log_level'])
@@ -200,16 +197,6 @@ class EMaligner(argschema.ArgSchemaParser):
         zvals = np.arange(
             self.args['first_section'],
             self.args['last_section'] + 1)
-
-
-        # read in the tilespecs
-        self.resolvedtiles = utils.get_resolved_tilespecs(
-            self.args['input_stack'],
-            self.args['transformation'],
-            self.args['n_parallel_jobs'],
-            zvals,
-            fullsize=self.args['fullsize_transform'],
-            order=self.args['poly_order'])
 
         # the parallel workers will need this stack ready
         if self.args['output_mode'] == 'stack':
@@ -234,6 +221,16 @@ class EMaligner(argschema.ArgSchemaParser):
 
     def assemble_and_solve(self, zvals):
         t0 = time.time()
+
+        # read in the tilespecs
+        self.resolvedtiles = utils.get_resolved_tilespecs(
+            self.args['input_stack'],
+            self.args['transformation'],
+            self.args['n_parallel_jobs'],
+            zvals,
+            fullsize=self.args['fullsize_transform'],
+            order=self.args['poly_order'])
+
         if self.args['ingest_from_file'] != '':
             assemble_result = self.assemble_from_hdf5(
                 self.args['ingest_from_file'],
@@ -267,19 +264,24 @@ class EMaligner(argschema.ArgSchemaParser):
             logger.info('\n' + message)
             del assemble_result['A']
 
-        if self.args['output_mode'] == 'stack':
-            solved_resolved = utils.update_tilespecs(
+        if results:
+            utils.update_tilespecs(
                     self.resolvedtiles,
                     results['x'],
                     assemble_result['tiles_used'])
-            utils.write_to_new_stack(
-                    solved_resolved,
-                    self.args['output_stack'],
-                    self.args['render_output'],
-                    self.args['overwrite_zlayer'])
-            if self.args['render_output'] == 'stdout':
-                logger.info(message)
-        del assemble_result['x']
+            if self.args['output_mode'] == 'stack':
+                res_for_file = {a: b for a, b in results.items() if a != 'x'}
+                self.args['output_stack'] = utils.write_to_new_stack(
+                        self.resolvedtiles,
+                        self.args['output_stack'],
+                        self.args['render_output'],
+                        self.args['overwrite_zlayer'],
+                        # for file output, these go too
+                        self.args,
+                        res_for_file)
+                if self.args['render_output'] == 'stdout':
+                    logger.info(message)
+            del assemble_result['x']
 
         return results
 
@@ -318,9 +320,7 @@ class EMaligner(argschema.ArgSchemaParser):
             t.tileId for t in self.resolvedtiles.tilespecs])
         assemble_result['tiles_used'] = np.in1d(tids, assemble_result['tids'])
 
-        outr = sparse.eye(reg.size, format='csr')
-        outr.data = reg
-        assemble_result['reg'] = outr
+        assemble_result['reg'] = sparse.diags([reg], [0], format='csr')
 
         if read_data:
             data = np.array([]).astype('float64')
@@ -345,10 +345,8 @@ class EMaligner(argschema.ArgSchemaParser):
                     logger.info('  %s read' % fname)
 
             assemble_result['A'] = csr_matrix((data, indices, indptr))
-
-            outw = sparse.eye(weights.size, format='csr')
-            outw.data = weights
-            assemble_result['weights'] = outw
+            assemble_result['weights'] = sparse.diags(
+                    [weights], [0], format='csr')
 
         # alert about differences between this call and the original
         for k in file_args.keys():
@@ -396,26 +394,22 @@ class EMaligner(argschema.ArgSchemaParser):
     def concatenate_results(self, results):
         result = {}
 
-        if np.all([r['data'] is None for r in results]):
+        ind = np.array([r['data'] is not None for r in results])
+        if not np.any(ind):
             return {'data': None}
 
         result['data'] = np.concatenate([
-            results[i]['data'] for i in range(len(results))
-            if results[i]['data'] is not None]).astype('float64')
+            r.pop('data') for r in results[ind]]).astype('float64')
         result['weights'] = np.concatenate([
-            results[i]['weights'] for i in range(len(results))
-            if results[i]['data'] is not None]).astype('float64')
+            r.pop('weights') for r in results[ind]]).astype('float64')
         result['indices'] = np.concatenate([
-            results[i]['indices'] for i in range(len(results))
-            if results[i]['data'] is not None]).astype('int64')
+            r.pop('indices') for r in results[ind]]).astype('int64')
         result['zlist'] = np.concatenate([
-            results[i]['zlist'] for i in range(len(results))
-            if results[i]['data'] is not None])
+            r.pop('zlist') for r in results[ind]])
+
         # Pointers need to be handled differently,
         # since you need to sum the arrays
-        result['indptr'] = [results[i]['indptr']
-                            for i in range(len(results))
-                            if results[i]['data'] is not None]
+        result['indptr'] = [r.pop('indptr') for r in results[ind]]
         indptr_cumends = np.cumsum([i[-1] for i in result['indptr']])
         result['indptr'] = np.concatenate(
             [j if i == 0 else j[1:]+indptr_cumends[i-1] for i, j
@@ -431,8 +425,6 @@ class EMaligner(argschema.ArgSchemaParser):
             'weights': None,
             'tiles_used': None,
             'metadata': None}
-
-        pool = multiprocessing.Pool(self.args['n_parallel_jobs'])
 
         pairs = utils.determine_zvalue_pairs(
                 resolved,
@@ -457,9 +449,8 @@ class EMaligner(argschema.ArgSchemaParser):
             reg.append(
                     t.tforms[-1].regularization(self.args['regularization']))
         func_result['x'] = np.concatenate(func_result['x'])
-        reg = np.concatenate(reg)
-        func_result['reg'] = sparse.eye(reg.size, format='csr')
-        func_result['reg'].data = reg
+        func_result['reg'] = sparse.diags(
+                [np.concatenate(reg)], [0], format='csr')
 
         if self.args['output_mode'] == 'hdf5':
             results = np.array(results)
@@ -492,19 +483,18 @@ class EMaligner(argschema.ArgSchemaParser):
 
         else:
             result = self.concatenate_results(results)
-            A = csr_matrix((
+            func_result['A'] = csr_matrix((
                 result['data'],
                 result['indices'],
                 result['indptr']))
-            outw = sparse.eye(result['weights'].size, format='csr')
-            outw.data = result['weights']
+            func_result['weights'] = sparse.diags(
+                    [result['weights']], [0], format='csr')
             slice_ind = np.concatenate(
                     [np.repeat(
                         func_result['tiles_used'][i],
                         resolved.tilespecs[i].tforms[-1].DOF_per_tile)
                      for i in range(tile_ids.size)])
-            func_result['A'] = A[:, slice_ind]
-            func_result['weights'] = outw
+            func_result['A'] = func_result['A'][:, slice_ind]
 
         return func_result
 

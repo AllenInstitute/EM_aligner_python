@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 
 from argschema import ArgSchema
-from argschema.fields import \
-        String, Int, Boolean, Nested, Float, NumpyArray, List
-from marshmallow import post_load, ValidationError, pre_load
+from argschema.schemas import DefaultSchema
+from argschema.fields import (
+        String, Int, Boolean, Nested, Float,
+        List, InputFile, OutputFile)
+import marshmallow as mm
 import numpy as np
 
 
-class db_params(ArgSchema):
+class db_params(DefaultSchema):
     owner = String(
         default='',
         required=False,
@@ -19,11 +21,10 @@ class db_params(ArgSchema):
     name = List(
         String,
         cli_as_single_argument=True,
-        required=True,
+        required=False,
         many=True,
         description='stack name')
     host = String(
-        default=None,
         required=False,
         description='render host')
     port = Int(
@@ -51,20 +52,22 @@ class db_params(ArgSchema):
         required=False,
         description='mongo pwd')
     db_interface = String(
-        default='mongo')
+        default='mongo',
+        validator=mm.validate.OneOf(['render', 'mongo', 'file']))
     client_scripts = String(
         default=("/allen/aibs/pipeline/image_processing/"
                  "volume_assembly/render-jars/production/scripts"),
         required=False,
         description='render bin path')
 
-    @pre_load
+    @mm.pre_load
     def tolist(self, data):
-        if not isinstance(data['name'], list):
-            data['name'] = [data['name']]
+        if 'name' in data:
+            if not isinstance(data['name'], list):
+                data['name'] = [data['name']]
 
 
-class hdf5_options(ArgSchema):
+class hdf5_options(DefaultSchema):
     output_dir = String(
         default="")
     chunks_per_file = Int(
@@ -73,7 +76,7 @@ class hdf5_options(ArgSchema):
                      " cross section to write per .h5 file"))
 
 
-class matrix_assembly(ArgSchema):
+class matrix_assembly(DefaultSchema):
     depth = List(
         Int,
         cli_as_single_argument=True,
@@ -87,18 +90,18 @@ class matrix_assembly(ArgSchema):
         missing=None,
         description='explicitly set solver weights by depth')
 
-    @pre_load
+    @mm.pre_load
     def tolist(self, data):
         if not isinstance(data['depth'], list):
             data['depth'] = np.arange(0, data['depth'] + 1).tolist()
 
-    @post_load
+    @mm.post_load
     def check_explicit(self, data):
         if data['explicit_weight_by_depth'] is not None:
             if (
                     len(data['explicit_weight_by_depth']) !=
                     len(data['depth'])):
-                raise ValidationError(
+                raise mm.ValidationError(
                         "matrix_assembly['explicit_weight_by_depth'] "
                         "must be the same length as matrix_assembly['depth']")
     cross_pt_weight = Float(
@@ -129,14 +132,14 @@ class matrix_assembly(ArgSchema):
         description='cross section point match weighting fades with z')
 
 
-class regularization(ArgSchema):
+class regularization(DefaultSchema):
     default_lambda = Float(
         default=0.005,
         description='regularization factor')
     translation_factor = Float(
         default=0.005,
         description='regularization factor')
-    poly_factors = NumpyArray(
+    poly_factors = List(
         Float,
         required=False,
         default=None,
@@ -150,13 +153,28 @@ class regularization(ArgSchema):
         required=False)
 
 
-class pointmatch(db_params):
+class input_db(db_params):
+    input_file = InputFile(
+        required=False,
+        missing=None,
+        default=None,
+        description=("json or compressed representation of input stack"))
+
+    @mm.post_load
+    def validate_file(self, data):
+        if data['db_interface'] == 'file':
+            if data['input_file'] is None:
+                raise mm.ValidationError("with db_interface 'file', "
+                                         "'input_file' must be a file")
+
+
+class pointmatch(input_db):
     collection_type = String(
         default='pointmatch',
         description="'stack' or 'pointmatch'")
 
 
-class stack(db_params):
+class input_stack(input_db):
     collection_type = String(
         default='stack',
         description="'stack' or 'pointmatch'")
@@ -164,11 +182,45 @@ class stack(db_params):
         default=False,
         description="passed as arg in import_tilespecs_parallel")
 
-    @post_load
+    @mm.post_load
     def validate_data(self, data):
-        if len(data['name']) != 1:
-            raise ValidationError("only one input or output "
-                                  "stack name is allowed")
+        if 'name' in data:
+            if len(data['name']) != 1:
+                raise mm.ValidationError("only one input or output "
+                                         "stack name is allowed")
+
+
+class output_stack(db_params):
+    output_file = OutputFile(
+        required=False,
+        missing=None,
+        default=None,
+        description=("json or compressed representation of input stack"))
+    compress_output = Boolean(
+        required=False,
+        default=True,
+        missing=True,
+        description=("if writing file, write to .json.gz"))
+    collection_type = String(
+        default='stack',
+        description="'stack' or 'pointmatch'")
+    use_rest = Boolean(
+        default=False,
+        description="passed as arg in import_tilespecs_parallel")
+
+    @mm.post_load
+    def validate_file(self, data):
+        if data['db_interface'] == 'file':
+            if data['output_file'] is None:
+                raise mm.ValidationError("with db_interface 'file', "
+                                         "'output_file' must be a file")
+
+    @mm.post_load
+    def validate_data(self, data):
+        if 'name' in data:
+            if len(data['name']) != 1:
+                raise mm.ValidationError("only one input or output "
+                                         "stack name is allowed")
 
 
 class EMA_Schema(ArgSchema):
@@ -218,10 +270,10 @@ class EMA_Schema(ArgSchema):
         description='fullpath to solution_output.h5')
     render_output = String(
         default='null',
-        description=("/path/to/file, null (devnull), or "
-                     "stdout for where to redirect render output"))
-    input_stack = Nested(stack)
-    output_stack = Nested(stack)
+        description=("anything besides the default will "
+                     "show all the render stderr/stdout"))
+    input_stack = Nested(input_stack)
+    output_stack = Nested(output_stack)
     pointmatch = Nested(pointmatch)
     hdf5_options = Nested(hdf5_options)
     matrix_assembly = Nested(matrix_assembly)
@@ -230,13 +282,13 @@ class EMA_Schema(ArgSchema):
         default=1,
         description='have the routine showhow long each process takes')
 
-    @post_load
+    @mm.post_load
     def validate_data(self, data):
         if (data['regularization']['poly_factors'] is not None) & \
                 (data['transformation'] == 'Polynomial2DTransform'):
             n = len(data['regularization']['poly_factors'])
             if n != data['poly_order'] + 1:
-                raise ValidationError(
+                raise mm.ValidationError(
                         "regularization.poly_factors must be a list"
                         " of length poly_order + 1")
 

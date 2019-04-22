@@ -11,7 +11,10 @@ import json
 from functools import partial
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform
-import copy
+from . import jsongz
+import collections
+import itertools
+import subprocess
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
@@ -31,6 +34,10 @@ def make_dbconnection(collection, which='tile', interface=None):
         interface = collection['db_interface']
 
     if interface == 'mongo':
+        mongoconn = collections.namedtuple('mongoconn', 'client collection')
+        client = MongoClient(
+                host=collection['mongo_host'],
+                port=collection['mongo_port'])
         if collection['mongo_userName'] != '':
             client = MongoClient(
                     host=collection['mongo_host'],
@@ -38,10 +45,6 @@ def make_dbconnection(collection, which='tile', interface=None):
                     username=collection['mongo_userName'],
                     authSource=collection['mongo_authenticationDatabase'],
                     password=collection['mongo_password'])
-        else:
-            client = MongoClient(
-                    host=collection['mongo_host'],
-                    port=collection['mongo_port'])
 
         if collection['collection_type'] == 'stack':
             # for getting shared transforms, which='transform'
@@ -50,15 +53,21 @@ def make_dbconnection(collection, which='tile', interface=None):
                     '__' + collection['project'] +
                     '__' + collection['name'][0] +
                     '__'+which)
-            dbconnection = client.render[mongo_collection_name]
+            dbconnection = mongoconn(
+                    client=client,
+                    collection=client.render[mongo_collection_name])
         elif collection['collection_type'] == 'pointmatch':
             mongo_collection_name = [(
                     collection['owner'] +
                     '__' + name) for name in collection['name']]
-            dbconnection = [
-                    client.match[name] for name in mongo_collection_name]
+            dbconnection = [mongoconn(
+                                client=client,
+                                collection=client.match[name])
+                            for name in mongo_collection_name]
     elif interface == 'render':
         dbconnection = renderapi.connect(**collection)
+    elif interface == 'file':
+        return None
     else:
         raise EMalignerException(
                 "invalid interface in make_dbconnection()")
@@ -106,6 +115,15 @@ def determine_zvalue_pairs(resolved, depths):
     return pairs
 
 
+def ready_transforms(tilespecs, tform_name, fullsize, order):
+    for t in tilespecs:
+        t.tforms[-1] = AlignerTransform(
+            name=tform_name,
+            transform=t.tforms[-1],
+            fullsize=fullsize,
+            order=order)
+
+
 def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     resolved = renderapi.resolvedtiles.ResolvedTiles()
     dbconnection = make_dbconnection(stack)
@@ -121,12 +139,11 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             pass
     if stack['db_interface'] == 'mongo':
         filt = {'z': float(z)}
-        if dbconnection.count_documents(filt) != 0:
-            # this sort ordering is the same as render, I think
-            cursor = dbconnection.find(filt).sort([
-                    ('layout.imageRow', 1),
-                    ('layout.imageCol', 1)])
+        if dbconnection.collection.count_documents(filt) != 0:
+            cursor = dbconnection.collection.find(filt)
             tspecs = [renderapi.tilespec.TileSpec(json=c) for c in cursor]
+            cursor.close()
+            dbconnection.client.close()
             refids = np.unique([
                 [tf.refId for tf in t.tforms if
                     isinstance(tf, renderapi.transform.ReferenceTransform)]
@@ -135,32 +152,41 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
             dbconnection2 = make_dbconnection(stack, which='transform')
 
             def tfjson(refid):
-                return list(dbconnection2.find({"id": refid}))[0]
+                c = dbconnection2.collection.find({"id": refid})
+                x = list(c)[0]
+                c.close()
+                return x
 
             shared_tforms = [renderapi.transform.load_transform_json(
                 tfjson(refid)) for refid in refids]
-            resolved.tilespecs = tspecs
-            resolved.transforms = shared_tforms
+            dbconnection2.client.close()
+            resolved = renderapi.resolvedtiles.ResolvedTiles(
+                    tilespecs=tspecs, transformList=shared_tforms)
+            del tspecs, shared_tforms
 
     # turn the last transform of every tilespec into an AlignerTransform
-    for t in resolved.tilespecs:
-        t.tforms[-1] = AlignerTransform(
-            name=tform_name,
-            transform=t.tforms[-1],
-            fullsize=fullsize,
-            order=order)
+    ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
+
     return resolved
 
 
 def get_resolved_tilespecs(
         stack, tform_name, pool_size, zvals, fullsize=False, order=2):
     t0 = time.time()
-    resolved = renderapi.resolvedtiles.ResolvedTiles()
-    getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
-    with renderapi.client.WithPool(pool_size) as pool:
-        for rz in pool.map(getz, zvals):
-            resolved.tilespecs += rz.tilespecs
-            resolved.transforms += rz.transforms
+    if stack['db_interface'] == 'file':
+        resolved = renderapi.resolvedtiles.ResolvedTiles(
+                json=jsongz.load(stack['input_file']))
+        resolved.tilespecs = [t for t in resolved.tilespecs if t.z in zvals]
+        ready_transforms(resolved.tilespecs, tform_name, fullsize, order)
+    else:
+        resolved = renderapi.resolvedtiles.ResolvedTiles()
+        getz = partial(get_resolved_from_z, stack, tform_name, fullsize, order)
+        with renderapi.client.WithPool(pool_size) as pool:
+            results = pool.map(getz, zvals)
+        resolved.tilespecs = list(itertools.chain.from_iterable(
+            [r.__dict__.pop('tilespecs') for r in results]))
+        resolved.transforms = list(itertools.chain.from_iterable(
+            [r.__dict__.pop('transforms') for r in results]))
 
     logger.info(
         "\n loaded %d tile specs from %d zvalues in "
@@ -175,6 +201,10 @@ def get_resolved_tilespecs(
 
 def get_matches(iId, jId, collection, dbconnection):
     matches = []
+    if collection['db_interface'] == 'file':
+        matches = jsongz.load(collection['input_file'])
+        matches = [m for m in matches
+                   if set([m['pGroupId'], m['qGroupId']]) & set([iId, jId])]
     if collection['db_interface'] == 'render':
         if iId == jId:
             for name in collection['name']:
@@ -194,18 +224,21 @@ def get_matches(iId, jId, collection, dbconnection):
                             render=dbconnection))
     if collection['db_interface'] == 'mongo':
         for dbconn in dbconnection:
-            cursor = dbconn.find(
+            cursor = dbconn.collection.find(
                     {'pGroupId': iId, 'qGroupId': jId},
                     {'_id': False})
             matches.extend(list(cursor))
+            cursor.close()
             if iId != jId:
                 # in principle, this does nothing if zi < zj, but, just in case
-                cursor = dbconn.find(
+                cursor = dbconn.collection.find(
                         {
                             'pGroupId': jId,
                             'qGroupId': iId},
                         {'_id': False})
                 matches.extend(list(cursor))
+                cursor.close()
+        dbconn.client.close()
     message = ("\n %d matches for section1=%s section2=%s "
                "in pointmatch collection" % (len(matches), iId, jId))
     logger.debug(message)
@@ -334,24 +367,14 @@ def write_reg_and_tforms(
 
 def get_stderr_stdout(outarg):
     if outarg == 'null':
-        stdeo = open(os.devnull, 'wb')
-        logger.info('render output is going to /dev/null')
-    elif outarg == 'stdout':
-        stdeo = sys.stdout
         if sys.version_info[0] >= 3:
-            stdeo = sys.stdout.buffer
-        logger.info('render output is going to stdout')
+            stdeo = subprocess.DEVNULL
+        else:
+            stdeo = open(os.devnull, 'wb')
+        logger.info('render output is going to /dev/null')
     else:
-        i = 0
-        odir, oname = os.path.split(outarg)
-        while os.path.exists(outarg):
-            t = oname.split('.')
-            outarg = odir + '/'
-            for it in t[:-1]:
-                outarg += it
-            outarg += '%d.%s' % (i, t[-1])
-            i += 1
-        stdeo = open(outarg, 'a')
+        stdeo = None
+        logger.info('render output is going to stdout')
     return stdeo
 
 
@@ -359,9 +382,23 @@ def write_to_new_stack(
         resolved,
         output_stack,
         outarg,
-        overwrite_zlayer):
+        overwrite_zlayer,
+        args,
+        results):
+
+    if output_stack['db_interface'] == 'file':
+        r = resolved.to_dict()
+        r['solver_args'] = dict(args)
+        r['results'] = dict(results)
+        output_stack['output_file'] = jsongz.dump(
+                r,
+                output_stack['output_file'],
+                compress=output_stack['compress_output'])
+        logger.info('wrote {}'.format(output_stack['output_file']))
+        return output_stack
 
     ingestconn = make_dbconnection(output_stack, interface='render')
+
     logger.info(
         "\ningesting results to %s:%d %s__%s__%s" % (
             ingestconn.DEFAULT_HOST,
@@ -369,7 +406,6 @@ def write_to_new_stack(
             ingestconn.DEFAULT_OWNER,
             ingestconn.DEFAULT_PROJECT,
             output_stack['name'][0]))
-    stdeo = get_stderr_stdout(outarg)
 
     if overwrite_zlayer:
         zvalues = np.unique(np.array([t.z for t in resolved.tilespecs]))
@@ -379,16 +415,22 @@ def write_to_new_stack(
                     zvalue,
                     render=ingestconn)
 
+    stdeo = get_stderr_stdout(outarg)
+    pool = renderapi.client.WithPool
+    if (sys.version_info[0] < 3) & (outarg == 'null'):
+        pool = pool_pathos.PathosWithPool
     renderapi.client.import_tilespecs_parallel(
             output_stack['name'][0],
             resolved.tilespecs,
             sharedTransforms=resolved.transforms,
             render=ingestconn,
             close_stack=False,
-            mpPool=pool_pathos.PathosWithPool,
+            mpPool=pool,
             stderr=stdeo,
             stdout=stdeo,
             use_rest=output_stack['use_rest'])
+
+    return output_stack
 
 
 def solve(A, weights, reg, x0):
@@ -398,6 +440,9 @@ def solve(A, weights, reg, x0):
     weights.data = np.sqrt(weights.data)
     rtWA = weights.dot(A)
     K = rtWA.transpose().dot(rtWA) + reg
+
+    # save this for calculating error
+    w = weights.diagonal() != 0
 
     del weights, rtWA
 
@@ -417,15 +462,19 @@ def solve(A, weights, reg, x0):
         del Lm
     del K
 
+    # only report errors where weights != 0
+    err = err[w, :]
+
     results = {}
     results['precision'] = precision
     results['error'] = np.linalg.norm(err, axis=0).tolist()
+    mag = np.linalg.norm(err, axis=1)
+    results['mag'] = [mag.mean(), mag.std()]
     results['err'] = [
             [m, e] for m, e in
-            zip(np.abs(err).mean(axis=0), np.abs(err).std(axis=0))]
+            zip(err.mean(axis=0), err.std(axis=0))]
     results['x'] = x
     results['time'] = time.time() - time0
-
     return results
 
 
@@ -435,13 +484,17 @@ def message_from_solve_results(results):
     message += ", ".join(["%0.1e" % ix for ix in results['precision']])
     message += "\n error     [norm(Ax-b)] = "
     message += ", ".join(["%0.3f" % ix for ix in results['error']])
-    message += "\n [mean(|Ax|)+/-std(|Ax|)] : "
+    message += "\n [mean(Ax) +/- std(Ax)] : "
     message += ", ".join([
         "%0.1f +/- %0.1f" % (e[0], e[1]) for e in results['err']])
+    message += "\n [mean(error mag) +/- std(error mag)] : "
+    message += "%0.1f +/- %0.1f" % (results['mag'][0], results['mag'][1])
     return message
 
 
 def create_or_set_loading(stack):
+    if stack['db_interface'] == 'file':
+        return
     dbconnection = make_dbconnection(
             stack,
             interface='render')
@@ -451,6 +504,8 @@ def create_or_set_loading(stack):
 
 
 def set_complete(stack):
+    if stack['db_interface'] == 'file':
+        return
     dbconnection = make_dbconnection(
             stack,
             interface='render')
@@ -467,17 +522,21 @@ def get_z_values_for_stack(stack, zvals):
                 stack['name'][0],
                 render=dbconnection)
     if stack['db_interface'] == 'mongo':
-        zstack = dbconnection.distinct('z')
+        zstack = dbconnection.collection.distinct('z')
+        dbconnection.client.close()
+    if stack['db_interface'] == 'file':
+        resolved = renderapi.resolvedtiles.ResolvedTiles(
+                json=jsongz.load(stack['input_file']))
+        zstack = np.unique([t.z for t in resolved.tilespecs])
 
     ind = np.isin(zvals, zstack)
     return zvals[ind]
 
 
 def update_tilespecs(resolved, x, used):
-    up_resolved = copy.deepcopy(resolved)
     index = 0
-    for i in range(len(up_resolved.tilespecs)):
+    for i in range(len(resolved.tilespecs)):
         if used[i]:
-            index += up_resolved.tilespecs[i].tforms[-1].from_solve_vec(
+            index += resolved.tilespecs[i].tforms[-1].from_solve_vec(
                     x[index:, :])
-    return up_resolved
+    return

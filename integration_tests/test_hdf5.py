@@ -73,6 +73,7 @@ def test_hdf5_mode_similarity(
             parameters['hdf5_options']['output_dir'],
             'solution_input.h5')
     assert os.path.exists(indexfile)
+    del mod
 
     # check assemble from file
     parameters['output_mode'] = 'none'
@@ -82,6 +83,7 @@ def test_hdf5_mode_similarity(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 1e6)
+    del mod
 
     # delete the output stack, just in case
     renderapi.stack.delete_stack(
@@ -101,6 +103,7 @@ def test_hdf5_mode_similarity(
             render=render)
     assert len(tin) == len(tout)
     os.remove(indexfile)
+    del mod
 
     renderapi.stack.delete_stack(
                 parameters['output_stack']['name'],

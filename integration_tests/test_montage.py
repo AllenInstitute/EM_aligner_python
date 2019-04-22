@@ -35,6 +35,7 @@ def raw_stack(render):
     renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
     renderapi.stack.set_stack_state(test_raw_stack, 'COMPLETE', render=render)
     yield test_raw_stack
+    renderapi.stack.delete_stack(test_raw_stack, render=render)
 
 
 @pytest.fixture(scope='function')
@@ -46,6 +47,7 @@ def loading_raw_stack(render):
     renderapi.stack.create_stack(test_raw_stack, render=render)
     renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
     yield test_raw_stack
+    renderapi.stack.delete_stack(test_raw_stack, render=render)
 
 
 @pytest.fixture(scope='module')
@@ -57,6 +59,8 @@ def montage_pointmatches(render):
     renderapi.pointmatch.import_matches(
             test_montage_collection, pms_from_json, render=render)
     yield test_montage_collection
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection, render=render)
 
 
 @pytest.fixture(scope='module')
@@ -73,6 +77,10 @@ def split_montage_pointmatches(render):
     renderapi.pointmatch.import_matches(
             test_montage_collection2, pms_from_json, render=render)
     yield [test_montage_collection1, test_montage_collection2]
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection1, render=render)
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection2, render=render)
 
 
 @pytest.fixture(scope='module')
@@ -87,6 +95,8 @@ def montage_pointmatches_weighted(render):
     renderapi.pointmatch.import_matches(
             test_montage_collection2, pms_from_json, render=render)
     yield test_montage_collection2
+    renderapi.pointmatch.delete_collection(
+            test_montage_collection2, render=render)
 
 
 @pytest.fixture(scope='function')
@@ -110,6 +120,7 @@ def test_weighted(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 def test_multi_pm(
@@ -126,6 +137,7 @@ def test_multi_pm(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 @pytest.mark.parametrize(
@@ -149,6 +161,7 @@ def test_different_transforms(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 def test_polynomial(
@@ -168,6 +181,7 @@ def test_polynomial(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-4)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 def test_poly_validation(output_stack_name):
@@ -198,6 +212,7 @@ def test_stack_state(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
 @pytest.mark.parametrize("db_intfc", ["render", "mongo"])
@@ -217,9 +232,10 @@ def test_basic(
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
+    del mod
 
 
-@pytest.mark.parametrize("render_output", ["stdout", "file", "null"])
+@pytest.mark.parametrize("render_output", ["null", "anything else"])
 def test_render_output(
         render, montage_pointmatches, output_stack_name,
         loading_raw_stack, render_output, tmpdir):
@@ -227,15 +243,9 @@ def test_render_output(
     p['input_stack']['name'] = loading_raw_stack
     p['output_stack']['name'] = output_stack_name
     p['pointmatch']['name'] = montage_pointmatches
-    if render_output == 'file':
-        fout = str(tmpdir.join("myfile"))
-        p['render_output'] = fout
-    else:
-        p['render_output'] = render_output
+    p['render_output'] = render_output
     mod = EMaligner.EMaligner(input_data=p, args=[])
     mod.run()
     assert np.all(np.array(mod.results['precision']) < 1e-7)
     assert np.all(np.array(mod.results['error']) < 200)
-
-    if render_output == 'file':
-        assert os.path.isfile(fout)
+    del mod

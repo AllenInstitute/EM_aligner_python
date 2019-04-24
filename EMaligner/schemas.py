@@ -59,6 +59,10 @@ class db_params(DefaultSchema):
                  "volume_assembly/render-jars/production/scripts"),
         required=False,
         description='render bin path')
+    memGB = String(
+        required=False,
+        default='5G',
+        description='string describing java heap memory (default 5G)')
 
     @mm.pre_load
     def tolist(self, data):

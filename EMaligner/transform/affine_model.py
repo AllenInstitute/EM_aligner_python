@@ -1,9 +1,7 @@
 import renderapi
-from .utils import (
-        AlignerTransformException,
-        ptpair_indices,
-        arrays_for_tilepair)
+from .utils import AlignerTransformException
 import numpy as np
+from scipy.sparse import csr_matrix
 __all__ = ['AlignerAffineModel']
 
 
@@ -30,6 +28,14 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
             self.rows_per_ptmatch = 2
 
     def to_solve_vec(self):
+        """sets solve vector values from transform parameters
+
+        Returns
+        -------
+        vec : numpy array
+            shape depends on fullsize
+        """
+
         vec = np.array([
             self.M[0, 0],
             self.M[0, 1],
@@ -46,6 +52,20 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         return vec
 
     def from_solve_vec(self, vec):
+        """reads values from solution and sets transform parameters
+
+        Parameters
+        ----------
+        vec : numpy array
+            input to this function is sliced so that vec[0] is the
+            first relevant value for this transform
+
+        Returns
+        -------
+        n : int
+            number of values read from vec. Used to increment vec slice
+            for next transform
+        """
         vsh = vec.shape
         if vsh[1] == 1:
             self.M[0, 0] = vec[0]
@@ -66,119 +86,73 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         return n
 
     def regularization(self, regdict):
+        """regularization vector
+
+        Parameters
+        ----------
+        regdict : dict
+           see regularization class in schemas. controls values
+
+        Return
+        ------
+        reg : numpy array
+            array of regularization values of length DOF_per_tile
+        """
+
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
-                regdict['default_lambda']
+            regdict['default_lambda']
         reg[2::3] *= regdict['translation_factor']
+
         return reg
 
-    def CSR_from_tilepair(
-            self, match, tile_ind1, tile_ind2,
-            nmin, nmax, choose_random):
+    def block_from_pts(self, pts, w, col_ind, col_max):
+        """partial sparse block for a tilepair/match
+
+        Parameters
+        ----------
+        pts :  numpy array
+            N x 2, the x, y values of the match (either p or q)
+        w : numpy array
+            the weights associated with the pts
+        col_ind : int
+            the starting column index for this tile
+        col_max : int
+            number of columns in the matrix
+
+        Returns
+        -------
+        block : scipy.sparse.csr_matrix
+            the partial block for this transform
+        w : numpy array
+            the weights associated with the rows of this block
+        """
         if self.fullsize:
-            return self.CSR_fullsize(
-                    match, tile_ind1, tile_ind2,
-                    nmin, nmax, choose_random)
+            return self.block_from_pts_fullsize(pts, w, col_ind, col_max)
         else:
-            return self.CSR_halfsize(
-                    match, tile_ind1, tile_ind2,
-                    nmin, nmax, choose_random)
+            return self.block_from_pts_halfsize(pts, w, col_ind, col_max)
 
-    def CSR_fullsize(
-            self, match, tile_ind1, tile_ind2,
-            nmin, nmax, choose_random):
-        if np.all(np.array(match['matches']['w']) == 0):
-            # zero weights
-            return None, None, None, None, None
+    def block_from_pts_fullsize(self, pts, w, col_ind, col_max):
+        data = np.hstack((pts, np.ones((pts.shape[0], 1)))).flatten()
+        data = np.concatenate((data, data))
 
-        match_index, stride = ptpair_indices(
-                len(match['matches']['q'][0]),
-                nmin,
-                nmax,
-                self.nnz_per_row,
-                choose_random)
-        if match_index is None:
-            # did not meet nmin requirement
-            return None, None, None, None, None
+        i0 = col_ind + np.arange(3)
+        indices = np.hstack((
+            np.tile(i0, pts.shape[0]), np.tile(i0 + 3, pts.shape[0])))
 
-        npts = match_index.size
+        nrow = pts.shape[0] * 2
+        indptr = np.arange(0, nrow + 1) * 3
 
-        # empty arrays
-        data, indices, indptr, weights = (
-                arrays_for_tilepair(
-                   npts,
-                   self.rows_per_ptmatch,
-                   self.nnz_per_row))
+        block = csr_matrix((data, indices, indptr), shape=(nrow, col_max))
+        return block, np.hstack((w, w))
 
-        # u=ax+by+c
-        data[0 + stride] = np.array(match['matches']['p'][0])[match_index]
-        data[1 + stride] = np.array(match['matches']['p'][1])[match_index]
-        data[2 + stride] = 1.0
-        data[3 + stride] = -1.0 * \
-            np.array(match['matches']['q'][0])[match_index]
-        data[4 + stride] = -1.0 * \
-            np.array(match['matches']['q'][1])[match_index]
-        data[5 + stride] = -1.0
-        uindices = np.hstack((
-            tile_ind1 * self.DOF_per_tile+np.array([0, 1, 2]),
-            tile_ind2 * self.DOF_per_tile+np.array([0, 1, 2])))
-        indices[0:npts * self.nnz_per_row] = np.tile(uindices, npts)
-        # v=dx+ey+f
-        data[
-                (npts * self.nnz_per_row):
-                (2 * npts * self.nnz_per_row)] = \
-            data[0: npts * self.nnz_per_row]
-        indices[npts * self.nnz_per_row:
-                2 * npts * self.nnz_per_row] = \
-            np.tile(uindices + 3, npts)
+    def block_from_pts_halfsize(self, pts, w, col_ind, col_max):
+        nrow = pts.shape[0]
+        data = np.hstack((pts, np.ones((nrow, 1)))).flatten()
 
-        # indptr and weights
-        indptr[0: 2 * npts] = \
-            np.arange(1, 2 * npts + 1) * self.nnz_per_row
-        weights[0: 2 * npts] = \
-            np.tile(np.array(match['matches']['w'])[match_index], 2)
+        i0 = col_ind + np.arange(3)
+        indices = np.tile(i0, nrow)
 
-        return data, indices, indptr, weights, npts
+        indptr = np.arange(0, nrow + 1) * 3
 
-    def CSR_halfsize(
-            self, match, tile_ind1, tile_ind2,
-            nmin, nmax, choose_random):
-        if np.all(np.array(match['matches']['w']) == 0):
-            # zero weights
-            return None, None, None, None, None
-
-        match_index, stride = ptpair_indices(
-                len(match['matches']['q'][0]),
-                nmin,
-                nmax,
-                self.nnz_per_row,
-                choose_random)
-        if match_index is None:
-            # did not meet nmin requirement
-            return None, None, None, None, None
-
-        npts = match_index.size
-
-        # empty arrays
-        data, indices, indptr, weights = (
-                arrays_for_tilepair(
-                        npts,
-                        self.rows_per_ptmatch,
-                        self.nnz_per_row))
-
-        # u=ax+by+c
-        data[0 + stride] = np.array(match['matches']['p'][0])[match_index]
-        data[1 + stride] = np.array(match['matches']['p'][1])[match_index]
-        data[2 + stride] = 1.0
-        data[3 + stride] = -1.0 * \
-            np.array(match['matches']['q'][0])[match_index]
-        data[4 + stride] = -1.0 * \
-            np.array(match['matches']['q'][1])[match_index]
-        data[5 + stride] = -1.0
-        uindices = np.hstack((
-            tile_ind1 * self.DOF_per_tile + np.array([0, 1, 2]),
-            tile_ind2 * self.DOF_per_tile + np.array([0, 1, 2])))
-        indices[0: npts * self.nnz_per_row] = np.tile(uindices, npts)
-        indptr[0: npts] = np.arange(1, npts + 1) * self.nnz_per_row
-        weights[0: npts] = np.array(match['matches']['w'])[match_index]
-
-        return data, indices, indptr, weights, npts
+        block = csr_matrix((data, indices, indptr), shape=(nrow, col_max))
+        return block, w

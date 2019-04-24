@@ -97,21 +97,27 @@ def get_unused_tspecs(stack, tids):
 
 def determine_zvalue_pairs(resolved, depths):
     # create all possible pairs, given zvals and depth
-    zvals = [t.z for t in resolved.tilespecs]
-    zvals, uind = np.unique(zvals, return_index=True)
+    zvals, uind, inv = np.unique(
+            [t.z for t in resolved.tilespecs],
+            return_index=True,
+            return_inverse=True)
     sections = [resolved.tilespecs[i].layout.sectionId for i in uind]
+    index = np.arange(len(resolved.tilespecs))
     pairs = []
-    for i in range(len(zvals)):
+    for i, z1 in enumerate(zvals):
+        ind1 = index[inv == i]
         for j in depths:
             # need to get rid of duplicates
-            z2 = zvals[i] + j
+            z2 = z1 + j
             if z2 in zvals:
                 i2 = np.argwhere(zvals == z2)[0][0]
+                ind = np.unique(np.hstack((index[inv == i2], ind1)))
                 pairs.append({
-                    'z1': zvals[i],
-                    'z2': zvals[i2],
+                    'z1': z1,
+                    'z2': z2,
                     'section1': sections[i],
-                    'section2': sections[i2]})
+                    'section2': sections[i2],
+                    'ind': ind})
     return pairs
 
 
@@ -540,3 +546,63 @@ def update_tilespecs(resolved, x, used):
             index += resolved.tilespecs[i].tforms[-1].from_solve_vec(
                     x[index:, :])
     return
+
+
+def blocks_from_tilespec_pair(
+        ptspec, qtspec, match, pcol, qcol, ncol, matrix_assembly):
+    """create sparse matrix block from tilespecs and pointmatch
+
+    Parameters
+    ----------
+    ptspec : renderapi.tilespec.TileSpec
+        ptspec.tforms[-1] is an AlignerTransform object
+    qtspec : renderapi.tilespec.TileSpec
+        qtspec.tforms[-1] is an AlignerTransform object
+    match : dict
+        pointmatch between tilepairs
+    pcol : int
+        index for start of column entries for p
+    qcol : int
+        index for start of column entries for q
+    ncol : int
+        total number of columns in sparse matrix
+    matrix_assembly : dict
+        see class matrix_assembly in schemas, sets npts
+
+    Returns
+    -------
+    pblock : scipy.sparse.csr_matrix
+        block for the p tilespec/match entry. The full block can be had
+        from pblock - qblock, but, it is a little faster to do
+        vstack and then subtract, so p and q remain separate
+    qblock : scipy.sparse.csr_matrix
+        block for the q tilespec/match entry
+    w : numpy array
+        weights for the rows in pblock and qblock
+    """
+
+    if np.all(np.array(match['matches']['w']) == 0):
+        return None
+
+    if len(match['matches']['w']) < matrix_assembly['npts_min']:
+        return None
+
+    ppts = np.array(match['matches']['p']).transpose()
+    qpts = np.array(match['matches']['q']).transpose()
+    w = np.array(match['matches']['w'])
+
+    if ppts.shape[0] > matrix_assembly['npts_max']:
+        if matrix_assembly['choose_random']:
+            ind = np.arange(ppts.shape[0])
+            np.random.shuffle(ind)
+            ind = ind[0: matrix_assembly['npts_max']]
+        else:
+            ind = np.arange(matrix_assembly['npts_max'])
+        ppts = ppts[ind, :]
+        qpts = qpts[ind, :]
+        w = w[ind]
+
+    pblock, weights = ptspec.tforms[-1].block_from_pts(ppts, w, pcol, ncol)
+    qblock, _ = qtspec.tforms[-1].block_from_pts(qpts, w, qcol, ncol)
+
+    return pblock, qblock, weights

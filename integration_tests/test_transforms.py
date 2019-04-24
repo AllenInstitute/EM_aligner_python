@@ -122,50 +122,38 @@ def test_affine_model():
     assert(t.__class__ == AlignerAffineModel)
     assert(t.fullsize)
 
-    # make CSR (fullsize)
+    # make block (fullsize)
     t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
-    match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    indptr = np.insert(indptr, 0, 0)
-    c = csr_matrix((data, indices, indptr))
-    assert c.check_format() is None
-    assert weights.size == 100*t.rows_per_ptmatch
-    assert npts == 100
+    nmatch = 100
+    match = example_match(nmatch)
+    ncol = 1000
+    icol = 73
+    block, weights = t.block_from_pts(
+            np.array(match['matches']['p']).transpose(),
+            np.array(match['matches']['w']),
+            icol,
+            ncol)
+
+    assert block.check_format() is None
+    assert weights.size == nmatch * t.rows_per_ptmatch
+    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
+    assert block.nnz == 2 * nmatch * 3
 
     # make CSR (halfsize)
     t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
-    match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    indptr = np.insert(indptr, 0, 0)
-    c = csr_matrix((data, indices, indptr))
-    assert c.check_format() is None
-    assert weights.size == 100*t.rows_per_ptmatch
-    assert npts == 100
-
-    # make CSR zero weights
-    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
-    match = example_match(100)
-    match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    assert data is None
-    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    assert data is None
-
-    # minimum size
-    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=False)
-    match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 200, 500, True)
-    assert data is None
-    t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 200, 500, True)
-    assert data is None
+    nmatch = 100
+    match = example_match(nmatch)
+    ncol = 1000
+    icol = 73
+    block, weights = t.block_from_pts(
+            np.array(match['matches']['p']).transpose(),
+            np.array(match['matches']['w']),
+            icol,
+            ncol)
+    assert block.check_format() is None
+    assert weights.size == nmatch * t.rows_per_ptmatch
+    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
+    assert block.nnz == nmatch * 3
 
     # to vec
     t = AlignerTransform(name='AffineModel', transform=rt, fullsize=True)

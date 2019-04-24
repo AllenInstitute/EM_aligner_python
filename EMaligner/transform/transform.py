@@ -15,7 +15,6 @@ class AlignerTransform(object):
         # backwards compatibility
         if name == 'affine':
             name = 'AffineModel'
-            fullsize = False
         if name == 'affine_fullsize':
             name = 'AffineModel'
             fullsize = True

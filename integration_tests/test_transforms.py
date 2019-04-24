@@ -264,35 +264,27 @@ def test_polynomial_model():
         assert(t.__class__ == AlignerPolynomial2DTransform)
         assert(t.order == o)
 
-    # make CSR
+    # make block
     for order in range(4):
         n = int((order + 1) * (order + 2) / 2)
         params = np.zeros((2, n))
         rt = renderapi.transform.Polynomial2DTransform(params=params)
         t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
-        match = example_match(100)
-        data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-                match, 1, 2, 5, 500, True)
-        indptr = np.insert(indptr, 0, 0)
-        c = csr_matrix((data, indices, indptr))
-        assert c.check_format() is None
-        assert weights.size == 100*t.rows_per_ptmatch
-        assert npts == 100
 
-    # make CSR zero weights
-    t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
-    match = example_match(100)
-    match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    assert data is None
+        nmatch = 100
+        match = example_match(nmatch)
+        ncol = 1000
+        icol = 73
+        block, weights = t.block_from_pts(
+                np.array(match['matches']['p']).transpose(),
+                np.array(match['matches']['w']),
+                icol,
+                ncol)
 
-    # minimum size
-    t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
-    match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 200, 500, True)
-    assert data is None
+        assert block.check_format() is None
+        assert weights.size == nmatch
+        assert block.shape == (nmatch, ncol)
+        assert block.nnz == n * nmatch
 
     # to vec
     for order in range(4):

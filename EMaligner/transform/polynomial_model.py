@@ -1,8 +1,6 @@
 import renderapi
-from .utils import (
-        ptpair_indices,
-        arrays_for_tilepair)
 import numpy as np
+from scipy.sparse import csr_matrix
 __all__ = ['AlignerPolynomial2DTransform']
 
 
@@ -13,7 +11,8 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         if transform is not None:
             if isinstance(
                     transform, renderapi.transform.Polynomial2DTransform):
-                self.from_dict(transform.to_dict())
+                super(AlignerPolynomial2DTransform, self).__init__(
+                        json=transform.to_dict())
             elif isinstance(
                     transform, renderapi.transform.AffineModel):
                 params = np.zeros(
@@ -25,33 +24,69 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
                     params[0, 2] = transform.M01
                     params[1, 1] = transform.M10
                     params[1, 2] = transform.M11
-                renderapi.transform.Polynomial2DTransform.__init__(
-                        self, params=params)
+                super(AlignerPolynomial2DTransform, self).__init__(
+                        params=params)
         else:
             params = np.zeros(
                     (2, int((order + 1) * (order + 2) / 2)))
             if order > 0:
                 # identity
                 params[0, 1] = params[1, 2] = 1.0
-            renderapi.transform.Polynomial2DTransform.__init__(
-                    self, params=params)
+            super(AlignerPolynomial2DTransform, self).__init__(
+                    params=params)
 
         self.DOF_per_tile = int((self.order + 1) * (self.order + 2) / 2)
         self.nnz_per_row = (self.order + 1) * (self.order + 2)
         self.rows_per_ptmatch = 1
 
     def to_solve_vec(self):
+        """sets solve vector values from transform parameters
+
+        Returns
+        -------
+        vec : numpy array
+            transform parameters in solve form
+        """
+
         vec = np.transpose(self.params)
         return vec
 
     def from_solve_vec(self, vec):
+        """reads values from solution and sets transform parameters
+
+        Parameters
+        ----------
+        vec : numpy array
+            input to this function is sliced so that vec[0] is the
+            first relevant value for this transform
+
+        Returns
+        -------
+        n : int
+            number of values read from vec. Used to increment vec slice
+            for next transform
+        """
+
         n = int((self.order + 1) * (self.order + 2) / 2)
         self.params = np.transpose(vec[0:n, :])
         return n
 
     def regularization(self, regdict):
+        """regularization vector
+
+        Parameters
+        ----------
+        regdict : dict
+           see regularization class in schemas. controls values
+
+        Return
+        ------
+        reg : numpy array
+            array of regularization values of length DOF_per_tile
+        """
+
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
-                regdict['default_lambda']
+            regdict['default_lambda']
         n = int((self.order + 1) * (self.order + 2) / 2)
         if regdict['poly_factors'] is None:
             reg[0] *= regdict['translation_factor']
@@ -63,51 +98,40 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
                     ni += 1
         return reg
 
-    def CSR_from_tilepair(
-            self, match, tile_ind1, tile_ind2,
-            nmin, nmax, choose_random):
-        if np.all(np.array(match['matches']['w']) == 0):
-            # zero weights
-            return None, None, None, None, None
+    def block_from_pts(self, pts, w, col_ind, col_max):
+        """partial sparse block for a tilepair/match
 
-        match_index, stride = ptpair_indices(
-                len(match['matches']['q'][0]),
-                nmin,
-                nmax,
-                self.nnz_per_row,
-                choose_random)
-        if match_index is None:
-            # did not meet nmin requirement
-            return None, None, None, None, None
+        Parameters
+        ----------
+        pts :  numpy array
+            N x 2, the x, y values of the match (either p or q)
+        w : numpy array
+            the weights associated with the pts
+        col_ind : int
+            the starting column index for this tile
+        col_max : int
+            number of columns in the matrix
 
-        npts = match_index.size
+        Returns
+        -------
+        block : scipy.sparse.csr_matrix
+            the partial block for this transform
+        w : numpy array
+            the weights associated with the rows of this block
+        """
 
-        # empty arrays
-        data, indices, indptr, weights = (
-                arrays_for_tilepair(
-                   npts,
-                   self.rows_per_ptmatch,
-                   self.nnz_per_row))
-
-        px = np.array(match['matches']['p'][0])[match_index]
-        py = np.array(match['matches']['p'][1])[match_index]
-        qx = np.array(match['matches']['q'][0])[match_index]
-        qy = np.array(match['matches']['q'][1])[match_index]
-
-        k = 0
-        qoff = int(self.nnz_per_row / 2)
+        px = pts[:, 0]
+        py = pts[:, 1]
+        npts = px.size
+        cols = []
         for j in range(self.order + 1):
             for i in range(j + 1):
-                data[k + stride] = px ** (j - i) * py ** i
-                data[k + stride + qoff] = -qx ** (j - i) * qy ** i
-                k += 1
+                cols.append(px ** (j - i) * py ** i)
 
-        ir = np.arange(int(self.nnz_per_row / 2))
-        uindices = np.hstack((
-            tile_ind1 * self.DOF_per_tile + ir,
-            tile_ind2 * self.DOF_per_tile + ir))
-        indices[0: npts * self.nnz_per_row] = np.tile(uindices, npts)
-        indptr[0: npts] = np.arange(1, npts + 1) * self.nnz_per_row
-        weights[0: npts] = np.array(match['matches']['w'])[match_index]
+        data = np.hstack(cols).flatten()
+        indices = np.tile(np.arange(self.DOF_per_tile) + col_ind, npts)
+        indptr = np.arange(0, npts + 1) * self.DOF_per_tile
 
-        return data, indices, indptr, weights, npts
+        block = csr_matrix((data, indices, indptr), shape=(npts, col_max))
+
+        return block, w

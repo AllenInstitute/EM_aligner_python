@@ -30,7 +30,7 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         Returns
         -------
         vec : numpy array
-            shape depends on fullsize
+            transform parameters in solve form
         """
         vec = np.array([
             self.M[0, 0],

@@ -12,13 +12,14 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
         if transform is not None:
             if isinstance(transform, renderapi.transform.AffineModel):
-                self.from_dict(transform.to_dict())
+                super(AlignerAffineModel, self).__init__(
+                        json=transform.to_dict())
             else:
                 raise AlignerTransformException(
                         "can't initialize %s with %s" % (
                             self.__class__, transform.__class__))
         else:
-            self.from_dict(renderapi.transform.AffineModel().to_dict())
+            super(AlignerAffineModel, self).__init__()
 
         self.DOF_per_tile = 3
         self.nnz_per_row = 6

@@ -207,39 +207,22 @@ def test_similarity_model():
     t = AlignerTransform(name='SimilarityModel', transform=rt)
     assert(t.__class__ == AlignerSimilarityModel)
 
-    # make CSR
-    t = AlignerTransform(name='SimilarityModel', transform=rt)
-    match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    indptr = np.insert(indptr, 0, 0)
-    c = csr_matrix((data, indices, indptr))
-    assert c.check_format() is None
-    assert weights.size == 100*t.rows_per_ptmatch
-    assert npts == 100
-
-    # make CSR zero weights
-    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=False)
-    match = example_match(100)
-    match['matches']['w'] = list(np.zeros(100*t.rows_per_ptmatch))
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    assert data is None
+    # make block
     t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 5, 500, True)
-    assert data is None
+    nmatch = 100
+    match = example_match(nmatch)
+    ncol = 1000
+    icol = 73
+    block, weights = t.block_from_pts(
+            np.array(match['matches']['p']).transpose(),
+            np.array(match['matches']['w']),
+            icol,
+            ncol)
 
-    # minimum size
-    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=False)
-    match = example_match(100)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 200, 500, True)
-    assert data is None
-    t = AlignerTransform(name='SimilarityModel', transform=rt, fullsize=True)
-    data, indices, indptr, weights, npts = t.CSR_from_tilepair(
-            match, 1, 2, 200, 500, True)
-    assert data is None
+    assert block.check_format() is None
+    assert weights.size == nmatch * t.rows_per_ptmatch
+    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
+    assert block.nnz == 10 * nmatch
 
     # to vec
     t = AlignerTransform(name='SimilarityModel')

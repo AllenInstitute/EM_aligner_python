@@ -216,6 +216,13 @@ class EMaligner(argschema.ArgSchemaParser):
                     self.resolvedtiles,
                     results['x'],
                     assemble_result['tiles_used'])
+            scales = np.array(
+                    [np.array(t.tforms[-1].scale)
+                     for t in self.resolvedtiles.tilespecs])
+            smn = scales.mean(axis=0)
+            ssd = scales.std(axis=0)
+            logger.info("\n scales: %0.2f +/- %0.2f, %0.2f +/- %0.2f" %
+                (smn[0], ssd[0], smn[1], ssd[1]))
             if self.args['output_mode'] == 'stack':
                 res_for_file = {a: b for a, b in results.items() if a != 'x'}
                 self.args['output_stack'] = utils.write_to_new_stack(

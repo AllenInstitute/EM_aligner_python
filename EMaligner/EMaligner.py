@@ -35,9 +35,6 @@ def calculate_processing_chunk(fargs):
             args['pointmatch'],
             dbconnection)
 
-    if len(nmatches) == 0:
-        return None
-
     # extract IDs for fast checking
     pid_set = set(m['pId'] for m in nmatches)
     qid_set = set(m['qId'] for m in nmatches)
@@ -51,15 +48,15 @@ def calculate_processing_chunk(fargs):
                in pid_set and m['qId'] in qid_set]
     del nmatches
 
-    pids = np.array([m['pId'] for m in matches])
-    qids = np.array([m['qId'] for m in matches])
-
     if len(matches) == 0:
         logger.debug(
             "no tile pairs in "
             "stack for pointmatch groupIds %s and %s" % (
                 pair['section1'], pair['section2']))
         return None
+
+    pids = np.array([m['pId'] for m in matches])
+    qids = np.array([m['qId'] for m in matches])
 
     logger.debug(
             "loaded %d matches, using %d, "
@@ -221,8 +218,8 @@ class EMaligner(argschema.ArgSchemaParser):
                      for t in self.resolvedtiles.tilespecs])
             smn = scales.mean(axis=0)
             ssd = scales.std(axis=0)
-            logger.info("\n scales: %0.2f +/- %0.2f, %0.2f +/- %0.2f" %
-                (smn[0], ssd[0], smn[1], ssd[1]))
+            logger.info("\n scales: %0.2f +/- %0.2f, %0.2f +/- %0.2f" % (
+                smn[0], ssd[0], smn[1], ssd[1]))
             if self.args['output_mode'] == 'stack':
                 res_for_file = {a: b for a, b in results.items() if a != 'x'}
                 self.args['output_stack'] = utils.write_to_new_stack(
@@ -462,6 +459,6 @@ class EMaligner(argschema.ArgSchemaParser):
         return message, results
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     mod = EMaligner(schema_type=EMA_Schema)
     mod.run()

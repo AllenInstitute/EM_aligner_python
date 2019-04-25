@@ -74,27 +74,6 @@ def make_dbconnection(collection, which='tile', interface=None):
     return dbconnection
 
 
-def get_unused_tspecs(stack, tids):
-    dbconnection = make_dbconnection(stack)
-    tspecs = []
-    if stack['db_interface'] == 'render':
-        for t in tids:
-            tspecs.append(
-                    renderapi.tilespec.get_tile_spec(
-                        stack['name'][0],
-                        t,
-                        render=dbconnection,
-                        owner=stack['owner'],
-                        project=stack['project']))
-    if stack['db_interface'] == 'mongo':
-        for t in tids:
-            tmp = list(dbconnection.find({'tileId': t}))
-            tspecs.append(
-                    renderapi.tilespec.TileSpec(
-                        json=tmp[0]))
-    return np.array(tspecs)
-
-
 def determine_zvalue_pairs(resolved, depths):
     # create all possible pairs, given zvals and depth
     zvals, uind, inv = np.unique(

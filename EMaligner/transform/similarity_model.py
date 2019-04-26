@@ -127,4 +127,5 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         indptr = np.concatenate(([0], np.cumsum(i)))
 
         block = csr_matrix((data, indices, indptr), shape=(npts * 4, col_max))
-        return block, np.hstack((w, w, w, w))
+        rhs = np.zeros((npts * 4, 1))
+        return block, np.hstack((w, w, w, w)), rhs

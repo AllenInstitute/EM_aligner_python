@@ -133,5 +133,5 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         indptr = np.arange(0, npts + 1) * self.DOF_per_tile
 
         block = csr_matrix((data, indices, indptr), shape=(npts, col_max))
-
-        return block, w
+        rhs = np.zeros((npts, 2))
+        return block, w, rhs

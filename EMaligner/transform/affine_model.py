@@ -144,7 +144,8 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         indptr = np.arange(0, nrow + 1) * 3
 
         block = csr_matrix((data, indices, indptr), shape=(nrow, col_max))
-        return block, np.hstack((w, w))
+        rhs = np.zeros((nrow, 1))
+        return block, np.hstack((w, w)), rhs
 
     def block_from_pts_halfsize(self, pts, w, col_ind, col_max):
         nrow = pts.shape[0]
@@ -156,4 +157,5 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         indptr = np.arange(0, nrow + 1) * 3
 
         block = csr_matrix((data, indices, indptr), shape=(nrow, col_max))
-        return block, w
+        rhs = np.zeros((nrow, 2))
+        return block, w, rhs

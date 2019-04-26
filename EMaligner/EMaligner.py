@@ -83,10 +83,11 @@ def calculate_processing_chunk(fargs):
     wts = []
     pblocks = []
     qblocks = []
+    rhss = []
     used = []
     for k, match in enumerate(matches):
 
-        pqw = utils.blocks_from_tilespec_pair(
+        pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
                 tspecs[pinds[k]],
                 tspecs[qinds[k]],
                 match,
@@ -95,12 +96,13 @@ def calculate_processing_chunk(fargs):
                 ncol,
                 args['matrix_assembly'])
 
-        if pqw is None:
+        if pblock is None:
             continue
 
-        pblocks.append(pqw[0])
-        qblocks.append(pqw[1])
-        wts.append(pqw[2] * tilepair_weightfac)
+        pblocks.append(pblock)
+        qblocks.append(qblock)
+        wts.append(weights * tilepair_weightfac)
+        rhss.append(rhs)
 
         # note both as used
         used.append(tspecs[pinds[k]].tileId)
@@ -111,6 +113,7 @@ def calculate_processing_chunk(fargs):
     chunk['tiles_used'] = used
     chunk['block'] = sparse.vstack(pblocks) - sparse.vstack(qblocks)
     chunk['weights'] = np.concatenate(wts)
+    chunk['rhs'] = np.concatenate(rhss)
 
     return chunk
 
@@ -204,7 +207,8 @@ class EMaligner(argschema.ArgSchemaParser):
                     assemble_result['A'],
                     assemble_result['weights'],
                     assemble_result['reg'],
-                    assemble_result['x'])
+                    assemble_result['x'],
+                    assemble_result['rhs'])
             logger.info('\n' + message)
             del assemble_result['A']
 
@@ -326,6 +330,7 @@ class EMaligner(argschema.ArgSchemaParser):
         assemble_result['tiles_used'] = CSR_A.pop('tiles_used')
         assemble_result['reg'] = CSR_A.pop('reg')
         assemble_result['x'] = CSR_A.pop('x')
+        assemble_result['rhs'] = CSR_A.pop('rhs')
 
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
@@ -348,6 +353,7 @@ class EMaligner(argschema.ArgSchemaParser):
             'x': None,
             'reg': None,
             'weights': None,
+            'rhs': None,
             'tiles_used': None,
             'metadata': None}
 
@@ -410,7 +416,7 @@ class EMaligner(argschema.ArgSchemaParser):
                         utils.write_chunk_to_file(fname, Awz[0], Awz[1].data))
 
         else:
-            func_result['A'], func_result['weights'], _ = \
+            func_result['A'], func_result['weights'], func_result['rhs'], _ = \
                     self.concatenate_results(results)
             slice_ind = np.concatenate(
                     [np.repeat(
@@ -431,11 +437,12 @@ class EMaligner(argschema.ArgSchemaParser):
                     [np.concatenate([r['weights'] for r in results[ind]])],
                     [0],
                     format='csr')
+        rhs = np.concatenate([r.pop('rhs') for r in results[ind]])
         zlist = np.concatenate([r.pop('zlist') for r in results[ind]])
 
-        return A, weights, zlist
+        return A, weights, rhs, zlist
 
-    def solve_or_not(self, A, weights, reg, x0):
+    def solve_or_not(self, A, weights, reg, x0, rhs):
         # not
         if self.args['output_mode'] in ['hdf5']:
             message = '*****\nno solve for file output\n'
@@ -453,7 +460,7 @@ class EMaligner(argschema.ArgSchemaParser):
             message = message.replace(' hdf5 ', ' none ')
             results = None
         else:
-            results = utils.solve(A, weights, reg, x0)
+            results = utils.solve(A, weights, reg, x0, rhs)
             message = utils.message_from_solve_results(results)
 
         return message, results

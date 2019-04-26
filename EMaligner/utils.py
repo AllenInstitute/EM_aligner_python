@@ -10,7 +10,7 @@ import sys
 import json
 from functools import partial
 from scipy.sparse.linalg import factorized
-from .transform.transform import AlignerTransform
+from .transform.transform import AlignerTransform, AlignerRotationModel
 from . import jsongz
 import collections
 import itertools
@@ -418,18 +418,19 @@ def write_to_new_stack(
     return output_stack
 
 
-def solve(A, weights, reg, x0):
+def solve(A, weights, reg, x0, rhs):
     time0 = time.time()
     # regularized least squares
     # ensure symmetry of K
     weights.data = np.sqrt(weights.data)
-    rtWA = weights.dot(A)
-    K = rtWA.transpose().dot(rtWA) + reg
+    atwt = A.transpose().dot(weights.transpose())
+    wa = weights.dot(A)
+    K = atwt.dot(wa) + reg
 
     # save this for calculating error
     w = weights.diagonal() != 0
 
-    del weights, rtWA
+    del wa
 
     # factorize, then solve, efficient for large affine
     x = np.zeros_like(x0)
@@ -439,13 +440,13 @@ def solve(A, weights, reg, x0):
     solve = factorized(K)
     for i in range(x0.shape[1]):
         # can solve for same A, but multiple x0's
-        Lm = reg.dot(x0[:, i])
+        Lm = reg.dot(x0[:, i]) + atwt.dot(weights.dot(rhs[:, i]))
         x[:, i] = solve(Lm)
-        err[:, i] = A.dot(x[:, i])
+        err[:, i] = A.dot(x[:, i]) - rhs[:, i]
         precision[i] = \
             np.linalg.norm(K.dot(x[:, i]) - Lm) / np.linalg.norm(Lm)
         del Lm
-    del K
+    del K, A, atwt
 
     # only report errors where weights != 0
     err = err[w, :]
@@ -561,14 +562,17 @@ def blocks_from_tilespec_pair(
     """
 
     if np.all(np.array(match['matches']['w']) == 0):
-        return None
+        return None, None, None, None
 
     if len(match['matches']['w']) < matrix_assembly['npts_min']:
-        return None
+        return None, None, None, None
 
     ppts = np.array(match['matches']['p']).transpose()
     qpts = np.array(match['matches']['q']).transpose()
     w = np.array(match['matches']['w'])
+
+    if isinstance(ptspec.tforms[-1], AlignerRotationModel):
+        ppts, qpts, w = AlignerRotationModel.preprocess(ppts, qpts, w)
 
     if ppts.shape[0] > matrix_assembly['npts_max']:
         if matrix_assembly['choose_random']:
@@ -581,7 +585,9 @@ def blocks_from_tilespec_pair(
         qpts = qpts[ind, :]
         w = w[ind]
 
-    pblock, weights = ptspec.tforms[-1].block_from_pts(ppts, w, pcol, ncol)
-    qblock, _ = qtspec.tforms[-1].block_from_pts(qpts, w, qcol, ncol)
+    pblock, weights, prhs = ptspec.tforms[-1].block_from_pts(
+            ppts, w, pcol, ncol)
+    qblock, _, qrhs = qtspec.tforms[-1].block_from_pts(
+            qpts, w, qcol, ncol)
 
-    return pblock, qblock, weights
+    return pblock, qblock, weights, qrhs - prhs

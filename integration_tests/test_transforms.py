@@ -4,11 +4,7 @@ from EMaligner.transform.transform import AlignerTransform
 from EMaligner.transform.affine_model import AlignerAffineModel
 from EMaligner.transform.similarity_model import AlignerSimilarityModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
-from EMaligner.transform.utils import (
-        AlignerTransformException,
-        ptpair_indices,
-        arrays_for_tilepair)
-from scipy.sparse import csr_matrix
+from EMaligner.transform.utils import AlignerTransformException
 import numpy as np
 
 
@@ -57,44 +53,6 @@ def test_transform():
     # specifying something not real
     with pytest.raises(AlignerTransformException):
         t = AlignerTransform(name='LudicrousModel')
-
-
-def test_ptpairs():
-    # doesn't meet nmin
-    m, s = ptpair_indices(10, 15, 200, 20, True)
-    assert (m is None) & (s is None)
-
-    # does meet nmin
-    m, s = ptpair_indices(50, 15, 200, 20, True)
-    assert m.size == 50
-    assert s.size == 50
-    assert s.max() == (50 - 1) * 20
-
-    # does meet nmin
-    m, s = ptpair_indices(50, 15, 200, 20, False)
-    assert m.size == 50
-    assert s.size == 50
-    assert s.max() == (50 - 1) * 20
-
-    # exceed nmax
-    m, s = ptpair_indices(50, 15, 40, 20, False)
-    assert m.size == 40
-    assert s.size == 40
-    assert s.max() == (40 - 1) * 20
-
-    # exceed nmax
-    m, s = ptpair_indices(50, 15, 40, 20, True)
-    assert m.size == 40
-    assert s.size == 40
-    assert s.max() == (40 - 1) * 20
-
-
-def test_array_gen():
-    data, indices, indptr, weights = arrays_for_tilepair(
-            100, 2, 14)
-    c = csr_matrix((data, indices, indptr))
-    assert c.check_format() is None
-    assert weights.size == 200
 
 
 def example_match(npts):

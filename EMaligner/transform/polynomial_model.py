@@ -128,7 +128,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
             for i in range(j + 1):
                 cols.append(px ** (j - i) * py ** i)
 
-        data = np.hstack(cols).flatten()
+        data = np.vstack(cols).transpose().flatten()
         indices = np.tile(np.arange(self.DOF_per_tile) + col_ind, npts)
         indptr = np.arange(0, npts + 1) * self.DOF_per_tile
 

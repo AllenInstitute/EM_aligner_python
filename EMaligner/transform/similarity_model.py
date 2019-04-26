@@ -135,7 +135,7 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         data[5 + stride + 3 * npts * self.nnz_per_row] = \
             -0.0
         indices[3 * npts * self.nnz_per_row:
-                4 * npts * self.nnz_per_row] = np.tile(uindices, npts)
+                4 * npts * self.nnz_per_row] = np.tile(vindices, npts)
 
         indptr[0: self.rows_per_ptmatch * npts] = \
             np.arange(1, self.rows_per_ptmatch * npts + 1) * \

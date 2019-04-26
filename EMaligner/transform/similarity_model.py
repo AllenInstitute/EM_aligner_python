@@ -112,10 +112,10 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         ones = np.ones_like(px)
 
         data = np.concatenate((
-            np.hstack((px, py, ones)).flatten(),
-            np.hstack((-px, py, ones)).flatten(),
-            np.hstack((pxm, pym)).flatten(),
-            np.hstack((-pxm, pym)).flatten()))
+            np.vstack((px, py, ones)).transpose().flatten(),
+            np.vstack((-px, py, ones)).transpose().flatten(),
+            np.vstack((pxm, pym)).transpose().flatten(),
+            np.vstack((-pxm, pym)).transpose().flatten()))
 
         indices = np.concatenate((
             np.tile([0, 1, 2], npts),

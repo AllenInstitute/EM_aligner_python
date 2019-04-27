@@ -4,6 +4,7 @@ from EMaligner.transform.transform import AlignerTransform
 from EMaligner.transform.affine_model import AlignerAffineModel
 from EMaligner.transform.similarity_model import AlignerSimilarityModel
 from EMaligner.transform.rotation_model import AlignerRotationModel
+from EMaligner.transform.translation_model import AlignerTranslationModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
 from EMaligner.transform.utils import AlignerTransformException
 import numpy as np
@@ -50,6 +51,14 @@ def test_transform():
     rt = renderapi.transform.AffineModel()
     t = AlignerTransform(name='RotationModel', transform=rt)
     assert(t.__class__ == AlignerRotationModel)
+
+    # two ways to load translation
+    t = AlignerTransform(name='TranslationModel')
+    assert(t.__class__ == AlignerTranslationModel)
+    del t
+    rt = renderapi.transform.AffineModel()
+    t = AlignerTransform(name='TranslationModel', transform=rt)
+    assert(t.__class__ == AlignerTranslationModel)
 
     # two ways to load polynomial
     t = AlignerTransform(name='Polynomial2DTransform')
@@ -376,3 +385,58 @@ def test_rotation_model():
     t = AlignerTransform(name='RotationModel')
     r = t.regularization(rdict)
     assert np.all(np.isclose(r, 1.2345))
+
+
+def test_translation_model():
+    # can't do this
+    rt = renderapi.transform.Polynomial2DTransform()
+    with pytest.raises(AlignerTransformException):
+        t = AlignerTranslationModel(transform=rt)
+
+    # check args
+    rt = renderapi.transform.AffineModel()
+    t = AlignerTransform(name='TranslationModel', transform=rt)
+    assert(t.__class__ == AlignerTranslationModel)
+
+    # make block
+    t = AlignerTransform(name='TranslationModel', transform=rt)
+    nmatch = 100
+    match = example_match(nmatch)
+    ncol = 1000
+    icol = 73
+
+    block, weights, rhs = t.block_from_pts(
+            np.array(match['matches']['p']).transpose(),
+            np.array(match['matches']['w']),
+            icol,
+            ncol)
+
+    assert rhs.shape == (nmatch, 2)
+    assert block.check_format() is None
+    assert weights.size == nmatch * t.rows_per_ptmatch
+    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
+    assert block.nnz == 1 * nmatch
+
+    # to vec
+    t = AlignerTransform(name='TranslationModel')
+    v = t.to_solve_vec()
+    assert np.all(v == np.array([0.0, 0.0]).reshape(-1, 2))
+
+    # from vec
+    ntiles = 6
+    vec = np.random.randn(ntiles * 2)
+    vec = vec.reshape(-1, 2)
+    index = 0
+    for i in range(ntiles):
+        t = AlignerTransform(name='TranslationModel')
+        index += t.from_solve_vec(vec[index:, :])
+        msub = t.translation
+        assert np.all(np.isclose(msub, vec[i]))
+
+    # reg
+    rdict = {
+            "default_lambda": 1.2345,
+            "translation_factor": 0.1}
+    t = AlignerTransform(name='TranslationModel')
+    r = t.regularization(rdict)
+    assert np.all(np.isclose(r, 0.12345))

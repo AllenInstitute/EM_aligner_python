@@ -21,7 +21,6 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
             super(AlignerSimilarityModel, self).__init__()
 
         self.DOF_per_tile = 4
-        self.nnz_per_row = 6
         self.rows_per_ptmatch = 4
 
     def to_solve_vec(self):

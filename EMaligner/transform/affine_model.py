@@ -22,7 +22,6 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
             super(AlignerAffineModel, self).__init__()
 
         self.DOF_per_tile = 3
-        self.nnz_per_row = 6
         self.rows_per_ptmatch = 1
         if self.fullsize:
             self.DOF_per_tile = 6

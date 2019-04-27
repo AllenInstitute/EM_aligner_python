@@ -256,7 +256,8 @@ class EMA_Schema(ArgSchema):
         default='AffineModel',
         validate=lambda x: x in [
             'AffineModel', 'SimilarityModel', 'Polynomial2DTransform',
-            'affine', 'rigid', 'affine_fullsize', 'RotationModel'])
+            'affine', 'rigid', 'affine_fullsize', 'RotationModel',
+            'TranslationModel'])
     fullsize_transform = Boolean(
         default=False,
         description='use fullsize affine transform')

@@ -209,6 +209,29 @@ def test_rough_similarity_2(
     del mod
 
 
+def test_rough_rotation(
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = output_stack_name
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'RotationModel'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+
+    assert np.all(np.array(mod.results['precision']) < 1e-10)
+    assert len(tin) == len(tout)
+    del mod
+
+
 @pytest.mark.parametrize("pm_db_intfc", ['render', 'mongo'])
 def test_rough_similarity_split(
         render,

@@ -3,6 +3,7 @@ import renderapi
 from EMaligner.transform.transform import AlignerTransform
 from EMaligner.transform.affine_model import AlignerAffineModel
 from EMaligner.transform.similarity_model import AlignerSimilarityModel
+from EMaligner.transform.rotation_model import AlignerRotationModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
 from EMaligner.transform.utils import AlignerTransformException
 import numpy as np
@@ -41,6 +42,14 @@ def test_transform():
     rt = renderapi.transform.SimilarityModel()
     t = AlignerTransform(name='SimilarityModel', transform=rt)
     assert(t.__class__ == AlignerSimilarityModel)
+
+    # two ways to load rotation
+    t = AlignerTransform(name='RotationModel')
+    assert(t.__class__ == AlignerRotationModel)
+    del t
+    rt = renderapi.transform.AffineModel()
+    t = AlignerTransform(name='RotationModel', transform=rt)
+    assert(t.__class__ == AlignerRotationModel)
 
     # two ways to load polynomial
     t = AlignerTransform(name='Polynomial2DTransform')
@@ -131,7 +140,7 @@ def test_affine_model():
     vec = vec.reshape(-1, 1)
     index = 0
     for i in range(ntiles):
-        index = t.from_solve_vec(vec[index:, :])
+        index += t.from_solve_vec(vec[index:, :])
         assert np.all(np.isclose(t.M[0:2, :].flatten(), vi))
 
     t.fullsize = False
@@ -139,7 +148,7 @@ def test_affine_model():
     vec = np.tile(vi, reps=[ntiles, 1])
     index = 0
     for i in range(ntiles):
-        index = t.from_solve_vec(vec[index:, :])
+        index += t.from_solve_vec(vec[index:, :])
         assert np.all(np.isclose(t.M[0:2, :], vi.transpose()))
 
     # reg
@@ -197,7 +206,7 @@ def test_similarity_model():
     vec = vec.reshape(-1, 1)
     index = 0
     for i in range(ntiles):
-        index = t.from_solve_vec(vec[index:, :])
+        index += t.from_solve_vec(vec[index:, :])
         msub = t.M.flatten()[[0, 1, 2, 5]]
         assert np.all(np.isclose(msub, vi))
 
@@ -268,7 +277,7 @@ def test_polynomial_model():
         vec = np.concatenate((v0, v0, v0, v0))
         index = 0
         for i in range(4):
-            index = t.from_solve_vec(vec[index:, :])
+            index += t.from_solve_vec(vec[index:, :])
             assert np.all(np.isclose(t.params.transpose(), v0))
 
     # reg
@@ -304,3 +313,66 @@ def test_polynomial_model():
             for j in range(i + 1):
                 assert np.all(r[ni::n] == pf[i])
                 ni += 1
+
+
+def test_rotation_model():
+    # can't do this
+    rt = renderapi.transform.Polynomial2DTransform()
+    with pytest.raises(AlignerTransformException):
+        t = AlignerRotationModel(transform=rt)
+
+    # check args
+    rt = renderapi.transform.AffineModel()
+    t = AlignerTransform(name='RotationModel', transform=rt)
+    assert(t.__class__ == AlignerRotationModel)
+
+    # make block
+    t = AlignerTransform(name='RotationModel', transform=rt, fullsize=True)
+    nmatch = 100
+    match = example_match(nmatch)
+    ncol = 1000
+    icol = 73
+
+    # scale up because rotation filters out things near center-of-mass
+    ppts, qpts, w = AlignerRotationModel.preprocess(
+            np.array(match['matches']['p']).transpose() * 1000,
+            np.array(match['matches']['q']).transpose() * 1000,
+            np.array(match['matches']['w']))
+
+    assert ppts.shape == qpts.shape == (nmatch, 1)
+
+    block, weights, rhs = t.block_from_pts(
+            ppts,
+            w,
+            icol,
+            ncol)
+
+    assert rhs.shape == (nmatch, 1)
+    assert block.check_format() is None
+    assert weights.size == nmatch * t.rows_per_ptmatch
+    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
+    assert block.nnz == 1 * nmatch
+
+    # to vec
+    t = AlignerTransform(name='RotationModel')
+    v = t.to_solve_vec()
+    assert np.all(v == np.array([0.0]).reshape(-1, 1))
+
+    # from vec
+    ntiles = 6
+    vec = np.random.randn(ntiles)
+    vec = vec.reshape(-1, 1)
+    index = 0
+    for i in range(ntiles):
+        t = AlignerTransform(name='RotationModel')
+        index += t.from_solve_vec(vec[index:, :])
+        msub = t.rotation
+        assert np.isclose(msub, vec[i][0])
+
+    # reg
+    rdict = {
+            "default_lambda": 1.2345,
+            "translation_factor": 0.1}
+    t = AlignerTransform(name='RotationModel')
+    r = t.regularization(rdict)
+    assert np.all(np.isclose(r, 1.2345))

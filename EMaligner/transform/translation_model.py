@@ -31,11 +31,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         vec : numpy array
             transform parameters in solve form
         """
-        vec = np.array([
-            self.M[0, 2],
-            self.M[1, 2]])
-        vec = vec.reshape(1, 2)
-        return vec
+        return np.array([[0.0, 0.0]])
 
     def from_solve_vec(self, vec):
         """reads values from solution and sets transform parameters
@@ -52,8 +48,8 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
             number of values read from vec. Used to increment vec slice
             for next transform
         """
-        self.M[0, 2] = vec[0, 0]
-        self.M[1, 2] = vec[0, 1]
+        self.M[0, 2] += vec[0, 0]
+        self.M[1, 2] += vec[0, 1]
         n = 1
         return n
 
@@ -99,6 +95,8 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         indices = data * col_ind
         indptr = np.arange(0, pts.shape[0] + 1)
 
-        block = csr_matrix((data, indices, indptr), shape=(pts.shape[0], col_max))
-        rhs = pts
+        block = csr_matrix(
+                (data, indices, indptr),
+                shape=(pts.shape[0], col_max))
+        rhs = pts + np.array([self.B0, self.B1])
         return block, w, rhs

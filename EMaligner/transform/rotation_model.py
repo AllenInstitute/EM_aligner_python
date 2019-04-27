@@ -51,8 +51,8 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
             number of values read from vec. Used to increment vec slice
             for next transform
         """
-        newr = aff_matrix(vec[0][0], offs=[0.0, 0.0])
-        self.M = newr.dot(self.M)
+        newr = aff_matrix(vec[0][0])
+        self.M[0:2, 0:2] = newr.dot(self.M[0:2, 0:2])
         return 1
 
     def regularization(self, regdict):
@@ -98,7 +98,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         data = np.ones(pts.size)
         indices = np.ones(pts.size) * col_ind
         indptr = np.arange(pts.size + 1)
-        rhs = pts.reshape(-1, 1)
+        rhs = pts.reshape(-1, 1) + self.rotation
 
         block = csr_matrix((data, indices, indptr), shape=(pts.size, col_max))
         return block, w, rhs

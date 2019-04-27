@@ -248,23 +248,25 @@ class EMaligner(argschema.ArgSchemaParser):
                 f.get('used_tile_ids')[()]).astype('U')
             assemble_result['unused_tids'] = np.array(
                 f.get('unused_tile_ids')[()]).astype('U')
+
             k = 0
-            assemble_result['x'] = []
+            key = 'x'
+            assemble_result[key] = []
             while True:
                 name = 'transforms_%d' % k
                 if name in f.keys():
-                    assemble_result['x'].append(f.get(name)[()])
+                    assemble_result[key].append(f.get(name)[()])
                     k += 1
                 else:
                     break
 
-            if len(assemble_result['x']) == 1:
-                n = assemble_result['x'][0].size
-                assemble_result['x'] = np.array(
-                    assemble_result['x']).flatten().reshape((n, 1))
+            if len(assemble_result[key]) == 1:
+                n = assemble_result[key][0].size
+                assemble_result[key] = np.array(
+                    assemble_result[key]).flatten().reshape((n, 1))
             else:
-                assemble_result['x'] = np.transpose(
-                    np.array(assemble_result['x']))
+                assemble_result[key] = np.transpose(
+                    np.array(assemble_result[key]))
 
             reg = f.get('lambda')[()]
             datafile_names = f.get('datafile_names')[()]
@@ -282,6 +284,7 @@ class EMaligner(argschema.ArgSchemaParser):
             weights = np.array([]).astype('float64')
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
+            rhs = [np.array([]), np.array([])]
 
             fdir = os.path.dirname(filename)
             i = 0
@@ -297,9 +300,23 @@ class EMaligner(argschema.ArgSchemaParser):
                             indptr,
                             f.get('indptr')[()][1:] + indptr[-1])
                     weights = np.append(weights, f.get('weights')[()])
+
+                    k = 0
+                    while True:
+                        name = 'rhs_%d' % k
+                        if name in f.keys():
+                            rhs[k] = np.append(rhs[k], f.get(name)[()])
+                            k += 1
+                        else:
+                            break
                     logger.info('  %s read' % fname)
 
             assemble_result['A'] = csr_matrix((data, indices, indptr))
+            assemble_result['rhs'] = rhs[0].reshape(-1, 1)
+            if rhs[1].size > 0:
+                assemble_result['rhs'] = np.hstack((
+                    assemble_result['rhs'],
+                    rhs[1].reshape(-1, 1)))
             assemble_result['weights'] = sparse.diags(
                     [weights], [0], format='csr')
 
@@ -408,12 +425,12 @@ class EMaligner(argschema.ArgSchemaParser):
 
             func_result['metadata'] = []
             for pchunk in proc_chunks:
-                Awz = self.concatenate_results(results[pchunk])
-                if Awz:
+                A, w, rhs, z = self.concatenate_results(results[pchunk])
+                if A is not None:
                     fname = self.args['hdf5_options']['output_dir'] + \
-                        '/%d_%d.h5' % (Awz[2].min(), Awz[2].max())
+                        '/%d_%d.h5' % (z.min(), z.max())
                     func_result['metadata'].append(
-                        utils.write_chunk_to_file(fname, Awz[0], Awz[1].data))
+                        utils.write_chunk_to_file(fname, A, w.data, rhs))
 
         else:
             func_result['A'], func_result['weights'], func_result['rhs'], _ = \
@@ -430,7 +447,7 @@ class EMaligner(argschema.ArgSchemaParser):
     def concatenate_results(self, results):
         ind = np.flatnonzero(results)
         if ind.size == 0:
-            return None
+            return None, None, None, None
 
         A = sparse.vstack([r['block'] for r in results[ind]])
         weights = sparse.diags(

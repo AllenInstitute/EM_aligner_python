@@ -231,7 +231,7 @@ def get_matches(iId, jId, collection, dbconnection):
     return matches
 
 
-def write_chunk_to_file(fname, c, file_weights):
+def write_chunk_to_file(fname, c, file_weights, rhs):
     fcsr = h5py.File(fname, "w")
 
     indptr_dset = fcsr.create_dataset(
@@ -258,6 +258,23 @@ def write_chunk_to_file(fname, c, file_weights):
             (file_weights.size,),
             dtype='float64')
     weights_dset[:] = file_weights
+
+    for j in np.arange(rhs.shape[1]):
+        dsetname = 'rhs_%d' % j
+        dset = fcsr.create_dataset(
+                dsetname,
+                (rhs[:, j].size,),
+                dtype='float64')
+        dset[:] = rhs[:, j]
+
+    # a list of rhs indices (clunky, but works for PETSc to count)
+    rhslist = np.arange(rhs.shape[1]).astype('int32')
+    dset = fcsr.create_dataset(
+            "rhs_list",
+            (rhslist.size, 1),
+            dtype='int32')
+    dset[:] = rhslist.reshape(rhslist.size, 1)
+
     fcsr.close()
 
     logger.info(

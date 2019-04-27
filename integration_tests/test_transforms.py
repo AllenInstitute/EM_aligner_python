@@ -86,12 +86,13 @@ def test_affine_model():
     match = example_match(nmatch)
     ncol = 1000
     icol = 73
-    block, weights = t.block_from_pts(
+    block, weights, rhs = t.block_from_pts(
             np.array(match['matches']['p']).transpose(),
             np.array(match['matches']['w']),
             icol,
             ncol)
 
+    assert np.all(np.isclose(rhs, 0.0))
     assert block.check_format() is None
     assert weights.size == nmatch * t.rows_per_ptmatch
     assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
@@ -103,11 +104,12 @@ def test_affine_model():
     match = example_match(nmatch)
     ncol = 1000
     icol = 73
-    block, weights = t.block_from_pts(
+    block, weights, rhs = t.block_from_pts(
             np.array(match['matches']['p']).transpose(),
             np.array(match['matches']['w']),
             icol,
             ncol)
+    assert np.all(np.isclose(rhs, 0.0))
     assert block.check_format() is None
     assert weights.size == nmatch * t.rows_per_ptmatch
     assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
@@ -171,12 +173,13 @@ def test_similarity_model():
     match = example_match(nmatch)
     ncol = 1000
     icol = 73
-    block, weights = t.block_from_pts(
+    block, weights, rhs = t.block_from_pts(
             np.array(match['matches']['p']).transpose(),
             np.array(match['matches']['w']),
             icol,
             ncol)
 
+    assert np.all(np.isclose(rhs, 0.0))
     assert block.check_format() is None
     assert weights.size == nmatch * t.rows_per_ptmatch
     assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
@@ -233,12 +236,13 @@ def test_polynomial_model():
         match = example_match(nmatch)
         ncol = 1000
         icol = 73
-        block, weights = t.block_from_pts(
+        block, weights, rhs = t.block_from_pts(
                 np.array(match['matches']['p']).transpose(),
                 np.array(match['matches']['w']),
                 icol,
                 ncol)
 
+        assert np.all(np.isclose(rhs, 0.0))
         assert block.check_format() is None
         assert weights.size == nmatch
         assert block.shape == (nmatch, ncol)

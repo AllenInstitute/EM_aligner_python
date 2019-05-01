@@ -376,7 +376,7 @@ def test_rotation_model():
         t = AlignerTransform(name='RotationModel')
         index += t.from_solve_vec(vec[index:, :])
         msub = t.rotation
-        assert np.isclose(msub, vec[i][0])
+        assert np.isclose(np.mod(np.abs(msub - vec[i][0]), 2.0 * np.pi), 0.0)
 
     # reg
     rdict = {

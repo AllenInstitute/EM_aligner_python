@@ -320,21 +320,6 @@ class EMaligner(argschema.ArgSchemaParser):
             assemble_result['weights'] = sparse.diags(
                     [weights], [0], format='csr')
 
-        # alert about differences between this call and the original
-        for k in file_args.keys():
-            if k in self.args.keys():
-                if file_args[k] != self.args[k]:
-                    logger.warning("for key \"%s\" " % k)
-                    logger.warning("  from file: " + str(file_args[k]))
-                    logger.warning("  this call: " + str(self.args[k]))
-            else:
-                logger.warning("for key \"%s\" " % k)
-                logger.warning("  file     : " + str(file_args[k]))
-                logger.warning("  this call: not specified")
-
-        logger.info("csr inputs read from files listed in : "
-                    "%s" % self.args['assemble_from_file'])
-
         return assemble_result
 
     def assemble_from_db(self, zvals):

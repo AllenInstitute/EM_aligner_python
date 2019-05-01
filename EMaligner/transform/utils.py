@@ -17,9 +17,3 @@ def aff_matrix(theta, offs=None):
     M[0, 2] = offs[0]
     M[1, 2] = offs[1]
     return M
-
-
-def rotate(xy, theta):
-    R = aff_matrix(theta)
-    f = R.dot(xy.transpose()).transpose()
-    return f

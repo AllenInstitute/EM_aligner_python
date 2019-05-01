@@ -6,8 +6,18 @@ from EMaligner.transform.similarity_model import AlignerSimilarityModel
 from EMaligner.transform.rotation_model import AlignerRotationModel
 from EMaligner.transform.translation_model import AlignerTranslationModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
-from EMaligner.transform.utils import AlignerTransformException
+from EMaligner.transform.utils import AlignerTransformException, aff_matrix
 import numpy as np
+
+
+def test_aff_matrix():
+    a = aff_matrix(0.0)
+    assert np.all(np.isclose(a, np.eye(2)))
+    a = aff_matrix(0.0, offs=[0.0, 0.0])
+    assert np.all(np.isclose(a, np.eye(3)))
+    a = aff_matrix(0.0, offs=[1.0, 2.0])
+    assert a[0, 2] == 1.0
+    assert a[1, 2] == 2.0
 
 
 def test_aliases():

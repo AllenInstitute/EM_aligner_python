@@ -2,26 +2,30 @@ import renderapi
 from .utils import AlignerTransformException
 import numpy as np
 from scipy.sparse import csr_matrix
-__all__ = ['AlignerSimilarityModel']
+from scipy.spatial.distance import cdist
+__all__ = ['AlignerThinPlateSplineTransform']
 
 
-class AlignerSimilarityModel(renderapi.transform.AffineModel):
+class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransform):
 
     def __init__(self, transform=None):
 
         if transform is not None:
-            if isinstance(transform, renderapi.transform.AffineModel):
-                super(AlignerSimilarityModel, self).__init__(
+            if isinstance(transform, renderapi.transform.ThinPlateSplineTransform):
+                super(AlignerThinPlateSplineTransform, self).__init__(
                         json=transform.to_dict())
             else:
                 raise AlignerTransformException(
                         "can't initialize %s with %s" % (
                             self.__class__, transform.__class__))
         else:
-            super(AlignerSimilarityModel, self).__init__()
+            raise AlignerTransformException(
+                    "not sure how to iniztialize thin plate spline")
 
-        self.DOF_per_tile = 4
-        self.rows_per_ptmatch = 4
+        self.DOF_per_tile = self.nLm
+        if self.aMtx is not None:
+            self.DOF_per_tile += 3
+        self.rows_per_ptmatch = 1
 
     def to_solve_vec(self):
         """sets solve vector values from transform parameters
@@ -31,12 +35,12 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         vec : numpy array
             transform parameters in solve form
         """
-        vec = np.array([
-            self.M[0, 0],
-            self.M[0, 1],
-            self.M[0, 2],
-            self.M[1, 2]])
-        vec = vec.reshape((vec.size, 1))
+        vec = self.dMtxDat.transpose()
+        if self.aMtx is not None:
+            vec = np.vstack((
+                self.bVec,
+                self.aMtx.transpose(),
+                vec))
         return vec
 
     def from_solve_vec(self, vec):
@@ -54,14 +58,15 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
             number of values read from vec. Used to increment vec slice
             for next transform
         """
-        self.M[0, 0] = vec[0]
-        self.M[0, 1] = vec[1]
-        self.M[0, 2] = vec[2]
-        self.M[1, 0] = -vec[1]
-        self.M[1, 1] = vec[0]
-        self.M[1, 2] = vec[3]
-        n = 4
-        return n
+        n0 = 0
+        n1 = self.nLm
+        if self.aMtx is not None:
+            self.bVec = vec[0, :]
+            self.aMtx = vec[1:3, :].transpose()
+            n0 += 3
+            n1 += 3
+        self.dMtxDat = vec[n0:n1, :].transpose()
+        return n1
 
     def regularization(self, regdict):
         """regularization vector
@@ -78,8 +83,12 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         """
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
             regdict['default_lambda']
-        reg[2::4] *= regdict['translation_factor']
-        reg[3::4] *= regdict['translation_factor']
+        n0 = 0
+        if self.aMtx is not None:
+            reg[0] *= regdict['translation_factor']
+            reg[1:3] *= 1.0
+            n0 += 3
+        reg[n0:] *= regdict['thinplate_factor']
         return reg
 
     def block_from_pts(self, pts, w, col_ind, col_max):
@@ -103,28 +112,31 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         w : numpy array
             the weights associated with the rows of this block
         """
-        px = pts[:, 0]
-        py = pts[:, 1]
-        npts = px.size
-        pxm = px - px.mean()
-        pym = py - py.mean()
-        ones = np.ones_like(px)
+        data = cdist(
+                pts,
+                self.srcPts.transpose(),
+                metric='sqeuclidean')
+        data *= np.ma.log(np.sqrt(data)).filled(0.0)
+        ncol = data.shape[1]
+        if self.aMtx is not None:
+            ones = np.ones(pts.shape[0]).reshape(-1, 1)
+            data = np.hstack((ones, pts, data))
+            ncol += 3
+        data = data.flatten()
+        indices = np.tile(np.arange(ncol) + col_ind, pts.shape[0])
+        indptr = np.arange(0, pts.shape[0] + 1) * ncol
 
-        data = np.concatenate((
-            np.vstack((px, py, ones)).transpose().flatten(),
-            np.vstack((-px, py, ones)).transpose().flatten(),
-            np.vstack((pxm, pym)).transpose().flatten(),
-            np.vstack((-pxm, pym)).transpose().flatten()))
+        block = csr_matrix(
+                (data, indices, indptr),
+                shape=(pts.shape[0], col_max))
+        rhs = pts
+        return block, w, rhs
 
-        indices = np.concatenate((
-            np.tile([0, 1, 2], npts),
-            np.tile([1, 0, 3], npts),
-            np.tile([0, 1], npts),
-            np.tile([1, 0], npts))) + col_ind
+    @property
+    def scale(self):
+        src = self.srcPts.transpose()
+        dst = self.tform(src)
+        a = renderapi.transform.AffineModel()
+        a.estimate(src, dst)
+        return a.scale
 
-        i = np.concatenate(([3] * npts, [3] * npts, [2] * npts, [2] * npts))
-        indptr = np.concatenate(([0], np.cumsum(i)))
-
-        block = csr_matrix((data, indices, indptr), shape=(npts * 4, col_max))
-        rhs = np.zeros((npts * 4, 1))
-        return block, np.hstack((w, w, w, w)), rhs

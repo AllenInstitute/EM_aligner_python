@@ -184,6 +184,25 @@ def test_polynomial(
     del mod
 
 
+def test_thinplate(
+        render, montage_pointmatches, loading_raw_stack,
+        output_stack_name):
+    p = copy.deepcopy(montage_parameters)
+    p['input_stack']['name'] = loading_raw_stack
+    p['output_stack']['name'] = output_stack_name
+    p['pointmatch']['name'] = montage_pointmatches
+    p['transformation'] = 'ThinPlateSplineTransform'
+    p['regularization'] = {
+            'default_lambda': 1000.0,
+            'translation_factor': 1e-5,
+            'thinplate_factor': 1e-5}
+    mod = EMaligner.EMaligner(input_data=p, args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-4)
+    assert np.all(np.array(mod.results['error']) < 200)
+    del mod
+
+
 def test_poly_validation(output_stack_name):
     p = copy.deepcopy(montage_parameters)
     p['regularization'] = {

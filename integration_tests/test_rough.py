@@ -104,6 +104,20 @@ def rough_pointmatches(render):
 
 
 @pytest.fixture(scope='module')
+def rough_pointmatches_missing(render):
+    test_rough_collection = 'rough_collection_missing'
+    with open(FILE_ROUGH_PMS, 'r') as f:
+        pms_from_json = json.load(f)
+    # pop out one match
+    pms_from_json.pop(100)
+    renderapi.pointmatch.import_matches(
+            test_rough_collection, pms_from_json, render=render)
+    yield test_rough_collection
+    renderapi.pointmatch.delete_collection(
+            test_rough_collection, render=render)
+
+
+@pytest.fixture(scope='module')
 def split_rough_pointmatches(render):
     test_rough_collection1 = 'rough_collection_split1'
     test_rough_collection2 = 'rough_collection_split2'
@@ -214,6 +228,29 @@ def test_rough_similarity_2(
     del mod
 
 
+def test_rough_rotation(
+        render,
+        rough_pointmatches,
+        rough_input_stack,
+        output_stack_name):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = output_stack_name
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'RotationModel'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+
+    assert np.all(np.array(mod.results['precision']) < 1e-10)
+    assert len(tin) == len(tout)
+    del mod
+
+
 @pytest.mark.parametrize("pm_db_intfc", ['render', 'mongo'])
 def test_rough_similarity_split(
         render,
@@ -267,20 +304,29 @@ def test_missing_section(
     del mod
 
 
-def test_no_CSR_exception(
+def test_missing_match(
+        # this case was covered elsewhere, but one more test
         render,
-        rough_pointmatches,
-        rough_input_stack_renamed,
+        rough_pointmatches_missing,
+        rough_input_stack,
         output_stack_name):
     rough_parameters2 = copy.deepcopy(rough_parameters)
-    rough_parameters2['input_stack']['name'] = rough_input_stack_renamed
-    rough_parameters2['output_mode'] = 'none'
-    rough_parameters2['pointmatch']['name'] = rough_pointmatches
-    rough_parameters2['transformation'] = 'AffineModel'
+    rough_parameters2['input_stack']['name'] = rough_input_stack
+    rough_parameters2['output_stack']['name'] = output_stack_name
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches_missing
+    rough_parameters2['transformation'] = 'SimilarityModel'
+
     mod = EMaligner.EMaligner(
             input_data=copy.deepcopy(rough_parameters2), args=[])
-    with pytest.raises(utils.EMalignerException):
-        mod.run()
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    assert len(tin) == len(tout)
+    del mod
 
 
 def test_affine_on_similarity(

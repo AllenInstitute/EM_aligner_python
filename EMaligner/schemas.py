@@ -59,6 +59,10 @@ class db_params(DefaultSchema):
                  "volume_assembly/render-jars/production/scripts"),
         required=False,
         description='render bin path')
+    memGB = String(
+        required=False,
+        default='5G',
+        description='string describing java heap memory (default 5G)')
 
     @mm.pre_load
     def tolist(self, data):
@@ -151,6 +155,11 @@ class regularization(DefaultSchema):
     freeze_first_tile = Boolean(
         default=False,
         required=False)
+    thinplate_factor = Float(
+        required=False,
+        default=1e-5,
+        missing=1e-5,
+        description="factor for thin plate spline control points")
 
 
 class input_db(db_params):
@@ -252,7 +261,8 @@ class EMA_Schema(ArgSchema):
         default='AffineModel',
         validate=lambda x: x in [
             'AffineModel', 'SimilarityModel', 'Polynomial2DTransform',
-            'affine', 'rigid', 'affine_fullsize'])
+            'affine', 'rigid', 'affine_fullsize', 'RotationModel',
+            'TranslationModel', 'ThinPlateSplineTransform'])
     fullsize_transform = Boolean(
         default=False,
         description='use fullsize affine transform')

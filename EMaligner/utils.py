@@ -10,7 +10,7 @@ import sys
 import json
 from functools import partial
 from scipy.sparse.linalg import factorized
-from .transform.transform import AlignerTransform
+from .transform.transform import AlignerTransform, AlignerRotationModel
 from . import jsongz
 import collections
 import itertools
@@ -74,49 +74,45 @@ def make_dbconnection(collection, which='tile', interface=None):
     return dbconnection
 
 
-def get_unused_tspecs(stack, tids):
-    dbconnection = make_dbconnection(stack)
-    tspecs = []
-    if stack['db_interface'] == 'render':
-        for t in tids:
-            tspecs.append(
-                    renderapi.tilespec.get_tile_spec(
-                        stack['name'][0],
-                        t,
-                        render=dbconnection,
-                        owner=stack['owner'],
-                        project=stack['project']))
-    if stack['db_interface'] == 'mongo':
-        for t in tids:
-            tmp = list(dbconnection.find({'tileId': t}))
-            tspecs.append(
-                    renderapi.tilespec.TileSpec(
-                        json=tmp[0]))
-    return np.array(tspecs)
-
-
 def determine_zvalue_pairs(resolved, depths):
     # create all possible pairs, given zvals and depth
-    zvals = [t.z for t in resolved.tilespecs]
-    zvals, uind = np.unique(zvals, return_index=True)
+    zvals, uind, inv = np.unique(
+            [t.z for t in resolved.tilespecs],
+            return_index=True,
+            return_inverse=True)
     sections = [resolved.tilespecs[i].layout.sectionId for i in uind]
+    index = np.arange(len(resolved.tilespecs))
     pairs = []
-    for i in range(len(zvals)):
+    for i, z1 in enumerate(zvals):
+        ind1 = index[inv == i]
         for j in depths:
             # need to get rid of duplicates
-            z2 = zvals[i] + j
+            z2 = z1 + j
             if z2 in zvals:
                 i2 = np.argwhere(zvals == z2)[0][0]
+                ind = np.unique(np.hstack((index[inv == i2], ind1)))
                 pairs.append({
-                    'z1': zvals[i],
-                    'z2': zvals[i2],
+                    'z1': z1,
+                    'z2': z2,
                     'section1': sections[i],
-                    'section2': sections[i2]})
+                    'section2': sections[i2],
+                    'ind': ind})
     return pairs
 
 
 def ready_transforms(tilespecs, tform_name, fullsize, order):
     for t in tilespecs:
+        # for first starts with thin plate spline
+        if ((tform_name == 'ThinPlateSplineTransform') &
+                (not isinstance(
+                        t.tforms[-1],
+                        renderapi.transform.ThinPlateSplineTransform))):
+            xt, yt = np.meshgrid(
+                    np.linspace(0, t.width, 3), np.linspace(0, t.height, 3))
+            src = np.vstack((xt.flatten(), yt.flatten())).transpose()
+            dst = t.tforms[-1].tform(src)
+            t.tforms[-1] = renderapi.transform.ThinPlateSplineTransform()
+            t.tforms[-1].estimate(src, dst)
         t.tforms[-1] = AlignerTransform(
             name=tform_name,
             transform=t.tforms[-1],
@@ -246,7 +242,7 @@ def get_matches(iId, jId, collection, dbconnection):
     return matches
 
 
-def write_chunk_to_file(fname, c, file_weights):
+def write_chunk_to_file(fname, c, file_weights, rhs):
     fcsr = h5py.File(fname, "w")
 
     indptr_dset = fcsr.create_dataset(
@@ -273,6 +269,23 @@ def write_chunk_to_file(fname, c, file_weights):
             (file_weights.size,),
             dtype='float64')
     weights_dset[:] = file_weights
+
+    for j in np.arange(rhs.shape[1]):
+        dsetname = 'rhs_%d' % j
+        dset = fcsr.create_dataset(
+                dsetname,
+                (rhs[:, j].size,),
+                dtype='float64')
+        dset[:] = rhs[:, j]
+
+    # a list of rhs indices (clunky, but works for PETSc to count)
+    rhslist = np.arange(rhs.shape[1]).astype('int32')
+    dset = fcsr.create_dataset(
+            "rhs_list",
+            (rhslist.size, 1),
+            dtype='int32')
+    dset[:] = rhslist.reshape(rhslist.size, 1)
+
     fcsr.close()
 
     logger.info(
@@ -433,18 +446,19 @@ def write_to_new_stack(
     return output_stack
 
 
-def solve(A, weights, reg, x0):
+def solve(A, weights, reg, x0, rhs):
     time0 = time.time()
     # regularized least squares
     # ensure symmetry of K
     weights.data = np.sqrt(weights.data)
-    rtWA = weights.dot(A)
-    K = rtWA.transpose().dot(rtWA) + reg
+    atwt = A.transpose().dot(weights.transpose())
+    wa = weights.dot(A)
+    K = atwt.dot(wa) + reg
 
     # save this for calculating error
     w = weights.diagonal() != 0
 
-    del weights, rtWA
+    del wa
 
     # factorize, then solve, efficient for large affine
     x = np.zeros_like(x0)
@@ -454,13 +468,13 @@ def solve(A, weights, reg, x0):
     solve = factorized(K)
     for i in range(x0.shape[1]):
         # can solve for same A, but multiple x0's
-        Lm = reg.dot(x0[:, i])
+        Lm = reg.dot(x0[:, i]) + atwt.dot(weights.dot(rhs[:, i]))
         x[:, i] = solve(Lm)
-        err[:, i] = A.dot(x[:, i])
+        err[:, i] = A.dot(x[:, i]) - rhs[:, i]
         precision[i] = \
             np.linalg.norm(K.dot(x[:, i]) - Lm) / np.linalg.norm(Lm)
         del Lm
-    del K
+    del K, A, atwt
 
     # only report errors where weights != 0
     err = err[w, :]
@@ -540,3 +554,68 @@ def update_tilespecs(resolved, x, used):
             index += resolved.tilespecs[i].tforms[-1].from_solve_vec(
                     x[index:, :])
     return
+
+
+def blocks_from_tilespec_pair(
+        ptspec, qtspec, match, pcol, qcol, ncol, matrix_assembly):
+    """create sparse matrix block from tilespecs and pointmatch
+
+    Parameters
+    ----------
+    ptspec : renderapi.tilespec.TileSpec
+        ptspec.tforms[-1] is an AlignerTransform object
+    qtspec : renderapi.tilespec.TileSpec
+        qtspec.tforms[-1] is an AlignerTransform object
+    match : dict
+        pointmatch between tilepairs
+    pcol : int
+        index for start of column entries for p
+    qcol : int
+        index for start of column entries for q
+    ncol : int
+        total number of columns in sparse matrix
+    matrix_assembly : dict
+        see class matrix_assembly in schemas, sets npts
+
+    Returns
+    -------
+    pblock : scipy.sparse.csr_matrix
+        block for the p tilespec/match entry. The full block can be had
+        from pblock - qblock, but, it is a little faster to do
+        vstack and then subtract, so p and q remain separate
+    qblock : scipy.sparse.csr_matrix
+        block for the q tilespec/match entry
+    w : numpy array
+        weights for the rows in pblock and qblock
+    """
+
+    if np.all(np.array(match['matches']['w']) == 0):
+        return None, None, None, None
+
+    if len(match['matches']['w']) < matrix_assembly['npts_min']:
+        return None, None, None, None
+
+    ppts = np.array(match['matches']['p']).transpose()
+    qpts = np.array(match['matches']['q']).transpose()
+    w = np.array(match['matches']['w'])
+
+    if isinstance(ptspec.tforms[-1], AlignerRotationModel):
+        ppts, qpts, w = AlignerRotationModel.preprocess(ppts, qpts, w)
+
+    if ppts.shape[0] > matrix_assembly['npts_max']:
+        if matrix_assembly['choose_random']:
+            ind = np.arange(ppts.shape[0])
+            np.random.shuffle(ind)
+            ind = ind[0: matrix_assembly['npts_max']]
+        else:
+            ind = np.arange(matrix_assembly['npts_max'])
+        ppts = ppts[ind, :]
+        qpts = qpts[ind, :]
+        w = w[ind]
+
+    pblock, weights, prhs = ptspec.tforms[-1].block_from_pts(
+            ppts, w, pcol, ncol)
+    qblock, _, qrhs = qtspec.tforms[-1].block_from_pts(
+            qpts, w, qcol, ncol)
+
+    return pblock, qblock, weights, qrhs - prhs

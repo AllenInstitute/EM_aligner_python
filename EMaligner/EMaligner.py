@@ -218,7 +218,7 @@ class EMaligner(argschema.ArgSchemaParser):
                     results['x'],
                     assemble_result['tiles_used'])
             scales = np.array(
-                    [np.array(t.tforms[-1].scale)
+                    [t.tforms[-1].scale
                      for t in self.resolvedtiles.tilespecs])
             smn = scales.mean(axis=0)
             ssd = scales.std(axis=0)

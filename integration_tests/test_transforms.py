@@ -387,8 +387,8 @@ def test_rotation_model():
     assert rhs.shape == ppts.shape
     assert block.check_format() is None
     assert weights.size == ppts.shape[0]
-    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
-    assert block.nnz == 1 * nmatch
+    assert block.shape == (ppts.shape[0] * t.rows_per_ptmatch, ncol)
+    assert block.nnz == ppts.shape[0]
 
     # to vec
     t = AlignerTransform(name='RotationModel')

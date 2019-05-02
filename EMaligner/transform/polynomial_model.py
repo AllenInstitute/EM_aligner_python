@@ -36,7 +36,6 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
                     params=params)
 
         self.DOF_per_tile = int((self.order + 1) * (self.order + 2) / 2)
-        self.nnz_per_row = (self.order + 1) * (self.order + 2)
         self.rows_per_ptmatch = 1
 
     def to_solve_vec(self):
@@ -133,5 +132,5 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         indptr = np.arange(0, npts + 1) * self.DOF_per_tile
 
         block = csr_matrix((data, indices, indptr), shape=(npts, col_max))
-
-        return block, w
+        rhs = np.zeros((npts, 2))
+        return block, w, rhs

@@ -83,10 +83,11 @@ def calculate_processing_chunk(fargs):
     wts = []
     pblocks = []
     qblocks = []
+    rhss = []
     used = []
     for k, match in enumerate(matches):
 
-        pqw = utils.blocks_from_tilespec_pair(
+        pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
                 tspecs[pinds[k]],
                 tspecs[qinds[k]],
                 match,
@@ -95,12 +96,13 @@ def calculate_processing_chunk(fargs):
                 ncol,
                 args['matrix_assembly'])
 
-        if pqw is None:
+        if pblock is None:
             continue
 
-        pblocks.append(pqw[0])
-        qblocks.append(pqw[1])
-        wts.append(pqw[2] * tilepair_weightfac)
+        pblocks.append(pblock)
+        qblocks.append(qblock)
+        wts.append(weights * tilepair_weightfac)
+        rhss.append(rhs)
 
         # note both as used
         used.append(tspecs[pinds[k]].tileId)
@@ -111,6 +113,7 @@ def calculate_processing_chunk(fargs):
     chunk['tiles_used'] = used
     chunk['block'] = sparse.vstack(pblocks) - sparse.vstack(qblocks)
     chunk['weights'] = np.concatenate(wts)
+    chunk['rhs'] = np.concatenate(rhss)
 
     return chunk
 
@@ -204,7 +207,8 @@ class EMaligner(argschema.ArgSchemaParser):
                     assemble_result['A'],
                     assemble_result['weights'],
                     assemble_result['reg'],
-                    assemble_result['x'])
+                    assemble_result['x'],
+                    assemble_result['rhs'])
             logger.info('\n' + message)
             del assemble_result['A']
 
@@ -244,23 +248,25 @@ class EMaligner(argschema.ArgSchemaParser):
                 f.get('used_tile_ids')[()]).astype('U')
             assemble_result['unused_tids'] = np.array(
                 f.get('unused_tile_ids')[()]).astype('U')
+
             k = 0
-            assemble_result['x'] = []
+            key = 'x'
+            assemble_result[key] = []
             while True:
                 name = 'transforms_%d' % k
                 if name in f.keys():
-                    assemble_result['x'].append(f.get(name)[()])
+                    assemble_result[key].append(f.get(name)[()])
                     k += 1
                 else:
                     break
 
-            if len(assemble_result['x']) == 1:
-                n = assemble_result['x'][0].size
-                assemble_result['x'] = np.array(
-                    assemble_result['x']).flatten().reshape((n, 1))
+            if len(assemble_result[key]) == 1:
+                n = assemble_result[key][0].size
+                assemble_result[key] = np.array(
+                    assemble_result[key]).flatten().reshape((n, 1))
             else:
-                assemble_result['x'] = np.transpose(
-                    np.array(assemble_result['x']))
+                assemble_result[key] = np.transpose(
+                    np.array(assemble_result[key]))
 
             reg = f.get('lambda')[()]
             datafile_names = f.get('datafile_names')[()]
@@ -278,6 +284,7 @@ class EMaligner(argschema.ArgSchemaParser):
             weights = np.array([]).astype('float64')
             indices = np.array([]).astype('int64')
             indptr = np.array([]).astype('int64')
+            rhs = [np.array([]), np.array([])]
 
             fdir = os.path.dirname(filename)
             i = 0
@@ -293,26 +300,25 @@ class EMaligner(argschema.ArgSchemaParser):
                             indptr,
                             f.get('indptr')[()][1:] + indptr[-1])
                     weights = np.append(weights, f.get('weights')[()])
+
+                    k = 0
+                    while True:
+                        name = 'rhs_%d' % k
+                        if name in f.keys():
+                            rhs[k] = np.append(rhs[k], f.get(name)[()])
+                            k += 1
+                        else:
+                            break
                     logger.info('  %s read' % fname)
 
             assemble_result['A'] = csr_matrix((data, indices, indptr))
+            assemble_result['rhs'] = rhs[0].reshape(-1, 1)
+            if rhs[1].size > 0:
+                assemble_result['rhs'] = np.hstack((
+                    assemble_result['rhs'],
+                    rhs[1].reshape(-1, 1)))
             assemble_result['weights'] = sparse.diags(
                     [weights], [0], format='csr')
-
-        # alert about differences between this call and the original
-        for k in file_args.keys():
-            if k in self.args.keys():
-                if file_args[k] != self.args[k]:
-                    logger.warning("for key \"%s\" " % k)
-                    logger.warning("  from file: " + str(file_args[k]))
-                    logger.warning("  this call: " + str(self.args[k]))
-            else:
-                logger.warning("for key \"%s\" " % k)
-                logger.warning("  file     : " + str(file_args[k]))
-                logger.warning("  this call: not specified")
-
-        logger.info("csr inputs read from files listed in : "
-                    "%s" % self.args['assemble_from_file'])
 
         return assemble_result
 
@@ -326,6 +332,7 @@ class EMaligner(argschema.ArgSchemaParser):
         assemble_result['tiles_used'] = CSR_A.pop('tiles_used')
         assemble_result['reg'] = CSR_A.pop('reg')
         assemble_result['x'] = CSR_A.pop('x')
+        assemble_result['rhs'] = CSR_A.pop('rhs')
 
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
@@ -348,6 +355,7 @@ class EMaligner(argschema.ArgSchemaParser):
             'x': None,
             'reg': None,
             'weights': None,
+            'rhs': None,
             'tiles_used': None,
             'metadata': None}
 
@@ -402,15 +410,15 @@ class EMaligner(argschema.ArgSchemaParser):
 
             func_result['metadata'] = []
             for pchunk in proc_chunks:
-                Awz = self.concatenate_results(results[pchunk])
-                if Awz:
+                A, w, rhs, z = self.concatenate_results(results[pchunk])
+                if A is not None:
                     fname = self.args['hdf5_options']['output_dir'] + \
-                        '/%d_%d.h5' % (Awz[2].min(), Awz[2].max())
+                        '/%d_%d.h5' % (z.min(), z.max())
                     func_result['metadata'].append(
-                        utils.write_chunk_to_file(fname, Awz[0], Awz[1].data))
+                        utils.write_chunk_to_file(fname, A, w.data, rhs))
 
         else:
-            func_result['A'], func_result['weights'], _ = \
+            func_result['A'], func_result['weights'], func_result['rhs'], _ = \
                     self.concatenate_results(results)
             slice_ind = np.concatenate(
                     [np.repeat(
@@ -424,18 +432,19 @@ class EMaligner(argschema.ArgSchemaParser):
     def concatenate_results(self, results):
         ind = np.flatnonzero(results)
         if ind.size == 0:
-            return None
+            return None, None, None, None
 
         A = sparse.vstack([r['block'] for r in results[ind]])
         weights = sparse.diags(
                     [np.concatenate([r['weights'] for r in results[ind]])],
                     [0],
                     format='csr')
+        rhs = np.concatenate([r.pop('rhs') for r in results[ind]])
         zlist = np.concatenate([r.pop('zlist') for r in results[ind]])
 
-        return A, weights, zlist
+        return A, weights, rhs, zlist
 
-    def solve_or_not(self, A, weights, reg, x0):
+    def solve_or_not(self, A, weights, reg, x0, rhs):
         # not
         if self.args['output_mode'] in ['hdf5']:
             message = '*****\nno solve for file output\n'
@@ -453,7 +462,7 @@ class EMaligner(argschema.ArgSchemaParser):
             message = message.replace(' hdf5 ', ' none ')
             results = None
         else:
-            results = utils.solve(A, weights, reg, x0)
+            results = utils.solve(A, weights, reg, x0, rhs)
             message = utils.message_from_solve_results(results)
 
         return message, results

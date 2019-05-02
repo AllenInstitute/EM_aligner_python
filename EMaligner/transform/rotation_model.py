@@ -1,27 +1,29 @@
 import renderapi
-from .utils import AlignerTransformException
 import numpy as np
 from scipy.sparse import csr_matrix
-__all__ = ['AlignerSimilarityModel']
+from scipy.linalg import block_diag
+from .utils import aff_matrix, AlignerTransformException
+__all__ = ['AlignerRotationModel']
 
 
-class AlignerSimilarityModel(renderapi.transform.AffineModel):
+class AlignerRotationModel(renderapi.transform.AffineModel):
 
-    def __init__(self, transform=None):
+    def __init__(self, transform=None, order=2):
 
         if transform is not None:
-            if isinstance(transform, renderapi.transform.AffineModel):
-                super(AlignerSimilarityModel, self).__init__(
+            if isinstance(
+                    transform, renderapi.transform.AffineModel):
+                super(AlignerRotationModel, self).__init__(
                         json=transform.to_dict())
             else:
                 raise AlignerTransformException(
                         "can't initialize %s with %s" % (
                             self.__class__, transform.__class__))
         else:
-            super(AlignerSimilarityModel, self).__init__()
+            super(AlignerRotationModel, self).__init__()
 
-        self.DOF_per_tile = 4
-        self.rows_per_ptmatch = 4
+        self.DOF_per_tile = 1
+        self.rows_per_ptmatch = 1
 
     def to_solve_vec(self):
         """sets solve vector values from transform parameters
@@ -31,13 +33,8 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         vec : numpy array
             transform parameters in solve form
         """
-        vec = np.array([
-            self.M[0, 0],
-            self.M[0, 1],
-            self.M[0, 2],
-            self.M[1, 2]])
-        vec = vec.reshape((vec.size, 1))
-        return vec
+
+        return np.array([self.rotation]).reshape(-1, 1)
 
     def from_solve_vec(self, vec):
         """reads values from solution and sets transform parameters
@@ -54,14 +51,9 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
             number of values read from vec. Used to increment vec slice
             for next transform
         """
-        self.M[0, 0] = vec[0]
-        self.M[0, 1] = vec[1]
-        self.M[0, 2] = vec[2]
-        self.M[1, 0] = -vec[1]
-        self.M[1, 1] = vec[0]
-        self.M[1, 2] = vec[3]
-        n = 4
-        return n
+        newr = aff_matrix(vec[0][0])
+        self.M[0:2, 0:2] = newr.dot(self.M[0:2, 0:2])
+        return 1
 
     def regularization(self, regdict):
         """regularization vector
@@ -76,10 +68,9 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         reg : numpy array
             array of regularization values of length DOF_per_tile
         """
+
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
             regdict['default_lambda']
-        reg[2::4] *= regdict['translation_factor']
-        reg[3::4] *= regdict['translation_factor']
         return reg
 
     def block_from_pts(self, pts, w, col_ind, col_max):
@@ -88,7 +79,7 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         Parameters
         ----------
         pts :  numpy array
-            N x 2, the x, y values of the match (either p or q)
+            N x 1, preprocessed from preprocess()
         w : numpy array
             the weights associated with the pts
         col_ind : int
@@ -103,28 +94,37 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         w : numpy array
             the weights associated with the rows of this block
         """
-        px = pts[:, 0]
-        py = pts[:, 1]
-        npts = px.size
-        pxm = px - px.mean()
-        pym = py - py.mean()
-        ones = np.ones_like(px)
 
-        data = np.concatenate((
-            np.vstack((px, py, ones)).transpose().flatten(),
-            np.vstack((-px, py, ones)).transpose().flatten(),
-            np.vstack((pxm, pym)).transpose().flatten(),
-            np.vstack((-pxm, pym)).transpose().flatten()))
+        data = np.ones(pts.size)
+        indices = np.ones(pts.size) * col_ind
+        indptr = np.arange(pts.size + 1)
+        rhs = pts.reshape(-1, 1) + self.rotation
 
-        indices = np.concatenate((
-            np.tile([0, 1, 2], npts),
-            np.tile([1, 0, 3], npts),
-            np.tile([0, 1], npts),
-            np.tile([1, 0], npts))) + col_ind
+        block = csr_matrix((data, indices, indptr), shape=(pts.size, col_max))
+        return block, w, rhs
 
-        i = np.concatenate(([3] * npts, [3] * npts, [2] * npts, [2] * npts))
-        indptr = np.concatenate(([0], np.cumsum(i)))
+    @staticmethod
+    def preprocess(ppts, qpts, w):
+        # center of mass
+        pcm = ppts - ppts.mean(axis=0)
+        qcm = qpts - qpts.mean(axis=0)
 
-        block = csr_matrix((data, indices, indptr), shape=(npts * 4, col_max))
-        rhs = np.zeros((npts * 4, 1))
-        return block, np.hstack((w, w, w, w)), rhs
+        # points very close to center of mass are noisy
+        rfilter = np.argwhere(
+                (np.linalg.norm(pcm, axis=1) > 15) &
+                (np.linalg.norm(qcm, axis=1) > 15)).flatten()
+        pcm = pcm[rfilter]
+        qcm = qcm[rfilter]
+        w = w[rfilter]
+
+        pangs = np.arctan2(pcm[:, 1], pcm[:, 0])
+
+        # rotate all the q values relative to p
+        ams = block_diag(*[aff_matrix(-i) for i in pangs])
+        qrot = ams.dot(qcm.flatten()).reshape(-1, 2)
+
+        delta_angs = np.arctan2(qrot[:, 1], qrot[:, 0])
+
+        pa = (-0.5 * delta_angs).reshape(-1, 1)
+        qa = (0.5 * delta_angs).reshape(-1, 1)
+        return pa, qa, w

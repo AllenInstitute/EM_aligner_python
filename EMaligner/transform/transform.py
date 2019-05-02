@@ -2,6 +2,8 @@ from .utils import AlignerTransformException
 from .affine_model import AlignerAffineModel
 from .similarity_model import AlignerSimilarityModel
 from .polynomial_model import AlignerPolynomial2DTransform
+from .rotation_model import AlignerRotationModel
+from .translation_model import AlignerTranslationModel
 __all__ = ['AlignerTransform']
 
 
@@ -29,6 +31,12 @@ class AlignerTransform(object):
         elif (name == 'SimilarityModel'):
             self.__class__ = AlignerSimilarityModel
             AlignerSimilarityModel.__init__(self, transform=transform)
+        elif (name == 'RotationModel'):
+            self.__class__ = AlignerRotationModel
+            AlignerRotationModel.__init__(self, transform=transform)
+        elif (name == 'TranslationModel'):
+            self.__class__ = AlignerTranslationModel
+            AlignerTranslationModel.__init__(self, transform=transform)
         elif (name == 'Polynomial2DTransform'):
             self.__class__ = AlignerPolynomial2DTransform
             AlignerPolynomial2DTransform.__init__(

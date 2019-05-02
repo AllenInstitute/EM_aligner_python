@@ -52,7 +52,7 @@ def test_sparse_block(matches, tilespecs):
         pspec = tilespecs[pi]
         qspec = tilespecs[qi]
 
-        pblock, qblock, weights = blocks_from_tilespec_pair(
+        pblock, qblock, weights, rhs = blocks_from_tilespec_pair(
                 pspec,
                 qspec,
                 match,
@@ -63,6 +63,8 @@ def test_sparse_block(matches, tilespecs):
 
         assert pblock.shape == qblock.shape == \
             (len(match['matches']['w']), ncol)
+
+        assert pblock.shape[0] == rhs.shape[0]
 
         pndof = pspec.tforms[-1].DOF_per_tile
         qndof = qspec.tforms[-1].DOF_per_tile
@@ -101,7 +103,6 @@ def test_sparse_npts(matches, tilespecs, random):
     for k, match in enumerate(fmatches):
         if not ((match['pGroupId'] in tids) & (match['qGroupId'] in tids)):
             continue
-        print(k)
         npts = len(match['matches']['w'])
 
         pi = tids.index(match['pGroupId'])
@@ -109,7 +110,7 @@ def test_sparse_npts(matches, tilespecs, random):
         pspec = tilespecs[pi]
         qspec = tilespecs[qi]
 
-        pqw = blocks_from_tilespec_pair(
+        pblock, qblock, weights, rhs = blocks_from_tilespec_pair(
                 pspec,
                 qspec,
                 match,
@@ -119,14 +120,14 @@ def test_sparse_npts(matches, tilespecs, random):
                 ma)
 
         if np.all(np.array(match['matches']['w']) == 0):
-            assert pqw is None
+            for x in [pblock, qblock, weights, rhs]:
+                assert x is None
             continue
 
         if len(match['matches']['w']) < ma['npts_min']:
-            assert pqw is None
+            for x in [pblock, qblock, weights, rhs]:
+                assert x is None
             continue
-
-        pblock, qblock, weights = pqw
 
         nrow = npts
         if npts > ma['npts_max']:

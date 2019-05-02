@@ -102,6 +102,17 @@ def determine_zvalue_pairs(resolved, depths):
 
 def ready_transforms(tilespecs, tform_name, fullsize, order):
     for t in tilespecs:
+        # for first starts with thin plate spline
+        if ((tform_name == 'ThinPlateSplineTransform') &
+                (not isinstance(
+                        t.tforms[-1],
+                        renderapi.transform.ThinPlateSplineTransform))):
+            xt, yt = np.meshgrid(
+                    np.linspace(0, t.width, 3), np.linspace(0, t.height, 3))
+            src = np.vstack((xt.flatten(), yt.flatten())).transpose()
+            dst = t.tforms[-1].tform(src)
+            t.tforms[-1] = renderapi.transform.ThinPlateSplineTransform()
+            t.tforms[-1].estimate(src, dst)
         t.tforms[-1] = AlignerTransform(
             name=tform_name,
             transform=t.tforms[-1],

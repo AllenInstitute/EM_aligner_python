@@ -392,6 +392,14 @@ class EMaligner(argschema.ArgSchemaParser):
             func_result['x'].append(t.tforms[-1].to_solve_vec())
             reg.append(
                     t.tforms[-1].regularization(self.args['regularization']))
+
+        if len(func_result['x']) == 0:
+            raise utils.EMalignerException(
+                    "no matrix was assembled. Likely scenarios: "
+                    "your tilespecs and pointmatches do not key "
+                    " to each other in group or tileId. Or, your match "
+                    " collection is empty")
+
         func_result['x'] = np.concatenate(func_result['x'])
         func_result['reg'] = sparse.diags(
                 [np.concatenate(reg)], [0], format='csr')

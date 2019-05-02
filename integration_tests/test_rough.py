@@ -51,6 +51,25 @@ def rough_input_stack(render):
     renderapi.stack.delete_stack(test_rough_stack, render=render)
 
 
+# raw stack tiles with tileids renamed
+@pytest.fixture(scope='module')
+def rough_input_stack_renamed(render):
+    test_rough_stack = 'rough_input_stack_renamed'
+    with open(FILE_ROUGH_TILES, 'r') as f:
+        j = json.load(f)
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
+    for i in range(len(tilespecs)):
+        tilespecs[i].tileId = 'garbage_%d' % i
+    # no matches will match this
+    renderapi.stack.create_stack(test_rough_stack, render=render)
+    renderapi.client.import_tilespecs(
+            test_rough_stack, tilespecs, render=render)
+    renderapi.stack.set_stack_state(
+            test_rough_stack, 'COMPLETE', render=render)
+    yield test_rough_stack
+    renderapi.stack.delete_stack(test_rough_stack, render=render)
+
+
 # raw stack tiles with one z removed
 @pytest.fixture(scope='module')
 def rough_input_stack_2(render):

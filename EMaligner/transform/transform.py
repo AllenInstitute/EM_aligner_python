@@ -4,6 +4,7 @@ from .similarity_model import AlignerSimilarityModel
 from .polynomial_model import AlignerPolynomial2DTransform
 from .rotation_model import AlignerRotationModel
 from .translation_model import AlignerTranslationModel
+from .thinplatespline_model import AlignerThinPlateSplineTransform
 __all__ = ['AlignerTransform']
 
 
@@ -42,6 +43,10 @@ class AlignerTransform(object):
             AlignerPolynomial2DTransform.__init__(
                     self, transform=transform,
                     order=order)
+        elif (name == 'ThinPlateSplineTransform'):
+            self.__class__ = AlignerThinPlateSplineTransform
+            AlignerThinPlateSplineTransform.__init__(
+                    self, transform=transform)
         else:
             raise AlignerTransformException(
                     'transform %s not in possible choices:' % name)

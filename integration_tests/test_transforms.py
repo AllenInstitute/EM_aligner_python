@@ -6,6 +6,8 @@ from EMaligner.transform.similarity_model import AlignerSimilarityModel
 from EMaligner.transform.rotation_model import AlignerRotationModel
 from EMaligner.transform.translation_model import AlignerTranslationModel
 from EMaligner.transform.polynomial_model import AlignerPolynomial2DTransform
+from EMaligner.transform.thinplatespline_model import \
+        AlignerThinPlateSplineTransform
 from EMaligner.transform.utils import AlignerTransformException, aff_matrix
 import numpy as np
 
@@ -78,17 +80,32 @@ def test_transform():
     t = AlignerTransform(name='Polynomial2DTransform', transform=rt)
     assert(t.__class__ == AlignerPolynomial2DTransform)
 
+    # one way to load thinplatespline
+    x = y = np.linspace(0, 2000, 4)
+    xt, yt = np.meshgrid(x, y)
+    src = np.vstack((xt.flatten(), yt.flatten())).transpose()
+    dst = rt.tform(src)
+    tps = renderapi.transform.ThinPlateSplineTransform()
+    tps.estimate(src, dst)
+    t = AlignerTransform(name='ThinPlateSplineTransform', transform=tps)
+    assert(t.__class__ == AlignerThinPlateSplineTransform)
+    del t
+
     # specifying something not real
     with pytest.raises(AlignerTransformException):
-        t = AlignerTransform(name='LudicrousModel')
+        AlignerTransform(name='LudicrousModel')
 
 
-def example_match(npts):
+def example_match(npts, fac=1):
     match = {}
     match['matches'] = {
             "w": list(np.ones(npts)),
-            "p": [list(np.random.randn(npts)), list(np.random.randn(npts))],
-            "q": [list(np.random.randn(npts)), list(np.random.randn(npts))]
+            "p": [
+                list(np.random.rand(npts) * fac),
+                list(np.random.rand(npts) * fac)],
+            "q": [
+                list(np.random.rand(npts) * fac),
+                list(np.random.rand(npts) * fac)]
             }
     return match
 
@@ -348,17 +365,18 @@ def test_rotation_model():
     # make block
     t = AlignerTransform(name='RotationModel', transform=rt, fullsize=True)
     nmatch = 100
-    match = example_match(nmatch)
+    # scale up because rotation filters out things near center-of-mass
+    match = example_match(nmatch, fac=1000)
     ncol = 1000
     icol = 73
 
-    # scale up because rotation filters out things near center-of-mass
     ppts, qpts, w = AlignerRotationModel.preprocess(
-            np.array(match['matches']['p']).transpose() * 1000,
-            np.array(match['matches']['q']).transpose() * 1000,
+            np.array(match['matches']['p']).transpose(),
+            np.array(match['matches']['q']).transpose(),
             np.array(match['matches']['w']))
 
-    assert ppts.shape == qpts.shape == (nmatch, 1)
+    assert ppts.shape == qpts.shape
+    assert ppts.shape[0] <= nmatch
 
     block, weights, rhs = t.block_from_pts(
             ppts,
@@ -366,11 +384,11 @@ def test_rotation_model():
             icol,
             ncol)
 
-    assert rhs.shape == (nmatch, 1)
+    assert rhs.shape == ppts.shape
     assert block.check_format() is None
-    assert weights.size == nmatch * t.rows_per_ptmatch
-    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
-    assert block.nnz == 1 * nmatch
+    assert weights.size == ppts.shape[0]
+    assert block.shape == (ppts.shape[0] * t.rows_per_ptmatch, ncol)
+    assert block.nnz == ppts.shape[0]
 
     # to vec
     t = AlignerTransform(name='RotationModel')
@@ -450,3 +468,88 @@ def test_translation_model():
     t = AlignerTransform(name='TranslationModel')
     r = t.regularization(rdict)
     assert np.all(np.isclose(r, 0.12345))
+
+
+@pytest.mark.parametrize('computeAffine', [True, False])
+def test_thinplate_model(computeAffine):
+    # can't do this
+    rt = renderapi.transform.Polynomial2DTransform()
+    with pytest.raises(AlignerTransformException):
+        t = AlignerThinPlateSplineTransform(transform=rt)
+
+    # or this
+    with pytest.raises(AlignerTransformException):
+        t = AlignerTransform(name='ThinPlateSplineTransform')
+
+    hw = 5000
+    x = y = np.linspace(0, hw, 4)
+    xt, yt = np.meshgrid(x, y)
+    src = np.vstack((xt.flatten(), yt.flatten())).transpose()
+    dst = src + np.random.randn(src.shape[0], src.shape[1]) * 50
+
+    # check args
+    rt = renderapi.transform.ThinPlateSplineTransform()
+    rt.estimate(src, dst, computeAffine=computeAffine)
+    t = AlignerTransform(name='ThinPlateSplineTransform', transform=rt)
+    assert(t.__class__ == AlignerThinPlateSplineTransform)
+
+    # make block
+    nmatch = 100
+    match = example_match(nmatch, fac=hw)
+    ncol = 1000
+    icol = 73
+
+    block, weights, rhs = t.block_from_pts(
+            np.array(match['matches']['p']).transpose(),
+            np.array(match['matches']['w']),
+            icol,
+            ncol)
+
+    assert rhs.shape == (nmatch, 2)
+    assert block.check_format() is None
+    assert weights.size == nmatch * t.rows_per_ptmatch
+    assert block.shape == (nmatch * t.rows_per_ptmatch, ncol)
+    if computeAffine:
+        assert block.nnz == nmatch * (t.srcPts.shape[1] + 3)
+    else:
+        assert block.nnz == nmatch * t.srcPts.shape[1]
+
+    # to vec
+    v = t.to_solve_vec()
+    if computeAffine:
+        assert v.shape == (t.srcPts.shape[1] + 3, 2)
+    else:
+        assert v.shape == (t.srcPts.shape[1], 2)
+
+    # from vec
+    ntiles = 6
+    vec = np.tile(v, (ntiles, 1))
+    vec = vec.reshape(-1, 2)
+    index = 0
+    orig = renderapi.transform.ThinPlateSplineTransform()
+    orig.estimate(src, dst, computeAffine=computeAffine)
+    for i in range(ntiles):
+        index += t.from_solve_vec(vec[index:, :])
+        assert np.all(np.isclose(orig.dMtxDat, t.dMtxDat))
+        if computeAffine:
+            assert np.all(np.isclose(orig.aMtx, t.aMtx))
+            assert np.all(np.isclose(orig.bVec, t.bVec))
+
+    # reg
+    rdict = {
+            "default_lambda": 1.2345,
+            "translation_factor": 0.1,
+            "thinplate_factor": 1000}
+    r = t.regularization(rdict)
+    n0 = 0
+    if computeAffine:
+        assert np.isclose(
+                r[0], rdict['default_lambda'] * rdict['translation_factor'])
+        assert np.all(np.isclose(r[1:3], rdict['default_lambda']))
+        n0 += 3
+    assert np.all(np.isclose(
+        r[n0:], rdict['default_lambda'] * rdict['thinplate_factor']))
+
+    # scale
+    assert isinstance(t.scale, tuple)
+    assert len(t.scale) == 2

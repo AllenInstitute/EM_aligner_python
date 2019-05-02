@@ -155,6 +155,11 @@ class regularization(DefaultSchema):
     freeze_first_tile = Boolean(
         default=False,
         required=False)
+    thinplate_factor = Float(
+        required=False,
+        default=1e-5,
+        missing=1e-5,
+        description="factor for thin plate spline control points")
 
 
 class input_db(db_params):
@@ -257,7 +262,7 @@ class EMA_Schema(ArgSchema):
         validate=lambda x: x in [
             'AffineModel', 'SimilarityModel', 'Polynomial2DTransform',
             'affine', 'rigid', 'affine_fullsize', 'RotationModel',
-            'TranslationModel'])
+            'TranslationModel', 'ThinPlateSplineTransform'])
     fullsize_transform = Boolean(
         default=False,
         description='use fullsize affine transform')

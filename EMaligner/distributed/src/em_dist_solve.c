@@ -97,7 +97,7 @@ int main(int argc,char **args)
   free(local_data);
   if (rank==0){
     printf("A matrix created\n");
-    ShowMatInfo(PETSC_COMM_WORLD, &A, "");
+    //ShowMatInfo(PETSC_COMM_WORLD, &A, "");
   }
   PetscLogStagePop();
 

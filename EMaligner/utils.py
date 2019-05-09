@@ -243,6 +243,8 @@ def get_matches(iId, jId, collection, dbconnection):
 
 
 def write_chunk_to_file(fname, c, file_weights, rhs):
+    print(c.shape, c.nnz)
+
     fcsr = h5py.File(fname, "w")
 
     indptr_dset = fcsr.create_dataset(
@@ -338,7 +340,7 @@ def write_reg_and_tforms(
         dset[:] = vec
 
         # keep track here what tile_ids were used
-        str_type = h5py.special_dtype(vlen=str)
+        str_type = h5py.special_dtype(vlen=bytes)
         dset = f.create_dataset(
                 "used_tile_ids",
                 (tids.size,),
@@ -547,12 +549,11 @@ def get_z_values_for_stack(stack, zvals):
     return zvals[ind]
 
 
-def update_tilespecs(resolved, x, used):
+def update_tilespecs(resolved, x):
     index = 0
     for i in range(len(resolved.tilespecs)):
-        if used[i]:
-            index += resolved.tilespecs[i].tforms[-1].from_solve_vec(
-                    x[index:, :])
+        index += resolved.tilespecs[i].tforms[-1].from_solve_vec(
+                x[index:, :])
     return
 
 

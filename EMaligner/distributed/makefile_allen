@@ -1,5 +1,10 @@
-include ${PETSC_DIR}/install/lib/petsc/conf/variables
-include ${PETSC_DIR}/install/lib/petsc/conf/rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
+
+run:
+	@echo $(DYNAMICLINKER)
+	@echo $(PETSC_KSP_LIB)
+	@echo "test"
 
 em_dist_solve: src/ema.o src/em_dist_solve.o chkopts
 	${CLINKER} -o bin/em_dist_solve src/ema.o src/em_dist_solve.o  ${PETSC_KSP_LIB}

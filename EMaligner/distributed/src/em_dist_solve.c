@@ -91,11 +91,13 @@ int main(int argc,char **args)
   ierr = ReadLocalCSR(PETSC_COMM_SELF,csrnames,local_firstfile,local_lastfile,local_indptr,local_jcol,local_data,local_weights);CHKERRQ(ierr);
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,global_nrow,global_ncol,local_indptr,local_jcol,local_data,&A);
+  //MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,PETSC_DETERMINE,global_ncol,local_indptr,local_jcol,local_data,&A);
   free(local_indptr);
   free(local_jcol);
   free(local_data);
   if (rank==0){
     printf("A matrix created\n");
+    ShowMatInfo(PETSC_COMM_WORLD, &A, "");
   }
   PetscLogStagePop();
 
@@ -109,7 +111,7 @@ int main(int argc,char **args)
   /*  Start the K matrix with K = AT*W*A */
   ierr = MatPtAP(W,A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&K);CHKERRQ(ierr);
   //MatDestroy(&A);
-  MatDestroy(&W);
+  //MatDestroy(&W);
 
   //find out how the rows are distributed
   MatGetOwnershipRange(K,&local_row0,&local_rowN);
@@ -144,7 +146,7 @@ int main(int argc,char **args)
     ierr = VecDuplicate(rhs[i],&Lm[i]);CHKERRQ(ierr);
     ierr = MatMult(L,rhs[i],Lm[i]);CHKERRQ(ierr);
   }
-  MatDestroy(&L);
+  //MatDestroy(&L);
   if (rank==0){
     printf("Lm(s) created\n");
   }
@@ -195,6 +197,7 @@ int main(int argc,char **args)
       ierr = CopyDataSetstoSolutionOut(PETSC_COMM_SELF,sln_input,sln_output); CHKERRQ(ierr);
   }
   ierr = PetscViewerHDF5Open(PETSC_COMM_WORLD,sln_output,FILE_MODE_APPEND,&viewer);CHKERRQ(ierr);
+  printf("nrhs : %d", nrhs);
   for (i=0;i<nrhs;i++){
     PetscTime(&t0);
     ierr = VecDuplicate(rhs[i],&x[i]);CHKERRQ(ierr);

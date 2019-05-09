@@ -215,8 +215,7 @@ class EMaligner(argschema.ArgSchemaParser):
         if results:
             utils.update_tilespecs(
                     self.resolvedtiles,
-                    results['x'],
-                    assemble_result['tiles_used'])
+                    results['x'])
             scales = np.array(
                     [t.tforms[-1].scale
                      for t in self.resolvedtiles.tilespecs])
@@ -388,7 +387,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
         func_result['x'] = []
         reg = []
-        for t in np.array(resolved.tilespecs)[func_result['tiles_used']]:
+        for t in np.array(resolved.tilespecs):
             func_result['x'].append(t.tforms[-1].to_solve_vec())
             reg.append(
                     t.tforms[-1].regularization(self.args['regularization']))
@@ -428,12 +427,6 @@ class EMaligner(argschema.ArgSchemaParser):
         else:
             func_result['A'], func_result['weights'], func_result['rhs'], _ = \
                     self.concatenate_results(results)
-            slice_ind = np.concatenate(
-                    [np.repeat(
-                        func_result['tiles_used'][i],
-                        resolved.tilespecs[i].tforms[-1].DOF_per_tile)
-                     for i in range(tile_ids.size)])
-            func_result['A'] = func_result['A'][:, slice_ind]
 
         return func_result
 

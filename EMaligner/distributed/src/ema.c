@@ -117,8 +117,8 @@ PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char o
   herr_t      status;
   hsize_t     dims[1];
   int nds = 10;
-  char *copyds[10] = {"input_args", "used_tile_ids", "unused_tile_ids", 
-	  "datafile_maxcol", "datafile_mincol", "datafile_names",
+  char *copyids[10] = {"input_args", "used_tile_ids", "unused_tile_ids", 
+	  "datafile_names", "datafile_maxcol", "datafile_mincol",
 	  "datafile_nnz", "datafile_nrows", "lambda", "transform_list"};
   char **rdata;
   int ndims,i;
@@ -126,15 +126,18 @@ PetscErrorCode CopyDataSetstoSolutionOut(MPI_Comm COMM, char indexname [],char o
   filein = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
   fileout = H5Fcreate (outputname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   for (i=0;i<nds;i++){ 
-      dset = H5Dopen (filein,copyds[i],H5P_DEFAULT);
+      dset = H5Dopen (filein,copyids[i],H5P_DEFAULT);
       filetype = H5Dget_type (dset);
       space = H5Dget_space (dset);
       ndims = H5Sget_simple_extent_dims (space, dims, NULL);
       rdata = (char **) malloc (dims[0] * sizeof (char *));
-      memtype = H5Tcopy (H5T_C_S1);
-      status = H5Tset_size (memtype, H5T_VARIABLE);
+      memtype = H5Dget_type(dset);
+      if (i<4){
+          memtype = H5Tcopy (H5T_C_S1);
+          status = H5Tset_size (memtype, H5T_VARIABLE);
+      }
       status = H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
-      dsetout = H5Dcreate (fileout, copyds[i], filetype, space, H5P_DEFAULT, H5P_DEFAULT,H5P_DEFAULT);
+      dsetout = H5Dcreate (fileout, copyids[i], filetype, space, H5P_DEFAULT, H5P_DEFAULT,H5P_DEFAULT);
       status = H5Dwrite (dsetout, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
       status = H5Dclose (dset);
       status = H5Dclose (dsetout);
@@ -421,6 +424,7 @@ PetscErrorCode ReadLocalCSR(MPI_Comm COMM, char *csrnames[], int local_firstfile
       local_indptr[j+roff] = iptr[j]+poff;
     }
     ISRestoreIndices(indptr,&iptr);
+    printf("niptr : %d\n", niptr);
     poff = local_indptr[niptr-1+roff];
     roff += niptr-1;
 

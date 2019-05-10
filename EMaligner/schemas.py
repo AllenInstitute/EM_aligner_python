@@ -63,6 +63,10 @@ class db_params(DefaultSchema):
         required=False,
         default='5G',
         description='string describing java heap memory (default 5G)')
+    validate_client = Boolean(
+        required=False,
+        default=False,
+        description="let's not check")
 
     @mm.pre_load
     def tolist(self, data):

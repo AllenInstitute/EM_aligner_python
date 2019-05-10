@@ -4,7 +4,7 @@ wget -O- http://neuro.debian.net/lists/xenial.us-ca.full | sudo tee /etc/apt/sou
 sudo apt-key adv --recv-keys --keyserver hkp://pool.sks-keyservers.net:80 0xA5D32F012649A5A9
 sudo apt-get update
 
-sudo apt-get install -y singularity-container
+sudo apt-get install -y --allow-unauthenticated singularity-container 
 
 ## install go
 #export VERSION=1.11 OS=linux ARCH=amd64

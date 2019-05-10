@@ -16,7 +16,7 @@ addons:
       - libatlas-base-dev
       - libopenblas-base
       - libopenblas-dev
-      - default-jdk
+      - oracle-java9-set-default
       - gfortran
       - maven
       - build-essential
@@ -34,7 +34,7 @@ install:
   - mkdir -p \tmp\solver_output
 before_install:
   - git clone --depth 1 https://github.com/saalfeldlab/render.git render -b master
-  - mvn package -pl render-ws-java-client -am -DskipTests -f render/pom.xml --add-modules java.xml.bind
+  - mvn package -pl render-ws-java-client -am -DskipTests -f render/pom.xml
   - export RENDER_CLIENT_JAR=`readlink -m $TRAVIS_BUILD_DIR/render/render-ws-java-client/target/render-ws-java-client-*-standalone.jar`
   - export RENDER_JAVA_HOME=$JAVA_HOME
   - docker-compose up -d

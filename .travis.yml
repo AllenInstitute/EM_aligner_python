@@ -16,7 +16,7 @@ addons:
       - libatlas-base-dev
       - libopenblas-base
       - libopenblas-dev
-      - oracle-java9-set-default
+      - default-jdk
       - gfortran
       - maven
       - build-essential

@@ -40,7 +40,8 @@
         "mongo_port": {{mongo_port}},
         "client_scripts": "{{render_client_scripts}}",
         "collection_type": "stack",
-        "db_interface": "render"
+        "db_interface": "render",
+	"use_rest": true
     }, 
     "hdf5_options": {
         "output_dir": "{{solver_output_dir}}",

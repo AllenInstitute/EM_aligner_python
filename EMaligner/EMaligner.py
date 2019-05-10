@@ -288,7 +288,7 @@ class EMaligner(argschema.ArgSchemaParser):
             fdir = os.path.dirname(filename)
             i = 0
             for fname in datafile_names:
-                with h5py.File(os.path.join(fdir, fname), 'r') as f:
+                with h5py.File(os.path.join(fdir, fname.decode('utf-8')), 'r') as f:
                     data = np.append(data, f.get('data')[()])
                     indices = np.append(indices, f.get('indices')[()])
                     if i == 0:

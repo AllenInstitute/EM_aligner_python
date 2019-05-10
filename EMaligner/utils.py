@@ -243,8 +243,6 @@ def get_matches(iId, jId, collection, dbconnection):
 
 
 def write_chunk_to_file(fname, c, file_weights, rhs):
-    print(c.shape, c.nnz)
-
     fcsr = h5py.File(fname, "w")
 
     indptr_dset = fcsr.create_dataset(

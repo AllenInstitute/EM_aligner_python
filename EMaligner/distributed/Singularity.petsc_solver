@@ -1,0 +1,15 @@
+Bootstrap: shub
+From: AllenInstitute/EM_aligner_python:petsc 
+
+%post
+    # get some variables from the parent image
+    . /sourceme
+
+    git clone --branch $BRANCH --single-branch https://github.com/AllenInstitute/EM_aligner_python 
+    cd /EM_aligner_python/EMaligner/distributed/
+
+    make -f makefile_allen em_dist_solve
+
+%runscript
+    . /sourceme
+    exec /EM_aligner_python/EMaligner/distributed/bin/em_dist_solve "$@"

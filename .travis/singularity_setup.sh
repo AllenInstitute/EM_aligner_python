@@ -1,5 +1,17 @@
 #!/bin/bash -ex
 
+# install go
+export VERSION=1.11 OS=linux ARCH=amd64
+wget https://dl.google.com/go/go$VERSION.$OS-$ARCH.tar.gz
+sudo tar -C /usr/local -xzvf go$VERSION.$OS-$ARCH.tar.gz
+rm go$VERSION.$OS-$ARCH.tar.gz
+
+echo 'export GOPATH=${HOME}/go' >> ~/.bashrc
+echo 'export PATH=/usr/local/go/bin:${PATH}:${GOPATH}/bin' >> ~/.bashrc
+source ~/.bashrc
+
+go get -u github.com/golang/dep/cmd/dep
+
 sudo sed -i -e 's/^Defaults\tsecure_path.*$//' /etc/sudoers
 
 # Check Python

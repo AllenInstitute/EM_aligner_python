@@ -25,7 +25,7 @@ echo "sregistry Version:"
 
 # Install Singularity
 
-export VERSION= 3.1.1 && # adjust this as necessary
+export VERSION=3.1.1 
 mkdir -p $GOPATH/src/github.com/sylabs
 cd $GOPATH/src/github.com/sylabs
 wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-${VERSION}.tar.gz

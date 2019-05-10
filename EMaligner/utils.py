@@ -439,6 +439,7 @@ def write_to_new_stack(
             render=ingestconn,
             close_stack=False,
             mpPool=pool,
+            poolsize=args['n_parallel_jobs'],
             stderr=stdeo,
             stdout=stdeo,
             use_rest=output_stack['use_rest'])

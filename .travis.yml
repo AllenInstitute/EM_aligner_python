@@ -34,7 +34,6 @@ install:
 before_install:
   - sudo add-apt-repository ppa:webupd8team/java -y
   - sudo apt-get update -q
-  - sudo apt-get install oracle-java9-installer -y
   - sudo apt-get install oracle-java9-set-default -y
   - git clone --depth 1 https://github.com/saalfeldlab/render.git render -b master
   - mvn package -pl render-ws-java-client -am -DskipTests -f render/pom.xml

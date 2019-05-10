@@ -1,49 +1,54 @@
 #!/bin/bash -ex
 
-# install go
-export VERSION=1.11 OS=linux ARCH=amd64
-wget https://dl.google.com/go/go$VERSION.$OS-$ARCH.tar.gz
-sudo tar -C /usr/local -xzf go$VERSION.$OS-$ARCH.tar.gz
-rm go$VERSION.$OS-$ARCH.tar.gz
+wget -O- http://neuro.debian.net/lists/xenial.us-ca.full | sudo tee /etc/apt/sources.list.d/neurodebian.sources.list
+sudo apt-key adv --recv-keys --keyserver hkp://pool.sks-keyservers.net:80 0xA5D32F012649A5A9
 
-echo 'export GOPATH=${HOME}/go' >> ~/.bashrc
-echo 'export PATH=/usr/local/go/bin:${PATH}:${GOPATH}/bin' >> ~/.bashrc
-source ~/.bashrc
+sudo apt-get install -y singularity-container
 
-go get -u github.com/golang/dep/cmd/dep
-
-sudo sed -i -e 's/^Defaults\tsecure_path.*$//' /etc/sudoers
-
-# Check Python
-
-echo "Python Version:"
-python --version
-pip install sregistry[all]
-sregistry version
-
-echo "sregistry Version:"
-
-# Install Singularity
-
-export VERSION=3.1.1 
-mkdir -p $GOPATH/src/github.com/sylabs
-cd $GOPATH/src/github.com/sylabs
-wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-${VERSION}.tar.gz
-tar -xzf singularity-${VERSION}.tar.gz
-cd singularity
-
-./mconfig
-make -C ./builddir
-sudo make -C ./builddir install
-
-#SINGULARITY_BASE="${GOPATH}/src/github.com/sylabs/singularity"
-#export PATH="${GOPATH}/bin:${PATH}"
+## install go
+#export VERSION=1.11 OS=linux ARCH=amd64
+#wget https://dl.google.com/go/go$VERSION.$OS-$ARCH.tar.gz
+#sudo tar -C /usr/local -xzf go$VERSION.$OS-$ARCH.tar.gz
+#rm go$VERSION.$OS-$ARCH.tar.gz
 #
-#mkdir -p "${GOPATH}/src/github.com/sylabs"
-#cd "${GOPATH}/src/github.com/sylabs"
+#echo 'export GOPATH=${HOME}/go' >> ~/.bashrc
+#echo 'export PATH=/usr/local/go/bin:${PATH}:${GOPATH}/bin' >> ~/.bashrc
+#source ~/.bashrc
 #
-#git clone -b release-3.2 https://github.com/sylabs/singularity
+#go get -u github.com/golang/dep/cmd/dep
+#
+#sudo sed -i -e 's/^Defaults\tsecure_path.*$//' /etc/sudoers
+#
+## Check Python
+#
+#echo "Python Version:"
+#python --version
+#pip install sregistry[all]
+#sregistry version
+#
+#echo "sregistry Version:"
+#
+## Install Singularity
+#
+#export VERSION=3.1.1 
+#mkdir -p $GOPATH/src/github.com/sylabs
+#cd $GOPATH/src/github.com/sylabs
+#wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-${VERSION}.tar.gz
+#tar -xzf singularity-${VERSION}.tar.gz
 #cd singularity
-#./mconfig -v -p /usr/local
-#make -j `nproc 2>/dev/null || echo 1` -C ./builddir all
+#
+#./mconfig
+#make -C ./builddir
 #sudo make -C ./builddir install
+#
+##SINGULARITY_BASE="${GOPATH}/src/github.com/sylabs/singularity"
+##export PATH="${GOPATH}/bin:${PATH}"
+##
+##mkdir -p "${GOPATH}/src/github.com/sylabs"
+##cd "${GOPATH}/src/github.com/sylabs"
+##
+##git clone -b release-3.2 https://github.com/sylabs/singularity
+##cd singularity
+##./mconfig -v -p /usr/local
+##make -j `nproc 2>/dev/null || echo 1` -C ./builddir all
+##sudo make -C ./builddir install

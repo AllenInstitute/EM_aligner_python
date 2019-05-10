@@ -31,7 +31,7 @@ def rough_input_stack(render):
     tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
     renderapi.stack.create_stack(test_rough_stack, render=render)
     renderapi.client.import_tilespecs(
-            test_rough_stack, tilespecs, render=render)
+            test_rough_stack, tilespecs, render=render, use_rest=True)
     renderapi.stack.set_stack_state(
             test_rough_stack, 'COMPLETE', render=render)
     yield test_rough_stack

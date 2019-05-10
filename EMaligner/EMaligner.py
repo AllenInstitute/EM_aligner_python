@@ -269,7 +269,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
             reg = f.get('lambda')[()]
             datafile_names = f.get('datafile_names')[()]
-            file_args = json.loads(f.get('input_args')[()][0])
+            file_args = json.loads(f.get('input_args')[()][0].decode('utf-8'))
 
         # get the tile IDs and transforms
         tids = np.array([

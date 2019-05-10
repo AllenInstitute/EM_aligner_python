@@ -44,7 +44,7 @@ def rough_input_stack(render):
     tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
     renderapi.stack.create_stack(test_rough_stack, render=render)
     renderapi.client.import_tilespecs(
-            test_rough_stack, tilespecs, render=render)
+            test_rough_stack, tilespecs, render=render, use_rest=True)
     renderapi.stack.set_stack_state(
             test_rough_stack, 'COMPLETE', render=render)
     yield test_rough_stack
@@ -63,7 +63,7 @@ def rough_input_stack_renamed(render):
     # no matches will match this
     renderapi.stack.create_stack(test_rough_stack, render=render)
     renderapi.client.import_tilespecs(
-            test_rough_stack, tilespecs, render=render)
+            test_rough_stack, tilespecs, render=render, use_rest=True)
     renderapi.stack.set_stack_state(
             test_rough_stack, 'COMPLETE', render=render)
     yield test_rough_stack
@@ -80,7 +80,7 @@ def rough_input_stack_2(render):
     renderapi.stack.create_stack(
             test_rough_stack2, render=render)
     renderapi.client.import_tilespecs(
-            test_rough_stack2, tilespecs, render=render)
+            test_rough_stack2, tilespecs, render=render, use_rest=True)
     z_values = renderapi.stack.get_z_values_for_stack(
             test_rough_stack2, render=render)
     renderapi.stack.delete_section(

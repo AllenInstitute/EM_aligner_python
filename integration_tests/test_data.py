@@ -23,9 +23,6 @@ mongo_port = os.environ.get('MONGO_PORT', 27017)
 render_owner = os.environ.get('RENDER_OWNER', "test")
 render_test_owner = os.environ.get('RENDER_TEST_OWNER', 'test')
 render_output_owner = os.environ.get("RENDER_OUTPUT_OWNER", "test")
-client_script_location = os.environ.get(
-        'RENDER_CLIENT_SCRIPTS',
-        '/var/www/render/render-ws-java-client/src/main/scripts/')
 project = 'test_project'
 outdir = os.environ.get('EM_ALIGNER_OUTPUT_DIR', '/home/danielk/tmp/tmp')
 
@@ -34,7 +31,7 @@ render_params = {
     'port': render_port,
     'owner': 'test',
     'project': project,
-    'client_scripts': client_script_location,
+    'client_scripts': '',
     'memGB': '1G',
     'validate_client': False
 }
@@ -53,7 +50,7 @@ montage_parameters = render_json_template(
         render_mongo_host=render_mongo_host,
         mongo_port=mongo_port,
         render_output_owner=render_output_owner,
-        render_client_scripts=client_script_location,
+        render_client_scripts='',
         solver_output_dir=outdir
         )
 
@@ -67,7 +64,7 @@ rough_parameters = render_json_template(
         render_mongo_host=render_mongo_host,
         mongo_port=mongo_port,
         render_output_owner=render_output_owner,
-        render_client_scripts=client_script_location,
+        render_client_scripts='',
         solver_output_dir=outdir,
         rough_output_stack=rough_output_stack
         )

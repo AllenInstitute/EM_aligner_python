@@ -1,11 +1,14 @@
 Bootstrap: shub
 From: AllenInstitute/EM_aligner_python:petsc 
 
+%setup
+    # singularity build should be run from repo base dir
+    git clone --single-branch ./ ${SINGULARITY_ROOTFS}/EM_aligner_python
+
 %post
-    # get some variables from the parent image
+    # variables from parent image
     . /sourceme
 
-    git clone --branch $BRANCH --single-branch https://github.com/AllenInstitute/EM_aligner_python 
     cd /EM_aligner_python/EMaligner/distributed/
 
     make -f makefile_allen em_dist_solve

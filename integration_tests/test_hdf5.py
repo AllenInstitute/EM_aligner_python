@@ -65,13 +65,13 @@ def test_petsc_solver(
         rough_pointmatches,
         output_directory):
 
+    # setup the solver to write out hdf5 files
     parameters = copy.deepcopy(rough_parameters)
     parameters['hdf5_options']['output_dir'] = output_directory
     parameters['input_stack']['name'] = rough_input_stack
     parameters['pointmatch']['name'] = rough_pointmatches
     parameters['output_mode'] = 'hdf5'
     parameters['hdf5_options']['chunks_per_file'] = 10
-
     mod = EMaligner.EMaligner(
             input_data=parameters, args=[])
     mod.run()
@@ -79,74 +79,115 @@ def test_petsc_solver(
             parameters['hdf5_options']['output_dir'],
             'solution_input.h5')
     assert os.path.isfile(indexfile)
+
+    # call the petsc solver
     outfile = os.path.join(
             parameters['hdf5_options']['output_dir'],
             'solution_output.h5')
-
     # /tmp is automatically bound
     cmd = ['singularity', 'run', './EMaligner/distributed/petsc_solver.simf']
     cmd += ['-input', indexfile]
     cmd += ['-output', outfile]
-
+    # this is a direct PaStiX solve
+    cmd += ['-ksp_type', 'preonly', '-pc_type', 'lu']
     subprocess.call(cmd)
     assert os.path.isfile(outfile)
 
+    # read the petsc result back into render
+    parameters['ingest_from_file'] = outfile
+    parameters['output_mode'] = 'stack'
+    parameters['output_stack']['name'] = 'from_petsc'
+    mod = EMaligner.EMaligner(
+            input_data=parameters, args=[])
+    mod.run()
 
-#@pytest.mark.parametrize("chunks", [-1, 1, 2])
-#def test_hdf5_mode_similarity(
-#        render,
-#        rough_input_stack,
-#        rough_pointmatches,
-#        tmpdir,
-#        chunks):
-#    # general parameters
-#    parameters = copy.deepcopy(rough_parameters)
-#    parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
-#    parameters['input_stack']['name'] = rough_input_stack
-#    parameters['pointmatch']['name'] = rough_pointmatches
-#    parameters['output_mode'] = 'hdf5'
-#    parameters['hdf5_options']['chunks_per_file'] = chunks
-#
-#    # check output mode HDF5
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(parameters), args=[])
-#    mod.run()
-#    indexfile = os.path.join(
-#            parameters['hdf5_options']['output_dir'],
-#            'solution_input.h5')
-#    assert os.path.exists(indexfile)
-#    del mod
-#
-#    # check assemble from file
-#    parameters['output_mode'] = 'none'
-#    parameters['assemble_from_file'] = indexfile
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(parameters), args=[])
-#    mod.run()
-#    assert np.all(np.array(mod.results['precision']) < 1e-7)
-#    assert np.all(np.array(mod.results['error']) < 1e6)
-#    del mod
-#
-#    # delete the output stack, just in case
-#    renderapi.stack.delete_stack(
-#                parameters['output_stack']['name'],
-#                render=render)
-#
-#    parameters['ingest_from_file'] = indexfile
-#    parameters['output_mode'] = 'stack'
-#    mod = EMaligner.EMaligner(
-#            input_data=copy.deepcopy(parameters), args=[])
-#    mod.run()
-#    tin = renderapi.tilespec.get_tile_specs_from_stack(
-#            parameters['input_stack']['name'],
-#            render=render)
-#    tout = renderapi.tilespec.get_tile_specs_from_stack(
-#            parameters['output_stack']['name'],
-#            render=render)
-#    assert len(tin) == len(tout)
-#    os.remove(indexfile)
-#    del mod
-#
-#    renderapi.stack.delete_stack(
-#                parameters['output_stack']['name'],
-#                render=render)
+    petsc_solved = renderapi.tilespec.get_tile_specs_from_stack(
+            parameters['output_stack']['name'][0],
+            render=render)
+
+    # have scipy solve the same thing
+    parameters['ingest_from_file'] = ''
+    parameters['output_mode'] = 'stack'
+    parameters['output_stack']['name'] = 'from_scipy'
+    mod = EMaligner.EMaligner(
+            input_data=parameters, args=[])
+    mod.run()
+
+    scipy_solved = renderapi.tilespec.get_tile_specs_from_stack(
+            parameters['output_stack']['name'][0],
+            render=render)
+
+    assert len(petsc_solved) == len(scipy_solved)
+    ptids = np.array([t.tileId for t in petsc_solved]) 
+    stids = np.array([t.tileId for t in scipy_solved]) 
+    in1d = np.intersect1d(ptids, stids)
+    for tid in in1d:
+        p = np.argwhere(ptids == tid).flatten()[0]
+        s = np.argwhere(stids == tid).flatten()[0]
+        pM = petsc_solved[p].tforms[-1].M
+        sM = scipy_solved[p].tforms[-1].M
+        # affine part
+        assert np.all(np.isclose(pM[0:2, 0:2], sM[0:2, 0:2], rtol=1e-7, atol=1e-7))
+        # translation part, small translations need a gentler rtol
+        # but, absolutely, still < 1e-5 pixels
+        assert np.all(np.isclose(pM[0:2, 2], sM[0:2, 2], rtol=1e-3, atol=1e-5))
+
+
+@pytest.mark.parametrize("chunks", [-1, 1, 2])
+def test_hdf5_mode_similarity(
+        render,
+        rough_input_stack,
+        rough_pointmatches,
+        tmpdir,
+        chunks):
+    # general parameters
+    parameters = copy.deepcopy(rough_parameters)
+    parameters['hdf5_options']['output_dir'] = str(tmpdir.mkdir('hdf5output'))
+    parameters['input_stack']['name'] = rough_input_stack
+    parameters['pointmatch']['name'] = rough_pointmatches
+    parameters['output_mode'] = 'hdf5'
+    parameters['hdf5_options']['chunks_per_file'] = chunks
+
+    # check output mode HDF5
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(parameters), args=[])
+    mod.run()
+    indexfile = os.path.join(
+            parameters['hdf5_options']['output_dir'],
+            'solution_input.h5')
+    assert os.path.exists(indexfile)
+    del mod
+
+    # check assemble from file
+    parameters['output_mode'] = 'none'
+    parameters['assemble_from_file'] = indexfile
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(parameters), args=[])
+    mod.run()
+    assert np.all(np.array(mod.results['precision']) < 1e-7)
+    assert np.all(np.array(mod.results['error']) < 1e6)
+    del mod
+
+    # delete the output stack, just in case
+    renderapi.stack.delete_stack(
+                parameters['output_stack']['name'],
+                render=render)
+
+    parameters['ingest_from_file'] = indexfile
+    parameters['output_mode'] = 'stack'
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(parameters), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            parameters['input_stack']['name'],
+            render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            parameters['output_stack']['name'],
+            render=render)
+    assert len(tin) == len(tout)
+    os.remove(indexfile)
+    del mod
+
+    renderapi.stack.delete_stack(
+                parameters['output_stack']['name'],
+                render=render)

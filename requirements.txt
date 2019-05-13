@@ -1,4 +1,4 @@
-render-python>=2.0.1
+-e git://github.com/djkapner/render-python@pass_render_import_ts_parallel#egg=render-python
 marshmallow<3.0
 argschema<2.0
 numpy

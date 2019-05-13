@@ -1,36 +1,24 @@
 #!/bin/bash -ex
 
-#wget -O- http://neuro.debian.net/lists/xenial.us-ca.full | sudo tee /etc/apt/sources.list.d/neurodebian.sources.list
-#sudo apt-key adv --recv-keys --keyserver hkp://pool.sks-keyservers.net:80 0xA5D32F012649A5A9
-#sudo apt-get update
-#
-#sudo apt-get install -y --allow-unauthenticated singularity-container 
-
 # install go
 export VERSION=1.11 OS=linux ARCH=amd64
 wget https://dl.google.com/go/go$VERSION.$OS-$ARCH.tar.gz
 sudo tar -C /usr/local -xzf go$VERSION.$OS-$ARCH.tar.gz
 rm go$VERSION.$OS-$ARCH.tar.gz
-
 echo 'export GOPATH=${HOME}/go' >> ~/.bashrc
 echo 'export PATH=/usr/local/go/bin:${PATH}:${GOPATH}/bin' >> ~/.bashrc
 source ~/.bashrc
-
 go get -u github.com/golang/dep/cmd/dep
-
 sudo sed -i -e 's/^Defaults\tsecure_path.*$//' /etc/sudoers
 
 # Check Python
-
 echo "Python Version:"
 python --version
 pip install sregistry[all]
 sregistry version
-
 echo "sregistry Version:"
 
 # Install Singularity
-
 export VERSION=3.1.1 
 mkdir -p $GOPATH/src/github.com/sylabs
 cd $GOPATH/src/github.com/sylabs

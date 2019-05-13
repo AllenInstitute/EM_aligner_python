@@ -30,7 +30,7 @@ with open('requirements.txt', 'r') as f:
 print("hacky thing for render-python dev branch. fix me.")
 for i in range(len(required)):
     if required[i][0:2] == "-e":
-required[i] = "render-python"
+        required[i] = "render-python"
 
 setup(name='EMaligner',
       use_scm_version=True,

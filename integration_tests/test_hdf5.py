@@ -88,7 +88,7 @@ def test_petsc_solver(
     cmd += ['-input', indexfile]
     cmd += ['-output', outfile]
 
-    subprocess.run(cmd)
+    subprocess.call(cmd)
     assert os.path.isfile(outfile)
 
 

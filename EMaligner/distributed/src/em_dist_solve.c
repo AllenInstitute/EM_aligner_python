@@ -3,20 +3,22 @@
   *
   * Reads A from file, reads regularizations and constraints, computes K, solves for x.
 */
-static char help[] = "Testing hdf5 I/O\n\n";
-
+static char help[] = "usage:\n"
+  "em_dist_solve -input <input_file_path> -output <output_file_path> <ksp options>\n"
+  "ksp options:\n"
+  "  direct solve with pastix: -ksp_type preonly -pc_type lu\n"
+  "see:\n"
+  "  https://www.mcs.anl.gov/petsc/petsc-current/docs/manualpages/KSP/KSPPREONLY.html\n"
+  "  https://www.mcs.anl.gov/petsc/petsc-3.11/docs/manualpages/Mat/MATSOLVERPASTIX.html#MATSOLVERPASTIX\n"
 #include <sys/resource.h>
 #include <stdio.h>
 #include <petsctime.h>
 #include "ema.h"
-//xxx
-
 /** @brief em_dist_solve main
   *
 */
-int
-main (int argc, char **args)
-{
+  int
+  main (int argc, char **args) {
   KSP ksp;			//linear solver context
   PetscMPIInt rank, size;	//MPI rank and size
   char fileinarg[PETSC_MAX_PATH_LEN];	//input file name
@@ -85,9 +87,6 @@ main (int argc, char **args)
   ierr =
     ReadMetadata (PETSC_COMM_WORLD, sln_input, nfiles, csrnames, metadata);
   CHKERRQ (ierr);
-  //for (i=0;i<nfiles;i++){
-  //  printf("%si %ld %ld %ld %ld\n",csrnames[i],metadata[i][0],metadata[i][1],metadata[i][2],metadata[i][3]);
-  //}
   /*  what files will this rank read  */
   ierr =
     SetFiles (PETSC_COMM_WORLD, nfiles, &local_firstfile, &local_lastfile);
@@ -117,14 +116,12 @@ main (int argc, char **args)
   MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
 			     global_nrow, global_ncol, local_indptr,
 			     local_jcol, local_data, &A);
-  //MatCreateMPIAIJWithArrays(PETSC_COMM_WORLD,local_nrow,PETSC_DECIDE,PETSC_DETERMINE,global_ncol,local_indptr,local_jcol,local_data,&A);
   free (local_indptr);
   free (local_jcol);
   free (local_data);
   if (rank == 0)
     {
       printf ("A matrix created\n");
-      //ShowMatInfo(PETSC_COMM_WORLD, &A, "");
     }
   PetscLogStagePop ();
 
@@ -140,21 +137,20 @@ main (int argc, char **args)
   /*  Start the K matrix with K = AT*W*A */
   ierr = MatPtAP (W, A, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &K);
   CHKERRQ (ierr);
-  //MatDestroy(&A);
-  //MatDestroy(&W);
 
-  //find out how the rows are distributed
+  /*  find out how the rows are distributed   */
   MatGetOwnershipRange (K, &local_row0, &local_rowN);
   MatGetSize (K, &global_nrow, NULL);
   local_nrow = local_rowN - local_row0;
 
-  //read in the regularization
+  /*  read in the regularization   */
   ierr = CreateL (PETSC_COMM_WORLD, dir, local_nrow, global_nrow, trunc, &L);
   if (rank == 0)
     {
       printf ("L created\n");
     }
-  //K = K+L
+
+  /*   K = K+L   */
   MatSetOption (K, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
   ierr = MatAXPY (K, (PetscScalar) 1.0, L, SUBSET_NONZERO_PATTERN);
   CHKERRQ (ierr);
@@ -186,38 +182,12 @@ main (int argc, char **args)
       ierr = MatMult (L, rhs[i], Lm[i]);
       CHKERRQ (ierr);
     }
-  //MatDestroy(&L);
   if (rank == 0)
     {
       printf ("Lm(s) created\n");
     }
 
   PetscLogStagePop ();
-
-  //MatConvert(K,MATMPIBAIJ,MAT_INPLACE_MATRIX,&K);
-//  PetscLogStageRegister("Reorder", &stage);
-//  PetscLogStagePush(stage);
-//  PC pc;
-//  MatSolverPackage stype="xxxxxxxxxxxxxxxxx";
-//  KSPGetPC(ksp,&pc);
-//  PCFactorSetMatSolverPackage(pc,MATSOLVERPASTIX);
-//  PCFactorGetMatSolverPackage(pc,stype);
-//  printf("matsolvertype for factorization: %s\n",stype);
-//
-////  ierr = MatConvert(K,MATMPIADJ,MAT_INITIAL_MATRIX,&Kadj);CHKERRQ(ierr);
-////  ierr = MatPartitioningCreate(PETSC_COMM_WORLD,&part);CHKERRQ(ierr);
-////  ierr = MatPartitioningSetAdjacency(part,Kadj);CHKERRQ(ierr);
-////  ierr = MatPartitioningSetType(part,MATPARTITIONINGPTSCOTCH);CHKERRQ(ierr);
-////  IS is,isg,isrows;
-////  ierr = MatPartitioningApply(part,&is);CHKERRQ(ierr);
-////  MatPartitioningDestroy(&part);
-////  MatDestroy(&Kadj);
-////  ISPartitioningToNumbering(is,&isg);
-////  ISBuildTwoSided(is,NULL,&isrows);
-////  MatCreateSubMatrix(K,isrows,isrows,MAT_INITIAL_MATRIX,&Kper);
-//  //ISView(isg,PETSC_VIEWER_STDOUT_WORLD);
-//  //ISDestroy(&is);
-//  PetscLogStagePop();
 
   PetscLogStageRegister ("Solve", &stage);
   PetscLogStagePush (stage);
@@ -278,7 +248,6 @@ main (int argc, char **args)
   den = 0;
   for (i = 0; i < nrhs; i++)
     {
-      //ierr = VecDuplicate(rhs[i],&rhs[i]);CHKERRQ(ierr);
       //from here on, rhs is replaced by err
       ierr = VecScale (Lm[i], (PetscScalar) - 1.0);
       CHKERRQ (ierr);
@@ -359,12 +328,9 @@ main (int argc, char **args)
       VecDestroy (&Lm[i]);
       VecDestroy (&x[i]);
       VecDestroy (&rhs[i]);
-      //VecDestroy(&rhs[i]);
     }
   MatDestroy (&A);
-  //MatDestroy(&W);
   MatDestroy (&K);
-  //MatDestroy(&L);
   KSPDestroy (&ksp);
   free (dir);
   free (sln_input);

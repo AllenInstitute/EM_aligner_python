@@ -9,7 +9,8 @@ static char help[] = "usage:\n"
   "  direct solve with pastix: -ksp_type preonly -pc_type lu\n"
   "see:\n"
   "  https://www.mcs.anl.gov/petsc/petsc-current/docs/manualpages/KSP/KSPPREONLY.html\n"
-  "  https://www.mcs.anl.gov/petsc/petsc-3.11/docs/manualpages/Mat/MATSOLVERPASTIX.html#MATSOLVERPASTIX\n"
+  "  https://www.mcs.anl.gov/petsc/petsc-3.11/docs/manualpages/Mat/MATSOLVERPASTIX.html#MATSOLVERPASTIX\n";
+
 #include <sys/resource.h>
 #include <stdio.h>
 #include <petsctime.h>
@@ -17,8 +18,9 @@ static char help[] = "usage:\n"
 /** @brief em_dist_solve main
   *
 */
-  int
-  main (int argc, char **args) {
+int
+main (int argc, char **args)
+{
   KSP ksp;			//linear solver context
   PetscMPIInt rank, size;	//MPI rank and size
   char fileinarg[PETSC_MAX_PATH_LEN];	//input file name

@@ -15,4 +15,4 @@ From: AllenInstitute/EM_aligner_python:petsc
 
 %runscript
     . /sourceme
-    exec /EM_aligner_python/EMaligner/distributed/bin/em_dist_solve "$@"
+    exec /EM_aligner_python/EMaligner/distributed/bin/em_dist_solve -help "$@"

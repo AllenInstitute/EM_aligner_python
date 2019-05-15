@@ -51,11 +51,11 @@ PetscErrorCode CreateW (MPI_Comm COMM, PetscScalar * local_weights,
 			PetscInt local_nrow, PetscInt local_row0,
 			PetscInt global_nrow, Mat * W);
 
-PetscErrorCode CreateL (MPI_Comm COMM, char *dir, PetscInt local_nrow,
+PetscErrorCode CreateL (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
 			PetscInt global_nrow, PetscBool trunc, Mat * L);
 
-PetscErrorCode CountSolves (MPI_Comm COMM, char *dir, PetscInt * nRHS);
+PetscErrorCode CountSolves (MPI_Comm COMM, char indexname[], PetscInt * nRHS);
 
-PetscErrorCode Readx0 (MPI_Comm COMM, char *dir, PetscInt local_nrow,
+PetscErrorCode Readx0 (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
 			PetscInt global_nrow, PetscInt nsolve, PetscBool trunc,
 			Vec x0[]);

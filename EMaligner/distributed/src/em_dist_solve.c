@@ -146,7 +146,7 @@ main (int argc, char **args)
   local_nrow = local_rowN - local_row0;
 
   /*  read in the regularization   */
-  ierr = CreateL (PETSC_COMM_WORLD, dir, local_nrow, global_nrow, trunc, &L);
+  ierr = CreateL (PETSC_COMM_WORLD, sln_input, local_nrow, global_nrow, trunc, &L);
   if (rank == 0)
     {
       printf ("L created\n");
@@ -169,10 +169,10 @@ main (int argc, char **args)
 
   /*  Read in the x0 vector(s)  */
   PetscInt nsolve;
-  ierr = CountSolves (PETSC_COMM_WORLD, dir, &nsolve);
+  ierr = CountSolves (PETSC_COMM_WORLD, sln_input, &nsolve);
   CHKERRQ (ierr);
   ierr =
-    Readx0 (PETSC_COMM_WORLD, dir, local_nrow, global_nrow, nsolve, trunc,
+    Readx0 (PETSC_COMM_WORLD, sln_input, local_nrow, global_nrow, nsolve, trunc,
 	     x0);
   CHKERRQ (ierr);
 

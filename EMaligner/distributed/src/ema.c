@@ -495,9 +495,9 @@ GetGlobalLocalCounts (int nfiles, PetscInt ** metadata, int local_firstfile,
 /*! Build local CSR block by sequentially reading in local hdf5 files.*/
 PetscErrorCode
 ReadLocalCSR (MPI_Comm COMM, char *csrnames[], int local_firstfile,
-	      int local_lastfile, PetscInt * local_indptr,
+	      int local_lastfile, int nsolve, PetscInt * local_indptr,
 	      PetscInt * local_jcol, PetscScalar * local_data,
-	      PetscScalar * local_weights)
+	      PetscScalar * local_weights, PetscScalar ** local_rhs)
 {
 /**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.
@@ -509,9 +509,10 @@ ReadLocalCSR (MPI_Comm COMM, char *csrnames[], int local_firstfile,
 
   PetscViewer viewer;		//viewer object for reading files
   IS indices, indptr;
-  Vec data, weights;
+  Vec data, weights, rhs;
   PetscErrorCode ierr;
   int i, j;
+  char tmp[200];
 
   //create the distributed matrix A
   PetscInt vcnt, niptr;
@@ -559,6 +560,19 @@ ReadLocalCSR (MPI_Comm COMM, char *csrnames[], int local_firstfile,
       VecGetArray (weights, &w);
       memcpy (&local_weights[roff2], w, vcnt * sizeof (PetscScalar));
       VecRestoreArray (weights, &w);
+
+      //rhs
+      for (j = 0; j < nsolve; j++)
+        {
+          sprintf (tmp, "rhs_%d", j);
+	  printf("tmp : %s\n", tmp);
+          ierr = ReadVec (COMM, viewer, tmp, &rhs, &vcnt);
+          CHKERRQ (ierr);
+          VecGetArray (rhs, &w);
+	  printf("%f %f %f\n", w[0], w[1], w[2]);
+          memcpy (&local_rhs[j][roff2], w, vcnt * sizeof (PetscScalar));
+          VecRestoreArray (rhs, &w);
+	}
       roff2 += vcnt;
 
       ierr = PetscViewerDestroy (&viewer);

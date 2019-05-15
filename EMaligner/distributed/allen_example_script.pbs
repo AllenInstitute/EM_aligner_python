@@ -2,7 +2,7 @@
   
 #PBS -N em_dist_solve
 #PBS -q emconnectome
-#PBS -l nodes=4:ppn=1
+#PBS -l nodes=2:ppn=1
 #PBS -l walltime=0:10:00
 #PBS -n
 #PBS -j oe
@@ -12,8 +12,10 @@
 
 module load mpi/mpich-x86_64
 
-cd /allen/programs/celltypes/workgroups/em-connectomics/danielk/petsc
+simf=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/EMaligner/distributed/petsc_solver.simf
+input=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/solution_input.h5
+output=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp.h5
 
 cat $PBS_NODEFILE > tmphosts
 
-mpiexec -np $PBS_NUM_NODES -f tmphosts singularity run --bind /allen:/allen em_distributed.simf -input /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/solution_input.h5 -output /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp.h5 -ksp_type preonly -pc_type lu -log_view
+mpiexec -np $PBS_NUM_NODES -f tmphosts singularity run --bind /allen:/allen $simf -input $input -output $output -ksp_type preonly -pc_type lu -log_view

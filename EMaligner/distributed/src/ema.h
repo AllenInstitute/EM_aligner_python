@@ -42,10 +42,11 @@ void GetGlobalLocalCounts (int nfiles, PetscInt ** metadata,
 			   PetscInt * local_nnz, PetscInt * local_row0);
 
 PetscErrorCode ReadLocalCSR (MPI_Comm COMM, char *csrnames[],
-			     int local_firstfile, int local_lastfile,
+			     int local_firstfile, int local_lastfile, int nsolve,
 			     PetscInt * local_indptr, PetscInt * local_jcol,
 			     PetscScalar * local_data,
-			     PetscScalar * local_weights);
+			     PetscScalar * local_weights,
+			     PetscScalar ** local_rhs);
 
 PetscErrorCode CreateW (MPI_Comm COMM, PetscScalar * local_weights,
 			PetscInt local_nrow, PetscInt local_row0,

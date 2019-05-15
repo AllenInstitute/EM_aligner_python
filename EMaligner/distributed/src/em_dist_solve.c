@@ -34,12 +34,13 @@ main (int argc, char **args)
   PetscInt local_rowN;
   PetscInt *local_indptr, *local_jcol;	//index arrays for local CSR
   PetscScalar *local_data, *local_weights;	//data for local CSR and weights
+  PetscScalar **local_rhs;
   PetscBool flg, trunc;		//boolean used in checking command line
   PetscErrorCode ierr;		//error code that gets passed around.
   PetscLogDouble tall0, tall1;	//timers
   int i;
   Mat A, W, K, L, Kadj, Kper;	//K and the matrices that build it
-  Vec x0[2], Lm[2], x[2];	//vectors associated with the solve(s)
+  Vec rhs[2], x0[2], Lm[2], x[2];	//vectors associated with the solve(s)
   PetscLogDouble t0, t1, current_mem;	//some timers
   PetscReal norm[2], norm2[2], gig = 1073741824.;
   PetscLogStage stage;
@@ -104,28 +105,76 @@ main (int argc, char **args)
       printf ("%d ranks will handle %d files\n", size, nfiles);
     }
 
+  /*  how many solves */
+  PetscInt nsolve;
+  ierr = CountSolves (PETSC_COMM_WORLD, sln_input, &nsolve);
+  CHKERRQ (ierr);
+
   /*  allocate space for local CSR arrays  */
   local_indptr = (PetscInt *) calloc (local_nrow + 1, sizeof (PetscInt));
   local_jcol = (PetscInt *) calloc (local_nnz, sizeof (PetscInt));
   local_data = (PetscScalar *) calloc (local_nnz, sizeof (PetscScalar));
   local_weights = (PetscScalar *) calloc (local_nrow, sizeof (PetscScalar));
+  local_rhs = (PetscScalar **) malloc (nsolve * sizeof (PetscInt *));
+  for (i = 0; i < nsolve; i++)
+    {
+      local_rhs[i] = (PetscScalar *) calloc (local_nrow, sizeof (PetscScalar));
+    }
   /*  read in local hdf5 files and concatenate into CSR arrays  */
   ierr =
     ReadLocalCSR (PETSC_COMM_SELF, csrnames, local_firstfile, local_lastfile,
-		  local_indptr, local_jcol, local_data, local_weights);
+		  nsolve, local_indptr, local_jcol, local_data, local_weights, local_rhs);
   CHKERRQ (ierr);
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
 			     global_nrow, global_ncol, local_indptr,
 			     local_jcol, local_data, &A);
-  free (local_indptr);
   free (local_jcol);
   free (local_data);
+  free (local_indptr);
   if (rank == 0)
     {
       printf ("A matrix created\n");
     }
   PetscLogStagePop ();
+
+  PetscInt m, n;
+  MatGetOwnershipRange(A, &m, &n);
+  printf("mrange %d %d\n", m, n);
+
+  PetscInt *local_indices = (PetscInt *) calloc (local_nrow, sizeof (PetscInt));
+  PetscScalar *u_local_ptr;
+  for (i = 0; i < local_nrow; i++){
+	  local_indices[i] = i + m;
+  }
+  printf("%d %d %d\n", local_indices[0], local_indices[1], local_indices[2]);
+
+  /*  Create distributed rhs  */
+  int j;
+  printf("%d %d\n", local_nrow, global_nrow);
+  for (i = 0; i < nsolve; i++)
+    {
+      VecCreate(PETSC_COMM_WORLD, &rhs[i]);
+      VecSetType(rhs[i], VECMPI);
+      VecSetSizes(rhs[i], local_nrow, global_nrow);
+      VecSet(rhs[i], 0.0);
+      VecGetArray(rhs[i], &u_local_ptr);
+      for (j = 0; j < local_nrow; j ++)
+        {
+          u_local_ptr[j] = local_rhs[i][j];
+        }
+      ierr = VecRestoreArray(rhs[i], &u_local_ptr);
+      VecAssemblyBegin(rhs[i]);
+      VecAssemblyEnd(rhs[i]);
+      VecGetArray(rhs[i], &u_local_ptr);
+      printf("%f %f %f\n", u_local_ptr[0], u_local_ptr[1], u_local_ptr[2]);
+      ierr = VecRestoreArray(rhs[i], &u_local_ptr);
+      VecAssemblyBegin(rhs[i]);
+      VecAssemblyEnd(rhs[i]);
+      //ierr = VecSetValuesLocal(rhs[i], local_nrow, local_indices, local_rhs[i], INSERT_VALUES);
+      //CHKERRQ(ierr);
+    }
+
 
   PetscLogStageRegister ("Create K", &stage);
   PetscLogStagePush (stage);
@@ -168,9 +217,6 @@ main (int argc, char **args)
   PetscLogStagePush (stage);
 
   /*  Read in the x0 vector(s)  */
-  PetscInt nsolve;
-  ierr = CountSolves (PETSC_COMM_WORLD, sln_input, &nsolve);
-  CHKERRQ (ierr);
   ierr =
     Readx0 (PETSC_COMM_WORLD, sln_input, local_nrow, global_nrow, nsolve, trunc,
 	     x0);

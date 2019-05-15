@@ -54,8 +54,8 @@ PetscErrorCode CreateW (MPI_Comm COMM, PetscScalar * local_weights,
 PetscErrorCode CreateL (MPI_Comm COMM, char *dir, PetscInt local_nrow,
 			PetscInt global_nrow, PetscBool trunc, Mat * L);
 
-PetscErrorCode CountRHS (MPI_Comm COMM, char *dir, PetscInt * nRHS);
+PetscErrorCode CountSolves (MPI_Comm COMM, char *dir, PetscInt * nRHS);
 
-PetscErrorCode ReadRHS (MPI_Comm COMM, char *dir, PetscInt local_nrow,
-			PetscInt global_nrow, PetscInt nrhs, PetscBool trunc,
-			Vec rhs[]);
+PetscErrorCode Readx0 (MPI_Comm COMM, char *dir, PetscInt local_nrow,
+			PetscInt global_nrow, PetscInt nsolve, PetscBool trunc,
+			Vec x0[]);

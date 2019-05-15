@@ -39,7 +39,7 @@ main (int argc, char **args)
   PetscLogDouble tall0, tall1;	//timers
   int i;
   Mat A, W, K, L, Kadj, Kper;	//K and the matrices that build it
-  Vec rhs[2], Lm[2], x[2];	//vectors associated with the solve(s)
+  Vec x0[2], Lm[2], x[2];	//vectors associated with the solve(s)
   PetscLogDouble t0, t1, current_mem;	//some timers
   PetscReal norm[2], norm2[2], gig = 1073741824.;
   PetscLogStage stage;
@@ -164,24 +164,24 @@ main (int argc, char **args)
     }
   PetscLogStagePop ();
 
-  PetscLogStageRegister ("Get RHS", &stage);
+  PetscLogStageRegister ("Get x0", &stage);
   PetscLogStagePush (stage);
 
-  /*  Read in the RHS vector(s)  */
-  PetscInt nrhs;
-  ierr = CountRHS (PETSC_COMM_WORLD, dir, &nrhs);
+  /*  Read in the x0 vector(s)  */
+  PetscInt nsolve;
+  ierr = CountSolves (PETSC_COMM_WORLD, dir, &nsolve);
   CHKERRQ (ierr);
   ierr =
-    ReadRHS (PETSC_COMM_WORLD, dir, local_nrow, global_nrow, nrhs, trunc,
-	     rhs);
+    Readx0 (PETSC_COMM_WORLD, dir, local_nrow, global_nrow, nsolve, trunc,
+	     x0);
   CHKERRQ (ierr);
 
   /*  Create Lm vectors  */
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
-      ierr = VecDuplicate (rhs[i], &Lm[i]);
+      ierr = VecDuplicate (x0[i], &Lm[i]);
       CHKERRQ (ierr);
-      ierr = MatMult (L, rhs[i], Lm[i]);
+      ierr = MatMult (L, x0[i], Lm[i]);
       CHKERRQ (ierr);
     }
   if (rank == 0)
@@ -219,11 +219,11 @@ main (int argc, char **args)
     PetscViewerHDF5Open (PETSC_COMM_WORLD, sln_output, FILE_MODE_APPEND,
 			 &viewer);
   CHKERRQ (ierr);
-  printf ("nrhs : %d", nrhs);
-  for (i = 0; i < nrhs; i++)
+  printf ("nsolve : %d", nsolve);
+  for (i = 0; i < nsolve; i++)
     {
       PetscTime (&t0);
-      ierr = VecDuplicate (rhs[i], &x[i]);
+      ierr = VecDuplicate (x0[i], &x[i]);
       CHKERRQ (ierr);
       ierr = KSPSolve (ksp, Lm[i], x[i]);
       CHKERRQ (ierr);
@@ -248,14 +248,14 @@ main (int argc, char **args)
   PetscReal num, den;
   num = 0;
   den = 0;
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
-      //from here on, rhs is replaced by err
+      //from here on, x0 is replaced by err
       ierr = VecScale (Lm[i], (PetscScalar) - 1.0);
       CHKERRQ (ierr);
-      ierr = MatMultAdd (K, x[i], Lm[i], rhs[i]);
+      ierr = MatMultAdd (K, x[i], Lm[i], x0[i]);
       CHKERRQ (ierr);		//err0 = Kx0-Lm0
-      ierr = VecNorm (rhs[i], NORM_2, &norm[i]);
+      ierr = VecNorm (x0[i], NORM_2, &norm[i]);
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
       ierr = VecNorm (Lm[i], NORM_2, &norm2[i]);
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
@@ -276,17 +276,17 @@ main (int argc, char **args)
   CHKERRQ (ierr);
   ierr = MatGetOwnershipRange (A, &c0, &cn);
   CHKERRQ (ierr);
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
-      ierr = VecCreate (PETSC_COMM_WORLD, &rhs[i]);
+      ierr = VecCreate (PETSC_COMM_WORLD, &x0[i]);
       CHKERRQ (ierr);
-      ierr = VecSetType (rhs[i], VECMPI);
+      ierr = VecSetType (x0[i], VECMPI);
       CHKERRQ (ierr);
-      ierr = VecSetSizes (rhs[i], cn - c0, mA);
+      ierr = VecSetSizes (x0[i], cn - c0, mA);
       CHKERRQ (ierr);
-      ierr = MatMult (A, x[i], rhs[i]);
+      ierr = MatMult (A, x[i], x0[i]);
       CHKERRQ (ierr);		//err0 = Ax0
-      ierr = VecNorm (rhs[i], NORM_2, &norm[i]);
+      ierr = VecNorm (x0[i], NORM_2, &norm[i]);
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
       num += norm[i] * norm[i];
     }
@@ -301,22 +301,22 @@ main (int argc, char **args)
   //calculate the mean and standard deviation
   PetscReal s[2];
   PetscReal tmp0;
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
-      ierr = VecAbs (rhs[i]);
+      ierr = VecAbs (x0[i]);
       CHKERRQ (ierr);
-      ierr = VecSum (rhs[i], &s[i]);
+      ierr = VecSum (x0[i], &s[i]);
       CHKERRQ (ierr);
-      tmp0 += s[i] / (nrhs * mA);
+      tmp0 += s[i] / (nsolve * mA);
     }
   num = 0;
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
-      ierr = VecShift (rhs[i], -1.0 * tmp0);
+      ierr = VecShift (x0[i], -1.0 * tmp0);
       CHKERRQ (ierr);
-      ierr = VecNorm (rhs[i], NORM_2, &s[i]);
+      ierr = VecNorm (x0[i], NORM_2, &s[i]);
       CHKERRQ (ierr);
-      num += s[i] * s[i] / (nrhs * mA);
+      num += s[i] * s[i] / (nsolve * mA);
     }
   if (rank == 0)
     {
@@ -325,11 +325,11 @@ main (int argc, char **args)
     }
 
   //cleanup
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
       VecDestroy (&Lm[i]);
       VecDestroy (&x[i]);
-      VecDestroy (&rhs[i]);
+      VecDestroy (&x0[i]);
     }
   MatDestroy (&A);
   MatDestroy (&K);

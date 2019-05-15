@@ -674,14 +674,14 @@ CreateL (MPI_Comm COMM, char *dir, PetscInt local_nrow, PetscInt global_nrow,
   return ierr;
 }
 
-/*! Counts how many RHS vectors are stored in the regularization file. */
+/*! Counts how many x0 vectors are stored in the regularization file. */
 PetscErrorCode
-CountRHS (MPI_Comm COMM, char *dir, PetscInt * nRHS)
+CountSolves (MPI_Comm COMM, char *dir, PetscInt * nsolve)
 {
 /**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] dir string containing the directory
- * @param[out] number of RHS vectors
+ * @param[out] number of solves
 */
   PetscErrorCode ierr;
   PetscViewer viewer;
@@ -689,30 +689,30 @@ CountRHS (MPI_Comm COMM, char *dir, PetscInt * nRHS)
   IS test;
   char tmp[200];
 
-  *nRHS = 0;
+  *nsolve = 0;
   sprintf (tmp, "%s/solution_input.h5", dir);
   ierr = PetscViewerHDF5Open (COMM, tmp, FILE_MODE_READ, &viewer);
   CHKERRQ (ierr);
   ierr = ReadIndexSet (COMM, viewer, (char *) "transform_list", &test, &junk);
   CHKERRQ (ierr);
-  *nRHS = junk;
+  *nsolve = junk;
   ierr = PetscViewerDestroy (&viewer);
   CHKERRQ (ierr);
   return ierr;
 }
 
-/*! Read the RHS vectors stored in the regularization file. */
+/*! Read the x0 vectors stored in the regularization file. */
 PetscErrorCode
-ReadRHS (MPI_Comm COMM, char *dir, PetscInt local_nrow, PetscInt global_nrow,
-	 PetscInt nrhs, PetscBool trunc, Vec rhs[])
+Readx0 (MPI_Comm COMM, char *dir, PetscInt local_nrow, PetscInt global_nrow,
+	 PetscInt nsolve, PetscBool trunc, Vec x0[])
 {
 /**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
  * @param[in] dir string containing the directory
  * @param[in] local_nrow Number of local rows this rank will own
  * @param[in] global_nrow Number of global rows.
- * @param[in] nrhs Number of rhs vectors to be read.
- * @param[out] rhs[] RHS vectors
+ * @param[in] nsolve Number of x0 vectors to be read.
+ * @param[out] x0[] vectors
 */
   PetscErrorCode ierr;
   PetscViewer viewer;
@@ -723,14 +723,11 @@ ReadRHS (MPI_Comm COMM, char *dir, PetscInt local_nrow, PetscInt global_nrow,
   sprintf (tmp, "%s/solution_input.h5", dir);
   ierr = PetscViewerHDF5Open (COMM, tmp, FILE_MODE_READ, &viewer);
   CHKERRQ (ierr);
-  for (i = 0; i < nrhs; i++)
+  for (i = 0; i < nsolve; i++)
     {
       sprintf (tmp, "transforms_%d", i);
-      //ierr = VecCreate(COMM,&rhs[i]);CHKERRQ(ierr);
-      //ierr = VecSetSizes(rhs[i],local_nrow,global_nrow);CHKERRQ(ierr);
-      //ierr = VecSetType(rhs[i],VECMPI);CHKERRQ(ierr);
       ierr =
-	ReadVecWithSizes (COMM, viewer, tmp, &rhs[i], &junk, local_nrow,
+	ReadVecWithSizes (COMM, viewer, tmp, &x0[i], &junk, local_nrow,
 			  global_nrow, trunc);
       CHKERRQ (ierr);
     }

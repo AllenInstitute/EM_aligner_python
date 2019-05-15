@@ -39,7 +39,8 @@ main (int argc, char **args)
   PetscErrorCode ierr;		//error code that gets passed around.
   PetscLogDouble tall0, tall1;	//timers
   int i;
-  Mat A, W, K, L, Kadj, Kper;	//K and the matrices that build it
+  Mat A, W, ATW, K, L, Kadj, Kper;	//K and the matrices that build it
+  Vec ATWRHS[2];
   Vec rhs[2], x0[2], Lm[2], x[2];	//vectors associated with the solve(s)
   PetscLogDouble t0, t1, current_mem;	//some timers
   PetscReal norm[2], norm2[2], gig = 1073741824.;
@@ -166,13 +167,6 @@ main (int argc, char **args)
       ierr = VecRestoreArray(rhs[i], &u_local_ptr);
       VecAssemblyBegin(rhs[i]);
       VecAssemblyEnd(rhs[i]);
-      VecGetArray(rhs[i], &u_local_ptr);
-      printf("%f %f %f\n", u_local_ptr[0], u_local_ptr[1], u_local_ptr[2]);
-      ierr = VecRestoreArray(rhs[i], &u_local_ptr);
-      VecAssemblyBegin(rhs[i]);
-      VecAssemblyEnd(rhs[i]);
-      //ierr = VecSetValuesLocal(rhs[i], local_nrow, local_indices, local_rhs[i], INSERT_VALUES);
-      //CHKERRQ(ierr);
     }
 
 
@@ -186,8 +180,12 @@ main (int argc, char **args)
   free (local_weights);
 
   /*  Start the K matrix with K = AT*W*A */
-  ierr = MatPtAP (W, A, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &K);
+  ierr = MatTransposeMatMult(A, W, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &ATW);
   CHKERRQ (ierr);
+  ierr = MatMatMult(ATW, A, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &K);
+  CHKERRQ (ierr);
+  //ierr = MatPtAP (W, A, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &K);
+  //CHKERRQ (ierr);
 
   /*  find out how the rows are distributed   */
   MatGetOwnershipRange (K, &local_row0, &local_rowN);
@@ -226,8 +224,13 @@ main (int argc, char **args)
   for (i = 0; i < nsolve; i++)
     {
       ierr = VecDuplicate (x0[i], &Lm[i]);
+      ierr = VecDuplicate (x0[i], &ATWRHS[i]);
       CHKERRQ (ierr);
       ierr = MatMult (L, x0[i], Lm[i]);
+      CHKERRQ (ierr);
+      ierr = MatMult(ATW, rhs[i], ATWRHS[i]);
+      CHKERRQ (ierr);
+      ierr = VecAXPY(Lm[i], 1.0, ATWRHS[i]);
       CHKERRQ (ierr);
     }
   if (rank == 0)
@@ -265,7 +268,6 @@ main (int argc, char **args)
     PetscViewerHDF5Open (PETSC_COMM_WORLD, sln_output, FILE_MODE_APPEND,
 			 &viewer);
   CHKERRQ (ierr);
-  printf ("nsolve : %d", nsolve);
   for (i = 0; i < nsolve; i++)
     {
       PetscTime (&t0);
@@ -292,8 +294,9 @@ main (int argc, char **args)
      Check solution and clean up
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
   PetscReal num, den;
-  num = 0;
-  den = 0;
+  PetscReal *precision = (PetscReal *) calloc (nsolve, sizeof (PetscReal));
+  char strout[400], strout2[400], tmp[400];
+  sprintf(strout, " precision [norm(Kx-Lm)/norm(Lm)] =");
   for (i = 0; i < nsolve; i++)
     {
       //from here on, x0 is replaced by err
@@ -305,16 +308,16 @@ main (int argc, char **args)
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
       ierr = VecNorm (Lm[i], NORM_2, &norm2[i]);
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
-      num += norm[i] * norm[i];
-      den += norm2[i] * norm2[i];
+      precision[i] = norm[i] / norm2[i];
+      sprintf(tmp, " %0.1e", precision[i]);
+      strcat(strout, tmp);
+      if (i != nsolve - 1)
+        {
+          strcat(strout, ",");
+	}
     }
-  if (rank == 0)
-    {
-      ierr =
-	PetscPrintf (PETSC_COMM_WORLD, "Precision %0.3g\n",
-		     (double) sqrt (num) / sqrt (den));
-      CHKERRQ (ierr);
-    }
+  strcat(strout, "\n");
+  printf(strout);
 
   num = 0;
   PetscInt mA, nA, c0, cn;
@@ -322,6 +325,7 @@ main (int argc, char **args)
   CHKERRQ (ierr);
   ierr = MatGetOwnershipRange (A, &c0, &cn);
   CHKERRQ (ierr);
+  sprintf(strout, " error     [norm(Ax-b)] =");
   for (i = 0; i < nsolve; i++)
     {
       ierr = VecCreate (PETSC_COMM_WORLD, &x0[i]);
@@ -332,43 +336,64 @@ main (int argc, char **args)
       CHKERRQ (ierr);
       ierr = MatMult (A, x[i], x0[i]);
       CHKERRQ (ierr);		//err0 = Ax0
+      ierr = VecAXPY (x0[i], -1.0, rhs[i]);
+      CHKERRQ (ierr);
       ierr = VecNorm (x0[i], NORM_2, &norm[i]);
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
-      num += norm[i] * norm[i];
+      sprintf(tmp, " %0.1f", norm[i]);
+      strcat(strout, tmp);
+      if (i != nsolve - 1)
+        {
+          strcat(strout, ",");
+	}
+      //num += norm[i] * norm[i];
     }
-  if (rank == 0)
-    {
-      ierr =
-	PetscPrintf (PETSC_COMM_WORLD, "Norm of error %0.1f\n",
-		     (double) sqrt (num));
-      CHKERRQ (ierr);
-    }
+  strcat(strout, "\n");
+  printf(strout);
+  //if (rank == 0)
+  //  {
+  //    ierr =
+  //      PetscPrintf (PETSC_COMM_WORLD, "Norm of error %0.1f\n",
+  //      	     (double) sqrt (num));
+  //    CHKERRQ (ierr);
+  //  }
 
   //calculate the mean and standard deviation
-  PetscReal s[2];
+  PetscReal errmean[2], errstd[2];
   PetscReal tmp0;
+  PetscInt sz;
+  sprintf(strout2, " [mean(Ax) +/- std(Ax)] =");
   for (i = 0; i < nsolve; i++)
     {
-      ierr = VecAbs (x0[i]);
-      CHKERRQ (ierr);
-      ierr = VecSum (x0[i], &s[i]);
-      CHKERRQ (ierr);
-      tmp0 += s[i] / (nsolve * mA);
+      VecGetSize(x0[i], &sz);
+      VecSum (x0[i], &errmean[i]);
+      errmean[i] /= sz;
+      VecShift (x0[i], -1.0 * errmean[i]);
+      VecNorm (x0[i], NORM_2, &errstd[i]);
+      errstd[i] /= sqrt(sz);
+      sprintf(tmp, " %0.2f +/- %0.2f", errmean[i], errstd[i]);
+      strcat(strout2, tmp);
+      if (i != nsolve - 1)
+        {
+          strcat(strout2, ",");
+	}
     }
-  num = 0;
-  for (i = 0; i < nsolve; i++)
-    {
-      ierr = VecShift (x0[i], -1.0 * tmp0);
-      CHKERRQ (ierr);
-      ierr = VecNorm (x0[i], NORM_2, &s[i]);
-      CHKERRQ (ierr);
-      num += s[i] * s[i] / (nsolve * mA);
-    }
-  if (rank == 0)
-    {
-      printf ("mean(|Ax|) +/- std(|Ax|) : %0.1f +/- %0.1f\n", tmp0,
-	      sqrt (num));
-    }
+  strcat(strout2, "\n");
+  printf(strout2);
+  //num = 0;
+  //for (i = 0; i < nsolve; i++)
+  //  {
+  //    ierr = VecShift (x0[i], -1.0 * tmp0);
+  //    CHKERRQ (ierr);
+  //    ierr = VecNorm (x0[i], NORM_2, &s[i]);
+  //    CHKERRQ (ierr);
+  //    num += s[i] * s[i] / (nsolve * mA);
+  //  }
+  //if (rank == 0)
+  //  {
+  //    printf ("mean(|Ax|) +/- std(|Ax|) : %0.1f +/- %0.1f\n", tmp0,
+  //            sqrt (num));
+  //  }
 
   //cleanup
   for (i = 0; i < nsolve; i++)

@@ -17,7 +17,7 @@ PetscErrorCode ReadMetadata (MPI_Comm COMM, char indexname[], int nfiles,
 			     char *csrnames[], PetscInt ** metadata);
 
 void CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[],
-					  char outputname[]);
+				char outputname[]);
 
 PetscErrorCode SetFiles (MPI_Comm COMM, int nfiles, PetscInt * firstfile,
 			 PetscInt * lastfile);
@@ -42,9 +42,9 @@ void GetGlobalLocalCounts (int nfiles, PetscInt ** metadata,
 			   PetscInt * local_nnz, PetscInt * local_row0);
 
 PetscErrorCode ReadLocalCSR (MPI_Comm COMM, char *csrnames[],
-			     int local_firstfile, int local_lastfile, int nsolve,
-			     PetscInt * local_indptr, PetscInt * local_jcol,
-			     PetscScalar * local_data,
+			     int local_firstfile, int local_lastfile,
+			     int nsolve, PetscInt * local_indptr,
+			     PetscInt * local_jcol, PetscScalar * local_data,
 			     PetscScalar * local_weights,
 			     PetscScalar ** local_rhs);
 
@@ -58,5 +58,5 @@ PetscErrorCode CreateL (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
 PetscErrorCode CountSolves (MPI_Comm COMM, char indexname[], PetscInt * nRHS);
 
 PetscErrorCode Readx0 (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
-			PetscInt global_nrow, PetscInt nsolve, PetscBool trunc,
-			Vec x0[]);
+		       PetscInt global_nrow, PetscInt nsolve, PetscBool trunc,
+		       Vec x0[]);

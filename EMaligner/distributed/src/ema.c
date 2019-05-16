@@ -126,7 +126,8 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
   hid_t filein, fileout, filetype, memtype, space, dset, dsetout;
   hsize_t dims[1];
   int nds = 10;
-  const char *copyids[10] = { "input_args", "used_tile_ids", "unused_tile_ids",
+  const char *copyids[10] =
+    { "input_args", "used_tile_ids", "unused_tile_ids",
     "datafile_names", "datafile_maxcol", "datafile_mincol",
     "datafile_nnz", "datafile_nrows", "lambda", "transform_list"
   };
@@ -548,13 +549,13 @@ ReadLocalCSR (MPI_Comm COMM, char *csrnames[], int local_firstfile,
 
       //rhs
       for (j = 0; j < nsolve; j++)
-        {
-          sprintf (tmp, "rhs_%d", j);
-          ierr = ReadVec (COMM, viewer, tmp, &rhs, &vcnt);
-          CHKERRQ (ierr);
-          VecGetArray (rhs, &w);
-          memcpy (&local_rhs[j][roff2], w, vcnt * sizeof (PetscScalar));
-          VecRestoreArray (rhs, &w);
+	{
+	  sprintf (tmp, "rhs_%d", j);
+	  ierr = ReadVec (COMM, viewer, tmp, &rhs, &vcnt);
+	  CHKERRQ (ierr);
+	  VecGetArray (rhs, &w);
+	  memcpy (&local_rhs[j][roff2], w, vcnt * sizeof (PetscScalar));
+	  VecRestoreArray (rhs, &w);
 	}
       roff2 += vcnt;
 
@@ -622,8 +623,8 @@ CreateW (MPI_Comm COMM, PetscScalar * local_weights, PetscInt local_nrow,
 
 /*! Creates a diagonal matrix with the weights as the entries.*/
 PetscErrorCode
-CreateL (MPI_Comm COMM, char indexname[], PetscInt local_nrow, PetscInt global_nrow,
-	 PetscBool trunc, Mat * L)
+CreateL (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
+	 PetscInt global_nrow, PetscBool trunc, Mat * L)
 {
 /**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A
@@ -693,8 +694,8 @@ CountSolves (MPI_Comm COMM, char indexname[], PetscInt * nsolve)
 
 /*! Read the x0 vectors stored in the regularization file. */
 PetscErrorCode
-Readx0 (MPI_Comm COMM, char indexname[], PetscInt local_nrow, PetscInt global_nrow,
-	 PetscInt nsolve, PetscBool trunc, Vec x0[])
+Readx0 (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
+	PetscInt global_nrow, PetscInt nsolve, PetscBool trunc, Vec x0[])
 {
 /**
  * @param[in] COMM The MPI communicator, PETSC_COMM_SELF.A

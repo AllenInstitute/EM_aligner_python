@@ -59,11 +59,13 @@ def output_directory(tmpdir_factory):
     rmtree(outdir)
 
 
+@pytest.mark.parametrize('transform', ['RotationModel', 'AffineModel'])
 def test_petsc_solver(
         render,
         rough_input_stack,
         rough_pointmatches,
-        output_directory):
+        output_directory,
+        transform):
 
     # setup the solver to write out hdf5 files
     parameters = copy.deepcopy(rough_parameters)
@@ -72,6 +74,8 @@ def test_petsc_solver(
     parameters['pointmatch']['name'] = rough_pointmatches
     parameters['output_mode'] = 'hdf5'
     parameters['hdf5_options']['chunks_per_file'] = 10
+    parameters['transformation'] = transform
+
     mod = EMaligner.EMaligner(
             input_data=parameters, args=[])
     mod.run()
@@ -85,7 +89,7 @@ def test_petsc_solver(
             parameters['hdf5_options']['output_dir'],
             'solution_output.h5')
     # /tmp is automatically bound
-    cmd = ['singularity', 'run', './EMaligner/distributed/petsc_solver.simf']
+    cmd = ['singularity', 'run', './EMaligner/distributed/bin/petsc_solver.simf']
     cmd += ['-input', indexfile]
     cmd += ['-output', outfile]
     # this is a direct PaStiX solve
@@ -127,10 +131,10 @@ def test_petsc_solver(
         pM = petsc_solved[p].tforms[-1].M
         sM = scipy_solved[p].tforms[-1].M
         # affine part
-        assert np.all(np.isclose(pM[0:2, 0:2], sM[0:2, 0:2], rtol=1e-7, atol=1e-7))
+        assert np.all(np.isclose(pM[0:2, 0:2], sM[0:2, 0:2], rtol=1e-1, atol=1e-5))
         # translation part, small translations need a gentler rtol
-        # but, absolutely, still < 1e-5 pixels
-        assert np.all(np.isclose(pM[0:2, 2], sM[0:2, 2], rtol=1e-3, atol=1e-5))
+        # but, absolutely, still < 1e-3 pixels
+        assert np.all(np.isclose(pM[0:2, 2], sM[0:2, 2], rtol=1e-1, atol=1e-3))
 
 
 @pytest.mark.parametrize("chunks", [-1, 1, 2])

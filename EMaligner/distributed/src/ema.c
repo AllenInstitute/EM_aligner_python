@@ -127,7 +127,7 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
   hsize_t dims[1];
   int nds = 8;
   const char *copyids[8] =
-    { "input_args", 
+    { "input_args", "resolved_tiles",
     "datafile_names", "datafile_maxcol", "datafile_mincol",
     "datafile_nnz", "datafile_nrows", "reg", "solve_list"
   };
@@ -144,7 +144,7 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
       H5Sget_simple_extent_dims (space, dims, NULL);
       rdata = (char **) malloc (dims[0] * sizeof (char *));
       memtype = H5Dget_type (dset);
-      if (i < 2)
+      if (i < 3)
 	{
 	  memtype = H5Tcopy (H5T_C_S1);
 	  H5Tset_size (memtype, H5T_VARIABLE);

@@ -303,6 +303,7 @@ def write_chunk_to_file(fname, c, file_weights, rhs):
 
 def write_reg_and_tforms(
         args,
+        resolved,
         metadata,
         tforms,
         reg):
@@ -336,6 +337,12 @@ def write_reg_and_tforms(
         dset[:] = vec
 
         str_type = h5py.special_dtype(vlen=bytes)
+
+        dset = f.create_dataset(
+                "resolved_tiles",
+                (1,),
+                dtype=str_type)
+        dset[:] = json.dumps(resolved.to_dict(), indent=2)
 
         # keep track of input args
         dset = f.create_dataset(

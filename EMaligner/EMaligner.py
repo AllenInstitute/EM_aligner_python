@@ -163,15 +163,6 @@ class EMaligner(argschema.ArgSchemaParser):
     def assemble_and_solve(self, zvals):
         t0 = time.time()
 
-        # read in the tilespecs
-        self.resolvedtiles = utils.get_resolved_tilespecs(
-            self.args['input_stack'],
-            self.args['transformation'],
-            self.args['n_parallel_jobs'],
-            zvals,
-            fullsize=self.args['fullsize_transform'],
-            order=self.args['poly_order'])
-
         if self.args['ingest_from_file'] != '':
             assemble_result = self.assemble_from_hdf5(
                 self.args['ingest_from_file'],
@@ -186,6 +177,14 @@ class EMaligner(argschema.ArgSchemaParser):
                     self.args['assemble_from_file'],
                     zvals)
             else:
+                # read in the tilespecs
+                self.resolvedtiles = utils.get_resolved_tilespecs(
+                    self.args['input_stack'],
+                    self.args['transformation'],
+                    self.args['n_parallel_jobs'],
+                    zvals,
+                    fullsize=self.args['fullsize_transform'],
+                    order=self.args['poly_order'])
                 assemble_result = self.assemble_from_db(zvals)
 
             logger.info(' A created in %0.1f seconds' % (time.time() - t0))
@@ -259,6 +258,19 @@ class EMaligner(argschema.ArgSchemaParser):
             datafile_names = f.get('datafile_names')[()]
             file_args = json.loads(f.get('input_args')[()][0].decode('utf-8'))
 
+            r = json.loads(f.get('resolved_tiles')[()][0].decode('utf-8'))
+            self.resolvedtiles = renderapi.resolvedtiles.ResolvedTiles(json=r)
+            logger.info(
+                "\n loaded %d tile specs from %s" % (
+                    len(self.resolvedtiles.tilespecs),
+                    filename))
+
+            utils.ready_transforms(
+                    self.resolvedtiles.tilespecs,
+                    file_args['transformation'],
+                    file_args['fullsize_transform'],
+                    file_args['poly_order'])
+
         assemble_result['reg'] = sparse.diags([reg], [0], format='csr')
 
         if read_data:
@@ -320,6 +332,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
             utils.write_reg_and_tforms(
                 dict(self.args),
+                self.resolvedtiles,
                 CSR_A['metadata'],
                 assemble_result['x'],
                 assemble_result['reg'])

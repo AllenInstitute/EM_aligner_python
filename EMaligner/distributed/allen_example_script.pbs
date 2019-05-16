@@ -3,7 +3,7 @@
 #PBS -N em_dist_solve
 #PBS -q emconnectome
 #PBS -l nodes=2:ppn=1
-#PBS -l walltime=0:10:00
+#PBS -l walltime=0:02:00
 #PBS -n
 #PBS -j oe
 #PBS -o /allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/EMaligner/distributed

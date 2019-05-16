@@ -281,82 +281,81 @@ main (int argc, char **args)
      Check solution and clean up
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
   PetscReal *precision = (PetscReal *) calloc (nsolve, sizeof (PetscReal));
-  char strout[400], tmp[400];
+  char strout[1000], tmp[400];
+  
+  sprintf(strout, " precision [norm(Kx-Lm)/norm(Lm)] =");
+  for (i = 0; i < nsolve; i++)
+    {
+      //from here on, x0 is replaced by err
+      ierr = VecScale (Lm[i], (PetscScalar) - 1.0);
+      CHKERRQ (ierr);
+      ierr = MatMultAdd (K, x[i], Lm[i], x0[i]);
+      CHKERRQ (ierr);		//err0 = Kx0-Lm0
+      ierr = VecNorm (x0[i], NORM_2, &norm[i]);
+      CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
+      ierr = VecNorm (Lm[i], NORM_2, &norm2[i]);
+      CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
+      precision[i] = norm[i] / norm2[i];
+      sprintf(tmp, " %0.1e", precision[i]);
+      strcat(strout, tmp);
+      if (i != nsolve - 1)
+        {
+          strcat(strout, ",");
+        }
+    }
+  strcat(strout, "\n");
+
+  PetscInt mA, nA, c0, cn;
+  ierr = MatGetSize (A, &mA, &nA);
+  CHKERRQ (ierr);
+  ierr = MatGetOwnershipRange (A, &c0, &cn);
+  CHKERRQ (ierr);
+  strcat(strout, " error     [norm(Ax-b)] =");
+  for (i = 0; i < nsolve; i++)
+    {
+      ierr = VecCreate (PETSC_COMM_WORLD, &x0[i]);
+      CHKERRQ (ierr);
+      ierr = VecSetType (x0[i], VECMPI);
+      CHKERRQ (ierr);
+      ierr = VecSetSizes (x0[i], cn - c0, mA);
+      CHKERRQ (ierr);
+      ierr = MatMult (A, x[i], x0[i]);
+      CHKERRQ (ierr);		//err0 = Ax0
+      ierr = VecAXPY (x0[i], -1.0, rhs[i]);
+      CHKERRQ (ierr);
+      ierr = VecNorm (x0[i], NORM_2, &norm[i]);
+      CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
+      sprintf(tmp, " %0.1f", norm[i]);
+      strcat(strout, tmp);
+      if (i != nsolve - 1)
+        {
+          strcat(strout, ",");
+        }
+    }
+  strcat(strout, "\n");
+
+  //calculate the mean and standard deviation
+  PetscReal errmean[2], errstd[2];
+  PetscInt sz;
+  strcat(strout, " [mean(Ax) +/- std(Ax)] =");
+  for (i = 0; i < nsolve; i++)
+    {
+      VecGetSize(x0[i], &sz);
+      VecSum (x0[i], &errmean[i]);
+      errmean[i] /= sz;
+      VecShift (x0[i], -1.0 * errmean[i]);
+      VecNorm (x0[i], NORM_2, &errstd[i]);
+      errstd[i] /= sqrt(sz);
+      sprintf(tmp, " %0.2f +/- %0.2f", errmean[i], errstd[i]);
+      strcat(strout, tmp);
+      if (i != nsolve - 1)
+        {
+          strcat(strout, ",");
+        }
+    }
+  strcat(strout, "\n");
   if (rank==0)
     {
-      sprintf(strout, " precision [norm(Kx-Lm)/norm(Lm)] =");
-      for (i = 0; i < nsolve; i++)
-        {
-          //from here on, x0 is replaced by err
-          ierr = VecScale (Lm[i], (PetscScalar) - 1.0);
-          CHKERRQ (ierr);
-          ierr = MatMultAdd (K, x[i], Lm[i], x0[i]);
-          CHKERRQ (ierr);		//err0 = Kx0-Lm0
-          ierr = VecNorm (x0[i], NORM_2, &norm[i]);
-          CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
-          ierr = VecNorm (Lm[i], NORM_2, &norm2[i]);
-          CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
-          precision[i] = norm[i] / norm2[i];
-          sprintf(tmp, " %0.1e", precision[i]);
-          strcat(strout, tmp);
-          if (i != nsolve - 1)
-            {
-              strcat(strout, ",");
-            }
-        }
-      strcat(strout, "\n");
-      printf(strout);
-
-      PetscInt mA, nA, c0, cn;
-      ierr = MatGetSize (A, &mA, &nA);
-      CHKERRQ (ierr);
-      ierr = MatGetOwnershipRange (A, &c0, &cn);
-      CHKERRQ (ierr);
-      sprintf(strout, " error     [norm(Ax-b)] =");
-      for (i = 0; i < nsolve; i++)
-        {
-          ierr = VecCreate (PETSC_COMM_WORLD, &x0[i]);
-          CHKERRQ (ierr);
-          ierr = VecSetType (x0[i], VECMPI);
-          CHKERRQ (ierr);
-          ierr = VecSetSizes (x0[i], cn - c0, mA);
-          CHKERRQ (ierr);
-          ierr = MatMult (A, x[i], x0[i]);
-          CHKERRQ (ierr);		//err0 = Ax0
-          ierr = VecAXPY (x0[i], -1.0, rhs[i]);
-          CHKERRQ (ierr);
-          ierr = VecNorm (x0[i], NORM_2, &norm[i]);
-          CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
-          sprintf(tmp, " %0.1f", norm[i]);
-          strcat(strout, tmp);
-          if (i != nsolve - 1)
-            {
-              strcat(strout, ",");
-            }
-        }
-      strcat(strout, "\n");
-      printf(strout);
-
-      //calculate the mean and standard deviation
-      PetscReal errmean[2], errstd[2];
-      PetscInt sz;
-      sprintf(strout, " [mean(Ax) +/- std(Ax)] =");
-      for (i = 0; i < nsolve; i++)
-        {
-          VecGetSize(x0[i], &sz);
-          VecSum (x0[i], &errmean[i]);
-          errmean[i] /= sz;
-          VecShift (x0[i], -1.0 * errmean[i]);
-          VecNorm (x0[i], NORM_2, &errstd[i]);
-          errstd[i] /= sqrt(sz);
-          sprintf(tmp, " %0.2f +/- %0.2f", errmean[i], errstd[i]);
-          strcat(strout, tmp);
-          if (i != nsolve - 1)
-            {
-              strcat(strout, ",");
-            }
-        }
-      strcat(strout, "\n");
       printf(strout);
     }
 

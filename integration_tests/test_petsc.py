@@ -75,6 +75,11 @@ def test_petsc_solver(
     parameters['output_mode'] = 'hdf5'
     parameters['hdf5_options']['chunks_per_file'] = 10
     parameters['transformation'] = transform
+    if transform == 'AffineModel':
+        parameters['regularization'] = {
+                "default_lamda": 1e3,
+                "translation_factor": 1.0e-10
+                }
 
     mod = EMaligner.EMaligner(
             input_data=parameters, args=[])
@@ -113,28 +118,28 @@ def test_petsc_solver(
     parameters['ingest_from_file'] = ''
     parameters['output_mode'] = 'stack'
     parameters['output_stack']['name'] = 'from_scipy'
-    mod = EMaligner.EMaligner(
+    smod = EMaligner.EMaligner(
             input_data=parameters, args=[])
-    mod.run()
+    smod.run()
 
     scipy_solved = renderapi.tilespec.get_tile_specs_from_stack(
             parameters['output_stack']['name'][0],
             render=render)
 
     assert len(petsc_solved) == len(scipy_solved)
+    assert np.all(np.isclose(mod.results['precision'], smod.results['precision']))
     ptids = np.array([t.tileId for t in petsc_solved]) 
     stids = np.array([t.tileId for t in scipy_solved]) 
     in1d = np.intersect1d(ptids, stids)
     for tid in in1d:
         p = np.argwhere(ptids == tid).flatten()[0]
         s = np.argwhere(stids == tid).flatten()[0]
-        pM = petsc_solved[p].tforms[-1].M
-        sM = scipy_solved[p].tforms[-1].M
-        # affine part
-        assert np.all(np.isclose(pM[0:2, 0:2], sM[0:2, 0:2], rtol=1e-1, atol=1e-5))
-        # translation part, small translations need a gentler rtol
-        # but, absolutely, still < 1e-3 pixels
-        assert np.all(np.isclose(pM[0:2, 2], sM[0:2, 2], rtol=1e-1, atol=1e-3))
+        ptf = petsc_solved[p].tforms[-1]
+        stf = scipy_solved[s].tforms[-1]
+        assert np.isclose(ptf.rotation, stf.rotation, rtol=10.0, atol=0.05)
+        assert np.all(np.isclose(ptf.scale, stf.scale, rtol=0.001, atol=0.001))
+        assert np.isclose(ptf.shear, stf.shear, rtol=0.1, atol=0.001)
+        assert np.all(np.isclose(ptf.translation, stf.translation, rtol=0.1, atol=0.5))
 
 
 @pytest.mark.parametrize("chunks", [-1, 1, 2])

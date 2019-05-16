@@ -256,7 +256,7 @@ main (int argc, char **args)
     }
   ierr =
     PetscViewerHDF5Open (PETSC_COMM_WORLD, sln_output, FILE_MODE_APPEND,
-			 &viewer);
+		    &viewer);
   CHKERRQ (ierr);
   for (i = 0; i < nsolve; i++)
     {
@@ -284,9 +284,10 @@ main (int argc, char **args)
      Check solution and clean up
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
   PetscReal *precision = (PetscReal *) calloc (nsolve, sizeof (PetscReal));
-  char strout[1000], tmp[400];
+  char results_out[1000], strout[1000], tmp[400];
 
   sprintf (strout, " precision [norm(Kx-Lm)/norm(Lm)] =");
+  sprintf (results_out, "{\"precision\": [");
   for (i = 0; i < nsolve; i++)
     {
       //from here on, x0 is replaced by err
@@ -301,12 +302,15 @@ main (int argc, char **args)
       precision[i] = norm[i] / norm2[i];
       sprintf (tmp, " %0.1e", precision[i]);
       strcat (strout, tmp);
+      strcat(results_out, tmp);
       if (i != nsolve - 1)
 	{
 	  strcat (strout, ",");
+	  strcat (results_out, ",");
 	}
     }
   strcat (strout, "\n");
+  strcat (results_out, "],");
 
   PetscInt mA, nA, c0, cn;
   ierr = MatGetSize (A, &mA, &nA);
@@ -314,6 +318,7 @@ main (int argc, char **args)
   ierr = MatGetOwnershipRange (A, &c0, &cn);
   CHKERRQ (ierr);
   strcat (strout, " error     [norm(Ax-b)] =");
+  strcat (results_out, "\"error\": [");
   for (i = 0; i < nsolve; i++)
     {
       ierr = VecCreate (PETSC_COMM_WORLD, &x0[i]);
@@ -330,17 +335,21 @@ main (int argc, char **args)
       CHKERRQ (ierr);		//NORM_2 denotes sqrt(sum_i |x_i|^2)
       sprintf (tmp, " %0.1f", norm[i]);
       strcat (strout, tmp);
+      strcat (results_out, tmp);
       if (i != nsolve - 1)
 	{
 	  strcat (strout, ",");
+	  strcat (results_out, ",");
 	}
     }
   strcat (strout, "\n");
+  strcat (results_out, "],");
 
   //calculate the mean and standard deviation
   PetscReal errmean[2], errstd[2];
   PetscInt sz;
   strcat (strout, " [mean(Ax) +/- std(Ax)] =");
+  strcat (results_out, " \"err\": [");
   for (i = 0; i < nsolve; i++)
     {
       VecGetSize (x0[i], &sz);
@@ -351,15 +360,34 @@ main (int argc, char **args)
       errstd[i] /= sqrt (sz);
       sprintf (tmp, " %0.2f +/- %0.2f", errmean[i], errstd[i]);
       strcat (strout, tmp);
+      sprintf (tmp, "[%0.2f, %0.2f]", errmean[i], errstd[i]);
+      strcat (results_out, tmp);
       if (i != nsolve - 1)
 	{
 	  strcat (strout, ",");
+	  strcat (results_out, ",");
 	}
     }
   strcat (strout, "\n");
+  strcat (results_out, "]}");
   if (rank == 0)
     {
       printf (strout);
+      hid_t fileout = H5Fopen (sln_output, H5F_ACC_RDWR, H5P_DEFAULT);
+      hid_t memtype = H5Tcopy (H5T_C_S1);
+      hsize_t dims[1] = {1};
+      hid_t space = H5Screate_simple(1, dims, NULL);
+      H5Tset_size (memtype, 1000);
+      hid_t dsetout =
+	H5Dcreate (fileout, "results", memtype, space, H5P_DEFAULT,
+		   H5P_DEFAULT, H5P_DEFAULT);
+      H5Dwrite (dsetout, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, results_out);
+      H5Dclose (dsetout);
+      H5Sclose (space);
+      H5Tclose (memtype);
+      H5Fclose (fileout);
+      ierr = PetscViewerDestroy (&viewer);
+      CHKERRQ (ierr);
     }
 
   //cleanup

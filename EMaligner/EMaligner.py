@@ -164,16 +164,15 @@ class EMaligner(argschema.ArgSchemaParser):
         t0 = time.time()
 
         if self.args['ingest_from_file'] != '':
-            assemble_result = self.assemble_from_hdf5(
+            assemble_result, results = self.assemble_from_hdf5(
                 self.args['ingest_from_file'],
                 zvals,
                 read_data=False)
-            results = {}
             results['x'] = assemble_result['x']
 
         else:
             if self.args['assemble_from_file'] != '':
-                assemble_result = self.assemble_from_hdf5(
+                assemble_result, _ = self.assemble_from_hdf5(
                     self.args['assemble_from_file'],
                     zvals)
             else:
@@ -257,6 +256,9 @@ class EMaligner(argschema.ArgSchemaParser):
             reg = f.get('reg')[()]
             datafile_names = f.get('datafile_names')[()]
             file_args = json.loads(f.get('input_args')[()][0].decode('utf-8'))
+            results = {}
+            if "results" in f.keys():
+                results = json.loads(f.get('results')[()][0].decode('utf-8'))
 
             r = json.loads(f.get('resolved_tiles')[()][0].decode('utf-8'))
             self.resolvedtiles = renderapi.resolvedtiles.ResolvedTiles(json=r)
@@ -314,7 +316,7 @@ class EMaligner(argschema.ArgSchemaParser):
             assemble_result['weights'] = sparse.diags(
                     [weights], [0], format='csr')
 
-        return assemble_result
+        return assemble_result, results
 
     def assemble_from_db(self, zvals):
         # create A matrix in compressed sparse row (CSR) format

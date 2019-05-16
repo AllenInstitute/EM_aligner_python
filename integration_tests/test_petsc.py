@@ -127,7 +127,9 @@ def test_petsc_solver(
             render=render)
 
     assert len(petsc_solved) == len(scipy_solved)
-    assert np.all(np.isclose(mod.results['precision'], smod.results['precision']))
+    assert np.all(np.isclose(mod.results['precision'], smod.results['precision'], rtol=10.0, atol=1e-10))
+    assert np.all(np.isclose(mod.results['error'], smod.results['error'], rtol=0.01, atol=1.0))
+    assert np.all(np.isclose(mod.results['err'], smod.results['err'], rtol=0.01, atol=0.2))
     ptids = np.array([t.tileId for t in petsc_solved]) 
     stids = np.array([t.tileId for t in scipy_solved]) 
     in1d = np.intersect1d(ptids, stids)

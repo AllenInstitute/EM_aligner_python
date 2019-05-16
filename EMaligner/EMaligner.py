@@ -84,7 +84,6 @@ def calculate_processing_chunk(fargs):
     pblocks = []
     qblocks = []
     rhss = []
-    used = []
     for k, match in enumerate(matches):
 
         pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
@@ -104,13 +103,8 @@ def calculate_processing_chunk(fargs):
         wts.append(weights * tilepair_weightfac)
         rhss.append(rhs)
 
-        # note both as used
-        used.append(tspecs[pinds[k]].tileId)
-        used.append(tspecs[qinds[k]].tileId)
-
     chunk = {}
     chunk['zlist'] = np.array([pair['z1'], pair['z2']])
-    chunk['tiles_used'] = used
     chunk['block'] = sparse.vstack(pblocks) - sparse.vstack(qblocks)
     chunk['weights'] = np.concatenate(wts)
     chunk['rhs'] = np.concatenate(rhss)
@@ -194,7 +188,6 @@ class EMaligner(argschema.ArgSchemaParser):
             else:
                 assemble_result = self.assemble_from_db(zvals)
 
-            self.ntiles_used = np.count_nonzero(assemble_result['tiles_used'])
             logger.info(' A created in %0.1f seconds' % (time.time() - t0))
 
             if self.args['profile_data_load']:
@@ -243,16 +236,11 @@ class EMaligner(argschema.ArgSchemaParser):
         assemble_result = {}
 
         with h5py.File(filename, 'r') as f:
-            assemble_result['tids'] = np.array(
-                f.get('used_tile_ids')[()]).astype('U')
-            assemble_result['unused_tids'] = np.array(
-                f.get('unused_tile_ids')[()]).astype('U')
-
             k = 0
             key = 'x'
             assemble_result[key] = []
             while True:
-                name = 'transforms_%d' % k
+                name = 'x_%d' % k
                 if name in f.keys():
                     assemble_result[key].append(f.get(name)[()])
                     k += 1
@@ -267,14 +255,9 @@ class EMaligner(argschema.ArgSchemaParser):
                 assemble_result[key] = np.transpose(
                     np.array(assemble_result[key]))
 
-            reg = f.get('lambda')[()]
+            reg = f.get('reg')[()]
             datafile_names = f.get('datafile_names')[()]
             file_args = json.loads(f.get('input_args')[()][0].decode('utf-8'))
-
-        # get the tile IDs and transforms
-        tids = np.array([
-            t.tileId for t in self.resolvedtiles.tilespecs])
-        assemble_result['tiles_used'] = np.in1d(tids, assemble_result['tids'])
 
         assemble_result['reg'] = sparse.diags([reg], [0], format='csr')
 
@@ -328,23 +311,18 @@ class EMaligner(argschema.ArgSchemaParser):
         assemble_result = {}
         assemble_result['A'] = CSR_A.pop('A')
         assemble_result['weights'] = CSR_A.pop('weights')
-        assemble_result['tiles_used'] = CSR_A.pop('tiles_used')
         assemble_result['reg'] = CSR_A.pop('reg')
         assemble_result['x'] = CSR_A.pop('x')
         assemble_result['rhs'] = CSR_A.pop('rhs')
 
         # output the regularization vectors to hdf5 file
         if self.args['output_mode'] == 'hdf5':
-            alltids = np.array([
-                t.tileId for t in self.resolvedtiles.tilespecs])
 
             utils.write_reg_and_tforms(
                 dict(self.args),
                 CSR_A['metadata'],
                 assemble_result['x'],
-                assemble_result['reg'],
-                alltids[assemble_result['tiles_used']],
-                alltids[np.invert(assemble_result['tiles_used'])])
+                assemble_result['reg'])
 
         return assemble_result
 
@@ -355,7 +333,6 @@ class EMaligner(argschema.ArgSchemaParser):
             'reg': None,
             'weights': None,
             'rhs': None,
-            'tiles_used': None,
             'metadata': None}
 
         # the processing will be distributed according to these pairs
@@ -379,11 +356,6 @@ class EMaligner(argschema.ArgSchemaParser):
 
         with renderapi.client.WithPool(self.args['n_parallel_jobs']) as pool:
             results = np.array(pool.map(calculate_processing_chunk, fargs))
-
-        t_used = np.unique(
-                np.concatenate([r['tiles_used'] for r in results if r]))
-
-        func_result['tiles_used'] = np.in1d(tile_ids, t_used)
 
         func_result['x'] = []
         reg = []

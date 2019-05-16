@@ -305,16 +305,14 @@ def write_reg_and_tforms(
         args,
         metadata,
         tforms,
-        reg,
-        tids,
-        unused_tids):
+        reg):
 
     fname = os.path.join(
             args['hdf5_options']['output_dir'],
             'solution_input.h5')
     with h5py.File(fname, "w") as f:
         for j in np.arange(tforms.shape[1]):
-            dsetname = 'transforms_%d' % j
+            dsetname = 'x_%d' % j
             dset = f.create_dataset(
                     dsetname,
                     (tforms[:, j].size,),
@@ -324,7 +322,7 @@ def write_reg_and_tforms(
         # a list of transform indices (clunky, but works for PETSc to count)
         tlist = np.arange(tforms.shape[1]).astype('int32')
         dset = f.create_dataset(
-                "transform_list",
+                "solve_list",
                 (tlist.size, 1),
                 dtype='int32')
         dset[:] = tlist.reshape(tlist.size, 1)
@@ -332,25 +330,12 @@ def write_reg_and_tforms(
         # create a regularization vector
         vec = reg.diagonal()
         dset = f.create_dataset(
-                "lambda",
+                "reg",
                 (vec.size,),
                 dtype='float64')
         dset[:] = vec
 
-        # keep track here what tile_ids were used
         str_type = h5py.special_dtype(vlen=bytes)
-        dset = f.create_dataset(
-                "used_tile_ids",
-                (tids.size,),
-                dtype=str_type)
-        dset[:] = tids
-
-        # keep track here what tile_ids were not used
-        dset = f.create_dataset(
-                "unused_tile_ids",
-                (unused_tids.size,),
-                dtype=str_type)
-        dset[:] = unused_tids
 
         # keep track of input args
         dset = f.create_dataset(

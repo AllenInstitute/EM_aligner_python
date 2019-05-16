@@ -270,7 +270,7 @@ main (int argc, char **args)
 	{
 	  printf ("solve %d: %0.1f sec\n", i, t1 - t0);
 	}
-      sprintf (xname, "transforms_%d", i);
+      sprintf (xname, "x_%d", i);
       ierr = PetscObjectSetName ((PetscObject) x[i], xname);
       CHKERRQ (ierr);
       ierr = VecView (x[i], viewer);

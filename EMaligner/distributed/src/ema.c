@@ -125,11 +125,11 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
 {
   hid_t filein, fileout, filetype, memtype, space, dset, dsetout;
   hsize_t dims[1];
-  int nds = 10;
-  const char *copyids[10] =
-    { "input_args", "used_tile_ids", "unused_tile_ids",
+  int nds = 8;
+  const char *copyids[8] =
+    { "input_args", 
     "datafile_names", "datafile_maxcol", "datafile_mincol",
-    "datafile_nnz", "datafile_nrows", "lambda", "transform_list"
+    "datafile_nnz", "datafile_nrows", "reg", "solve_list"
   };
   char **rdata;
   int i;
@@ -144,7 +144,7 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
       H5Sget_simple_extent_dims (space, dims, NULL);
       rdata = (char **) malloc (dims[0] * sizeof (char *));
       memtype = H5Dget_type (dset);
-      if (i < 4)
+      if (i < 2)
 	{
 	  memtype = H5Tcopy (H5T_C_S1);
 	  H5Tset_size (memtype, H5T_VARIABLE);
@@ -645,7 +645,7 @@ CreateL (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
   ierr = PetscViewerHDF5Open (COMM, indexname, FILE_MODE_READ, &viewer);
   CHKERRQ (ierr);
   ierr =
-    ReadVecWithSizes (COMM, viewer, (char *) "lambda", &global_reg, &junk,
+    ReadVecWithSizes (COMM, viewer, (char *) "reg", &global_reg, &junk,
 		      local_nrow, global_nrow, trunc);
   CHKERRQ (ierr);
 
@@ -684,7 +684,7 @@ CountSolves (MPI_Comm COMM, char indexname[], PetscInt * nsolve)
   *nsolve = 0;
   ierr = PetscViewerHDF5Open (COMM, indexname, FILE_MODE_READ, &viewer);
   CHKERRQ (ierr);
-  ierr = ReadIndexSet (COMM, viewer, (char *) "transform_list", &test, &junk);
+  ierr = ReadIndexSet (COMM, viewer, (char *) "solve_list", &test, &junk);
   CHKERRQ (ierr);
   *nsolve = junk;
   ierr = PetscViewerDestroy (&viewer);
@@ -715,7 +715,7 @@ Readx0 (MPI_Comm COMM, char indexname[], PetscInt local_nrow,
   CHKERRQ (ierr);
   for (i = 0; i < nsolve; i++)
     {
-      sprintf (tmp, "transforms_%d", i);
+      sprintf (tmp, "x_%d", i);
       ierr =
 	ReadVecWithSizes (COMM, viewer, tmp, &x0[i], &junk, local_nrow,
 			  global_nrow, trunc);

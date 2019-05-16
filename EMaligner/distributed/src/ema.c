@@ -15,23 +15,22 @@ CountFiles (MPI_Comm COMM, char indexname[], int *nfiles)
 */
   PetscErrorCode ierr;
   PetscMPIInt rank;
-  hid_t file, space, dset;
-  herr_t status;
-  hsize_t dims[1];
-  int ndims;
-
   ierr = MPI_Comm_rank (COMM, &rank);
   CHKERRQ (ierr);
+
   if (rank == 0)
     {
+      hid_t file, space, dset;
+      hsize_t dims[1];
+
       file = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
       dset = H5Dopen (file, "datafile_names", H5P_DEFAULT);
       space = H5Dget_space (dset);
-      ndims = H5Sget_simple_extent_dims (space, dims, NULL);
+      H5Sget_simple_extent_dims (space, dims, NULL);
       *nfiles = dims[0];
-      status = H5Dclose (dset);
-      status = H5Sclose (space);
-      status = H5Fclose (file);
+      H5Dclose (dset);
+      H5Sclose (space);
+      H5Fclose (file);
     }
   MPI_Bcast (nfiles, 1, MPI_INT, 0, COMM);
   return ierr;
@@ -50,40 +49,37 @@ ReadMetadata (MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[],
  * @param[out] *metadata An array of metadata from index.txt, populated by this function.
 */
   PetscErrorCode ierr;
-  PetscViewer viewer;
   PetscMPIInt rank;
-  PetscInt junk;
-  int i, j;
-  char *dir, *tmp, tmpname[200];
-  char **rdata;
-  hid_t file, filetype, memtype, space, dset;
-  herr_t status;
-  hsize_t dims[1];
-  int ndims;
-
-  tmp = strdup (indexname);
-  dir = strdup (dirname (tmp));
+  int i;
   ierr = MPI_Comm_rank (COMM, &rank);
   CHKERRQ (ierr);
+
   if (rank == 0)
     {
+      char **rdata;
+      hid_t file, filetype, memtype, space, dset;
+      hsize_t dims[1];
+      char *dir, *tmp;
+
+      tmp = strdup (indexname);
+      dir = strdup (dirname (tmp));
       file = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
       dset = H5Dopen (file, "datafile_names", H5P_DEFAULT);
       filetype = H5Dget_type (dset);
       space = H5Dget_space (dset);
-      ndims = H5Sget_simple_extent_dims (space, dims, NULL);
+      H5Sget_simple_extent_dims (space, dims, NULL);
       rdata = (char **) malloc (dims[0] * sizeof (char *));
       memtype = H5Tcopy (H5T_C_S1);
-      status = H5Tset_size (memtype, H5T_VARIABLE);
-      status = H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
+      H5Tset_size (memtype, H5T_VARIABLE);
+      H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
       for (i = 0; i < nfiles; i++)
 	{
 	  sprintf (csrnames[i], "%s/%s", dir, rdata[i]);
 	}
-      status = H5Dvlen_reclaim (memtype, space, H5P_DEFAULT, rdata);
+      H5Dvlen_reclaim (memtype, space, H5P_DEFAULT, rdata);
       free (rdata);
-      status = H5Dclose (dset);
-      status = H5Sclose (space);
+      H5Dclose (dset);
+      H5Sclose (space);
 
       PetscInt *row, *mxcol, *mncol, *nnz;
       row = (PetscInt *) malloc (nfiles * sizeof (PetscInt));
@@ -91,17 +87,13 @@ ReadMetadata (MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[],
       mncol = (PetscInt *) malloc (nfiles * sizeof (PetscInt));
       nnz = (PetscInt *) malloc (nfiles * sizeof (PetscInt));
       dset = H5Dopen (file, "datafile_nrows", H5P_DEFAULT);
-      status =
-	H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, row);
+      H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, row);
       dset = H5Dopen (file, "datafile_mincol", H5P_DEFAULT);
-      status =
-	H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, mncol);
+      H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, mncol);
       dset = H5Dopen (file, "datafile_maxcol", H5P_DEFAULT);
-      status =
-	H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, mxcol);
+      H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, mxcol);
       dset = H5Dopen (file, "datafile_nnz", H5P_DEFAULT);
-      status =
-	H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, nnz);
+      H5Dread (dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, nnz);
       for (i = 0; i < nfiles; i++)
 	{
 	  metadata[i][0] = row[i];
@@ -113,34 +105,33 @@ ReadMetadata (MPI_Comm COMM, char indexname[], int nfiles, char *csrnames[],
       free (mncol);
       free (mxcol);
       free (nnz);
-      status = H5Dclose (dset);
-      status = H5Tclose (filetype);
-      status = H5Tclose (memtype);
-      status = H5Fclose (file);
+      H5Dclose (dset);
+      H5Tclose (filetype);
+      H5Tclose (memtype);
+      H5Fclose (file);
+      free (dir);
+      free (tmp);
     }
   for (i = 0; i < nfiles; i++)
     {
       MPI_Bcast (csrnames[i], PETSC_MAX_PATH_LEN, MPI_CHAR, 0, COMM);
       MPI_Bcast (metadata[i], 4, MPIU_INT, 0, COMM);
     }
-  free (dir);
-  free (tmp);
   return ierr;
 }
 
-PetscErrorCode
+void
 CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
 {
   hid_t filein, fileout, filetype, memtype, space, dset, dsetout;
-  herr_t status;
   hsize_t dims[1];
   int nds = 10;
-  char *copyids[10] = { "input_args", "used_tile_ids", "unused_tile_ids",
+  const char *copyids[10] = { "input_args", "used_tile_ids", "unused_tile_ids",
     "datafile_names", "datafile_maxcol", "datafile_mincol",
     "datafile_nnz", "datafile_nrows", "lambda", "transform_list"
   };
   char **rdata;
-  int ndims, i;
+  int i;
 
   filein = H5Fopen (indexname, H5F_ACC_RDONLY, H5P_DEFAULT);
   fileout = H5Fcreate (outputname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
@@ -149,29 +140,28 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
       dset = H5Dopen (filein, copyids[i], H5P_DEFAULT);
       filetype = H5Dget_type (dset);
       space = H5Dget_space (dset);
-      ndims = H5Sget_simple_extent_dims (space, dims, NULL);
+      H5Sget_simple_extent_dims (space, dims, NULL);
       rdata = (char **) malloc (dims[0] * sizeof (char *));
       memtype = H5Dget_type (dset);
       if (i < 4)
 	{
 	  memtype = H5Tcopy (H5T_C_S1);
-	  status = H5Tset_size (memtype, H5T_VARIABLE);
+	  H5Tset_size (memtype, H5T_VARIABLE);
 	}
-      status = H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
+      H5Dread (dset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
       dsetout =
 	H5Dcreate (fileout, copyids[i], filetype, space, H5P_DEFAULT,
 		   H5P_DEFAULT, H5P_DEFAULT);
-      status =
-	H5Dwrite (dsetout, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
-      status = H5Dclose (dset);
-      status = H5Dclose (dsetout);
-      status = H5Tclose (filetype);
-      status = H5Tclose (memtype);
-      status = H5Dvlen_reclaim (memtype, space, H5P_DEFAULT, rdata);
+      H5Dwrite (dsetout, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata);
+      H5Dclose (dset);
+      H5Dclose (dsetout);
+      H5Tclose (filetype);
+      H5Tclose (memtype);
+      H5Dvlen_reclaim (memtype, space, H5P_DEFAULT, rdata);
       free (rdata);
     }
-  status = H5Fclose (filein);
-  status = H5Fclose (fileout);
+  H5Fclose (filein);
+  H5Fclose (fileout);
 }
 
 /*! Split the list of files roughly evenly amongst all the workers. */
@@ -485,10 +475,6 @@ GetGlobalLocalCounts (int nfiles, PetscInt ** metadata, int local_firstfile,
       *local_nnz += metadata[i][3];
       *local_nrow += metadata[i][0];
     }
-  //printf(" files %d through %d of %d",local_firstfile,local_lastfile,nfiles);
-  //printf(" nnz %ld of %ld\n",*local_nnz,*global_nnz);
-  //printf(" nrow %ld of %ld\n",*local_nrow,*global_nrow);
-  //printf(" localrow %ld\n",*local_row0);
   return;
 }
 
@@ -535,7 +521,6 @@ ReadLocalCSR (MPI_Comm COMM, char *csrnames[], int local_firstfile,
 	  local_indptr[j + roff] = iptr[j] + poff;
 	}
       ISRestoreIndices (indptr, &iptr);
-      printf ("niptr : %d\n", niptr);
       poff = local_indptr[niptr - 1 + roff];
       roff += niptr - 1;
 
@@ -565,11 +550,9 @@ ReadLocalCSR (MPI_Comm COMM, char *csrnames[], int local_firstfile,
       for (j = 0; j < nsolve; j++)
         {
           sprintf (tmp, "rhs_%d", j);
-	  printf("tmp : %s\n", tmp);
           ierr = ReadVec (COMM, viewer, tmp, &rhs, &vcnt);
           CHKERRQ (ierr);
           VecGetArray (rhs, &w);
-	  printf("%f %f %f\n", w[0], w[1], w[2]);
           memcpy (&local_rhs[j][roff2], w, vcnt * sizeof (PetscScalar));
           VecRestoreArray (rhs, &w);
 	}
@@ -654,7 +637,6 @@ CreateL (MPI_Comm COMM, char indexname[], PetscInt local_nrow, PetscInt global_n
   Vec global_reg;
   PetscMPIInt rank;
   PetscInt junk;
-  char tmp[200];
 
   ierr = MPI_Comm_rank (COMM, &rank);
   CHKERRQ (ierr);
@@ -697,7 +679,6 @@ CountSolves (MPI_Comm COMM, char indexname[], PetscInt * nsolve)
   PetscViewer viewer;
   PetscInt junk;
   IS test;
-  char tmp[200];
 
   *nsolve = 0;
   ierr = PetscViewerHDF5Open (COMM, indexname, FILE_MODE_READ, &viewer);

@@ -285,7 +285,9 @@ class EMaligner(argschema.ArgSchemaParser):
             fdir = os.path.dirname(filename)
             i = 0
             for fname in datafile_names:
-                with h5py.File(os.path.join(fdir, fname.decode('utf-8')), 'r') as f:
+                with h5py.File(
+                        os.path.join(
+                            fdir, fname.decode('utf-8')), 'r') as f:
                     data = np.append(data, f.get('data')[()])
                     indices = np.append(indices, f.get('indices')[()])
                     if i == 0:
@@ -361,7 +363,6 @@ class EMaligner(argschema.ArgSchemaParser):
                     [0],
                     [t.tforms[-1].DOF_per_tile for t in resolved.tilespecs])))
 
-        tile_ids = np.array([t.tileId for t in resolved.tilespecs])
         fargs = [[
             pair,
             self.args,

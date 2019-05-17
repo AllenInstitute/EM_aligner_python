@@ -12,7 +12,7 @@
 
 module load mpi/mpich-x86_64
 
-simf=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/EMaligner/distributed/petsc_solver.simf
+simf=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/EMaligner/distributed/bin/petsc_solver.simf
 input=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/solution_input.h5
 output=/allen/programs/celltypes/workgroups/em-connectomics/danielk/EM_aligner_python/tmp.h5
 

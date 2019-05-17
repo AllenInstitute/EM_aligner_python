@@ -126,8 +126,7 @@ CopyDataSetstoSolutionOut (MPI_Comm COMM, char indexname[], char outputname[])
   hid_t filein, fileout, filetype, memtype, space, dset, dsetout;
   hsize_t dims[1];
   int nds = 8;
-  const char *copyids[8] =
-    { "input_args", "resolved_tiles",
+  const char *copyids[8] = { "input_args", "resolved_tiles",
     "datafile_names", "datafile_maxcol", "datafile_mincol",
     "datafile_nnz", "datafile_nrows", "reg", "solve_list"
   };

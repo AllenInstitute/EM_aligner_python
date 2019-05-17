@@ -256,7 +256,7 @@ main (int argc, char **args)
     }
   ierr =
     PetscViewerHDF5Open (PETSC_COMM_WORLD, sln_output, FILE_MODE_APPEND,
-		    &viewer);
+			 &viewer);
   CHKERRQ (ierr);
   for (i = 0; i < nsolve; i++)
     {
@@ -302,7 +302,7 @@ main (int argc, char **args)
       precision[i] = norm[i] / norm2[i];
       sprintf (tmp, " %0.1e", precision[i]);
       strcat (strout, tmp);
-      strcat(results_out, tmp);
+      strcat (results_out, tmp);
       if (i != nsolve - 1)
 	{
 	  strcat (strout, ",");
@@ -375,8 +375,8 @@ main (int argc, char **args)
       printf (strout);
       hid_t fileout = H5Fopen (sln_output, H5F_ACC_RDWR, H5P_DEFAULT);
       hid_t memtype = H5Tcopy (H5T_C_S1);
-      hsize_t dims[1] = {1};
-      hid_t space = H5Screate_simple(1, dims, NULL);
+      hsize_t dims[1] = { 1 };
+      hid_t space = H5Screate_simple (1, dims, NULL);
       H5Tset_size (memtype, 1000);
       hid_t dsetout =
 	H5Dcreate (fileout, "results", memtype, space, H5P_DEFAULT,

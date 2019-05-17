@@ -11,7 +11,7 @@ From: AllenInstitute/EM_aligner_python:petsc
 
     cd /EM_aligner_python/EMaligner/distributed/
 
-    make -f makefile_allen em_dist_solve
+    make allen
 
 %runscript
     . /sourceme

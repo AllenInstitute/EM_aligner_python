@@ -20,8 +20,8 @@ echo "sregistry Version:"
 
 # Install Singularity
 export VERSION=3.1.1 
-mkdir -p $GOPATH/src/github.com/sylabs
-cd $GOPATH/src/github.com/sylabs
+mkdir -p "$GOPATH"/src/github.com/sylabs
+cd "$GOPATH"/src/github.com/sylabs
 wget -q https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-${VERSION}.tar.gz
 tar -xzf singularity-${VERSION}.tar.gz
 cd singularity
@@ -30,7 +30,6 @@ cd singularity
 make -C ./builddir
 sudo make -C ./builddir install
 
-SINGULARITY_BASE="${GOPATH}/src/github.com/sylabs/singularity"
 export PATH="${GOPATH}/bin:${PATH}"
 
 mkdir -p "${GOPATH}/src/github.com/sylabs"
@@ -39,5 +38,5 @@ cd "${GOPATH}/src/github.com/sylabs"
 git clone -b release-3.2 https://github.com/sylabs/singularity
 cd singularity
 ./mconfig -v -p /usr/local
-make -j `nproc 2>/dev/null || echo 1` -C ./builddir all
+make -j $(nproc 2>/dev/null || echo 1) -C ./builddir all
 sudo make -C ./builddir install

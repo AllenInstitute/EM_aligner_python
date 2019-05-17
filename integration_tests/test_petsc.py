@@ -94,7 +94,10 @@ def test_petsc_solver(
             parameters['hdf5_options']['output_dir'],
             'solution_output.h5')
     # /tmp is automatically bound
-    cmd = ['singularity', 'run', './EMaligner/distributed/bin/petsc_solver.simf']
+    cmd = [
+            'singularity',
+            'run',
+            './EMaligner/distributed/bin/petsc_solver.simf']
     cmd += ['-input', indexfile]
     cmd += ['-output', outfile]
     # this is a direct PaStiX solve
@@ -127,11 +130,26 @@ def test_petsc_solver(
             render=render)
 
     assert len(petsc_solved) == len(scipy_solved)
-    assert np.all(np.isclose(mod.results['precision'], smod.results['precision'], rtol=10.0, atol=1e-10))
-    assert np.all(np.isclose(mod.results['error'], smod.results['error'], rtol=0.01, atol=1.0))
-    assert np.all(np.isclose(mod.results['err'], smod.results['err'], rtol=0.01, atol=0.2))
-    ptids = np.array([t.tileId for t in petsc_solved]) 
-    stids = np.array([t.tileId for t in scipy_solved]) 
+    assert np.all(
+            np.isclose(
+                mod.results['precision'],
+                smod.results['precision'],
+                rtol=10.0,
+                atol=1e-10))
+    assert np.all(
+            np.isclose(
+                mod.results['error'],
+                smod.results['error'],
+                rtol=0.01,
+                atol=1.0))
+    assert np.all(
+            np.isclose(
+                mod.results['err'],
+                smod.results['err'],
+                rtol=0.01,
+                atol=0.2))
+    ptids = np.array([t.tileId for t in petsc_solved])
+    stids = np.array([t.tileId for t in scipy_solved])
     in1d = np.intersect1d(ptids, stids)
     for tid in in1d:
         p = np.argwhere(ptids == tid).flatten()[0]
@@ -141,7 +159,9 @@ def test_petsc_solver(
         assert np.isclose(ptf.rotation, stf.rotation, rtol=10.0, atol=0.05)
         assert np.all(np.isclose(ptf.scale, stf.scale, rtol=0.001, atol=0.001))
         assert np.isclose(ptf.shear, stf.shear, rtol=0.1, atol=0.001)
-        assert np.all(np.isclose(ptf.translation, stf.translation, rtol=0.1, atol=0.5))
+        assert np.all(
+                np.isclose(
+                    ptf.translation, stf.translation, rtol=0.1, atol=0.5))
 
 
 @pytest.mark.parametrize("chunks", [-1, 1, 2])

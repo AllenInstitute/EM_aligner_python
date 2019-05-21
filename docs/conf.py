@@ -33,13 +33,40 @@ from argschema.autodoc import process_schemas
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 
-
 extensions = [
         'sphinx.ext.autodoc',
         'sphinx.ext.imgmath',
         'sphinxcontrib.bibtex',
-        'sphinx.ext.napoleon']
+        'sphinx.ext.napoleon',
+        'breathe',
+        'exhale']
 
+# Setup the breathe extension
+breathe_projects = {
+    "ema_distributed": "./doxyoutput/xml"
+}
+breathe_default_project = "ema_distributed"
+
+# Setup the exhale extension
+exhale_args = {
+    # These arguments are required
+    "containmentFolder":     "./distributed",
+    "rootFileName":          "distributed.rst",
+    "rootFileTitle":         "EM aligner distributed",
+    "doxygenStripFromPath":  "..",
+    # Suggested optional arguments
+    "createTreeView":        True,
+    # TIP: if using the sphinx-bootstrap-theme, you need
+    # "treeViewIsBootstrap": True,
+    "exhaleExecutesDoxygen": True,
+    "exhaleDoxygenStdin":    "INPUT = ../EMaligner/distributed/src"
+}
+
+# Tell sphinx what the primary language being documented is.
+# primary_domain = 'c'
+
+# Tell sphinx what the pygments highlight language should be.
+# highlight_language = 'c'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

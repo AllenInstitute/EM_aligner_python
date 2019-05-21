@@ -9,7 +9,7 @@ Welcome to EMaligner's documentation!
 
 EMaligner is a scalable linear least squares image stitching and alignment solver that can align millions of images via point correspondences. The solver runs on systems from individual workstations to distributed clusters.
 
-This solver was developed to support the image alignment steps for :cite:`mouse`. The starting point for this package was the MATLAB-based package described in :cite:`KDS`. This solver is described in :cite:`thiswork`.
+This solver was developed to provide the image alignment steps for :cite:`mouse`. The starting point for this package was the MATLAB-based package described in :cite:`KDS`. This solver is described in :cite:`thiswork`.
 
 Compared to that repository, this repository has a number of changes and additions:
 
@@ -38,6 +38,8 @@ Compared to that repository, this repository has a number of changes and additio
 |                | - polynomial to 3rd degree| - polynomial to arbitrary degree|
 |                |                           | - thin plate spline             |
 +----------------+---------------------------+---------------------------------+
+| automated tests| N/A                       | TravisCI                        |
++----------------+---------------------------+---------------------------------+
 
 
 .. toctree::
@@ -64,6 +66,7 @@ This contains the complete documentation of the api
    :maxdepth: 2
 
    api/EMaligner/modules
+   distributed/distributed
 
 
 Indices and tables

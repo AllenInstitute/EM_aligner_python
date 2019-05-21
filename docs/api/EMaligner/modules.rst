@@ -7,4 +7,5 @@ EMaligner
    schemas
    EMaligner
    utils
+   transforms
    jsongz

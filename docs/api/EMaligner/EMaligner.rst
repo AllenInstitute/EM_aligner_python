@@ -1,12 +1,7 @@
 EMaligner 
 =========
 
-.. autoclass:: EMaligner.EMaligner.EMaligner
-    :members: assemble_and_solve, assemble_from_hdf5, assemble_from_db,
-      create_CSR_A, solve_or_not
+.. automodule:: EMaligner.EMaligner
+    :members: 
     :undoc-members:
     :show-inheritance:
-
-.. autofunction:: EMaligner.EMaligner.calculate_processing_chunk
-.. autofunction:: EMaligner.EMaligner.tilepair_weight
-

@@ -7,8 +7,6 @@ EMaligner
     :undoc-members:
     :show-inheritance:
 
-.. automodule:: EMaligner.EMaligner
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. autofunction:: EMaligner.EMaligner.calculate_processing_chunk
+.. autofunction:: EMaligner.EMaligner.tilepair_weight
 

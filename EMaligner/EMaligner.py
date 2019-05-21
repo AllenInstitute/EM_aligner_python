@@ -127,6 +127,24 @@ def calculate_processing_chunk(fargs):
 
 
 def tilepair_weight(z1, z2, matrix_assembly):
+    """get weight factor between two tilepairs
+
+    Parameters
+    ----------
+    z1 : int or float
+        z value for first section
+    z2 : int or float
+        z value for second section
+    matrix_assembly : dict
+        EMaligner.schemas.matrix assembly
+
+
+    Returns
+    -------
+    tp_weight : float
+        weight factor
+
+    """
     if matrix_assembly['explicit_weight_by_depth'] is not None:
         ind = matrix_assembly['depth'].index(int(np.abs(z1 - z2)))
         tp_weight = matrix_assembly['explicit_weight_by_depth'][ind]

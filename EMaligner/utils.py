@@ -9,6 +9,7 @@ import os
 import sys
 import json
 from functools import partial
+import scipy.sparse as sparse
 from scipy.sparse.linalg import factorized
 from .transform.transform import AlignerTransform, AlignerRotationModel
 from . import jsongz

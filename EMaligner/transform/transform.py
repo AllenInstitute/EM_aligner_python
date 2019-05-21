@@ -9,8 +9,27 @@ __all__ = ['AlignerTransform']
 
 
 class AlignerTransform(object):
+    """general transform object that the solver expects
+    """
 
     def __init__(self, name=None, transform=None, fullsize=False, order=2):
+        """
+        Parameters
+        ----------
+
+        name : str
+            specifies the intended transform for the type of solve
+        transform : obj
+            renderapi.transform.transform object. The new AlignerTransform will
+            inherit from this transform, if possible.
+        fullsize : bool
+            only applies to affine transform. Remains for legacy reason as an
+            explicit demonstration of the equivalence of fullsize and halfsize
+            transforms.
+        order : int
+            used in Polynomial2DTransform
+
+        """
         if (name is None):
             raise AlignerTransformException(
                    'must specify transform name')

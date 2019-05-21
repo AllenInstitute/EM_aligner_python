@@ -7,8 +7,19 @@ __all__ = ['AlignerThinPlateSplineTransform']
 
 
 class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransform):
+    """
+    Object for implementing thin plate spline transform
+    """
 
     def __init__(self, transform=None):
+        """
+        Parameters
+        ----------
+
+        transform : obj
+            renderapi.transform.transform object. The new AlignerTransform will
+            inherit from this transform, if possible.
+        """
 
         if transform is not None:
             if isinstance(transform, renderapi.transform.ThinPlateSplineTransform):
@@ -33,7 +44,7 @@ class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransfo
         Returns
         -------
         vec : numpy array
-            transform parameters in solve form
+            N x 2 transform parameters in solve form
         """
         vec = self.dMtxDat.transpose()
         if self.aMtx is not None:
@@ -50,12 +61,12 @@ class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransfo
         ----------
         vec : numpy array
             input to this function is sliced so that vec[0] is the
-            first relevant value for this transform
+            first harvested value for this transform
 
         Returns
         -------
         n : int
-            number of values read from vec. Used to increment vec slice
+            number of rows read from vec. Used to increment vec slice
             for next transform
         """
         n0 = 0
@@ -74,7 +85,8 @@ class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransfo
         Parameters
         ----------
         regdict : dict
-           see regularization class in schemas. controls values
+           EMaligner.schemas.regularization. controls
+           regularization values
 
         Return
         ------
@@ -111,6 +123,9 @@ class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransfo
             the partial block for this transform
         w : numpy array
             the weights associated with the rows of this block
+        rhs : numpy array
+            N/2 x 2 
+            right hand side for this transform.
         """
         data = cdist(
                 pts,
@@ -134,9 +149,14 @@ class AlignerThinPlateSplineTransform(renderapi.transform.ThinPlateSplineTransfo
 
     @property
     def scale(self):
+        """tuple of scale for x, y.
+           For setting regularization, it is useful to watch
+           scale (logged output for the solver) to look for 
+           unwanted distortions and shrinking. Other transforms
+           have scale implemented inside of renderapi.
+        """
         src = self.srcPts.transpose()
         dst = self.tform(src)
         a = renderapi.transform.AffineModel()
         a.estimate(src, dst)
         return a.scale
-

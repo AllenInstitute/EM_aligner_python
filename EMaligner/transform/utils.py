@@ -2,12 +2,27 @@ import numpy as np
 
 
 class AlignerTransformException(Exception):
-    """Exception raised when there is a \
-            problem creating a mesh lens correction"""
+    """Exception class for AlignerTransforms"""
     pass
 
 
 def aff_matrix(theta, offs=None):
+    """affine matrix or augmented affine matrix
+    given a rotation angle.
+
+    Parameters
+    ----------
+    theta : float
+        rotation angle in radians
+    offs : numpy array
+        the translations to include
+
+    Returns
+    -------
+    M : numpy array
+        2 x 2 (for offs=None) affine matrix
+        or 3 x 3 augmented matrix
+    """
     c, s = np.cos(theta), np.sin(theta)
     R = np.array([[c, -s], [s, c]])
     if offs is None:

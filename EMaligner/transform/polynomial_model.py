@@ -5,9 +5,21 @@ __all__ = ['AlignerPolynomial2DTransform']
 
 
 class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
+    """
+    Object for implementing half-size polynomial transforms
+    """
 
     def __init__(self, transform=None, order=2):
+        """
+        Parameters
+        ----------
 
+        transform : obj
+            renderapi.transform.transform object. The new AlignerTransform will
+            inherit from this transform, if possible.
+        order : int
+            order of the intended polynomial.
+        """
         if transform is not None:
             if isinstance(
                     transform, renderapi.transform.Polynomial2DTransform):
@@ -44,7 +56,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         Returns
         -------
         vec : numpy array
-            transform parameters in solve form
+            N x 2 transform parameters in solve form
         """
 
         vec = np.transpose(self.params)
@@ -57,12 +69,12 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         ----------
         vec : numpy array
             input to this function is sliced so that vec[0] is the
-            first relevant value for this transform
+            first harvested value for this transform
 
         Returns
         -------
         n : int
-            number of values read from vec. Used to increment vec slice
+            number of rows read from vec. Used to increment vec slice
             for next transform
         """
 
@@ -76,7 +88,8 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         Parameters
         ----------
         regdict : dict
-           see regularization class in schemas. controls values
+           EMaligner.schemas.regularization. controls
+           regularization values
 
         Return
         ------
@@ -98,7 +111,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         return reg
 
     def block_from_pts(self, pts, w, col_ind, col_max):
-        """partial sparse block for a tilepair/match
+        """partial sparse block for a transform/match
 
         Parameters
         ----------
@@ -117,6 +130,11 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
             the partial block for this transform
         w : numpy array
             the weights associated with the rows of this block
+        rhs : numpy array
+            N/2 x 2 (halfsize) or N x 1 (fullsize)
+            right hand side for this transform.
+            generally all zeros. could implement fixed tiles in
+            rhs later.
         """
 
         px = pts[:, 0]

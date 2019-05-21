@@ -23,3 +23,11 @@ Detailed Argument Descriptions
 
 see :ref:`ema-schema-label`
 
+Distributed Usage
+-----------------
+.. toctree::
+   :maxdepth: 1
+
+   ../distributed_rm
+
+

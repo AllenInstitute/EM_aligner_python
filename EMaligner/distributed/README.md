@@ -30,7 +30,7 @@ There are many PETSc options, and not all of them are necessarily installed in t
 
 ## Documentation
 
-[AllenInstitute.github.io/EM_aligner_python/](https://alleninstitute.github.io/EM_aligner_python)
+https://em-aligner-python.readthedocs.io/en/latest/index.html
 
 ## Author
 

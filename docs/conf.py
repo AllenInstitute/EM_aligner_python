@@ -39,7 +39,8 @@ extensions = [
         'sphinxcontrib.bibtex',
         'sphinx.ext.napoleon',
         'breathe',
-        'exhale']
+        'exhale',
+        'm2r']
 
 # Setup the breathe extension
 breathe_projects = {

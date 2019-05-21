@@ -6,3 +6,9 @@ EMaligner
       create_CSR_A, solve_or_not
     :undoc-members:
     :show-inheritance:
+
+.. automodule:: EMaligner.EMaligner
+    :members:
+    :undoc-members:
+    :show-inheritance:
+

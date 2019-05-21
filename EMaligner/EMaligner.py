@@ -19,6 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_processing_chunk(fargs):
+    """job to parallelize for creating a sparse matrix block
+    and associated vectors from a pair of sections
+    
+    Parameters
+    ----------
+    fargs : List
+        serialized inputs for multiprocessing job
+
+    Returns
+    -------
+    chunk : dict
+        keys are 'zlist', 'block', 'weights', and 'rhs'
+
+    """
     t0 = time.time()
     # set up for calling using multiprocessing pool
     [pair, args, tspecs, col_ind, ncol] = fargs

@@ -6,8 +6,23 @@ __all__ = ['AlignerAffineModel']
 
 
 class AlignerAffineModel(renderapi.transform.AffineModel):
+    """
+    Object for implementing full or half-size affine transforms
+    """
 
     def __init__(self, transform=None, fullsize=False):
+        """
+        Parameters
+        ----------
+
+        transform : obj
+            renderapi.transform.transform object. The new AlignerTransform will
+            inherit from this transform, if possible.
+        fullsize : bool
+            only applies to affine transform. Remains for legacy reason as an
+            explicit demonstration of the equivalence of fullsize and halfsize
+            transforms.
+        """
         self.fullsize = fullsize
 
         if transform is not None:
@@ -33,7 +48,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         Returns
         -------
         vec : numpy array
-            shape depends on fullsize
+            N/2 x 2 for halfsize, N x 2 for fullsize
         """
 
         vec = np.array([
@@ -58,16 +73,17 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         ----------
         vec : numpy array
             input to this function is sliced so that vec[0] is the
-            first relevant value for this transform
+            first harvested value for this transform
 
         Returns
         -------
         n : int
-            number of values read from vec. Used to increment vec slice
+            number of rows read from vec. Used to increment vec slice
             for next transform
         """
         vsh = vec.shape
         if vsh[1] == 1:
+            # fullsize
             self.M[0, 0] = vec[0]
             self.M[0, 1] = vec[1]
             self.M[0, 2] = vec[2]
@@ -76,6 +92,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
             self.M[1, 2] = vec[5]
             n = 6
         else:
+            # halfsize
             self.M[0, 0] = vec[0, 0]
             self.M[0, 1] = vec[1, 0]
             self.M[0, 2] = vec[2, 0]
@@ -86,12 +103,13 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         return n
 
     def regularization(self, regdict):
-        """regularization vector
+        """regularization vector from this transform
 
         Parameters
         ----------
         regdict : dict
-           see regularization class in schemas. controls values
+           EMaligner.schemas.regularization. controls
+           regularization values
 
         Return
         ------
@@ -106,18 +124,18 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         return reg
 
     def block_from_pts(self, pts, w, col_ind, col_max):
-        """partial sparse block for a tilepair/match
+        """partial sparse block for a transform/match
 
         Parameters
         ----------
         pts :  numpy array
             N x 2, the x, y values of the match (either p or q)
         w : numpy array
-            the weights associated with the pts
+            size N, the weights associated with the pts
         col_ind : int
             the starting column index for this tile
         col_max : int
-            number of columns in the matrix
+            total number of columns in the matrix
 
         Returns
         -------
@@ -125,36 +143,24 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
             the partial block for this transform
         w : numpy array
             the weights associated with the rows of this block
+        rhs : numpy array
+            N/2 x 2 (halfsize) or N x 1 (fullsize)
+            right hand side for this transform.
+            generally all zeros. could implement fixed tiles in
+            rhs later.
         """
-        if self.fullsize:
-            return self.block_from_pts_fullsize(pts, w, col_ind, col_max)
-        else:
-            return self.block_from_pts_halfsize(pts, w, col_ind, col_max)
-
-    def block_from_pts_fullsize(self, pts, w, col_ind, col_max):
         data = np.hstack((pts, np.ones((pts.shape[0], 1)))).flatten()
-        data = np.concatenate((data, data))
-
         i0 = col_ind + np.arange(3)
-        indices = np.hstack((
-            np.tile(i0, pts.shape[0]), np.tile(i0 + 3, pts.shape[0])))
-
-        nrow = pts.shape[0] * 2
-        indptr = np.arange(0, nrow + 1) * 3
-
-        block = csr_matrix((data, indices, indptr), shape=(nrow, col_max))
-        rhs = np.zeros((nrow, 1))
-        return block, np.hstack((w, w)), rhs
-
-    def block_from_pts_halfsize(self, pts, w, col_ind, col_max):
         nrow = pts.shape[0]
-        data = np.hstack((pts, np.ones((nrow, 1)))).flatten()
-
-        i0 = col_ind + np.arange(3)
         indices = np.tile(i0, nrow)
+        rhs = np.zeros((nrow, 2))
+        if self.fullsize:
+            nrow *= 2
+            data = np.concatenate((data, data))
+            indices = np.hstack((indices, indices + 3))
+            rhs = np.zeros((nrow, 1))
+            w = np.hstack((w, w))
 
         indptr = np.arange(0, nrow + 1) * 3
-
         block = csr_matrix((data, indices, indptr), shape=(nrow, col_max))
-        rhs = np.zeros((nrow, 2))
         return block, w, rhs

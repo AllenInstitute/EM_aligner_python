@@ -19,6 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_processing_chunk(fargs):
+    """job to parallelize for creating a sparse matrix block
+    and associated vectors from a pair of sections
+    
+    Parameters
+    ----------
+    fargs : List
+        serialized inputs for multiprocessing job
+
+    Returns
+    -------
+    chunk : dict
+        keys are 'zlist', 'block', 'weights', and 'rhs'
+
+    """
     t0 = time.time()
     # set up for calling using multiprocessing pool
     [pair, args, tspecs, col_ind, ncol] = fargs
@@ -113,6 +127,24 @@ def calculate_processing_chunk(fargs):
 
 
 def tilepair_weight(z1, z2, matrix_assembly):
+    """get weight factor between two tilepairs
+
+    Parameters
+    ----------
+    z1 : int or float
+        z value for first section
+    z2 : int or float
+        z value for second section
+    matrix_assembly : dict
+        EMaligner.schemas.matrix assembly
+
+
+    Returns
+    -------
+    tp_weight : float
+        weight factor
+
+    """
     if matrix_assembly['explicit_weight_by_depth'] is not None:
         ind = matrix_assembly['depth'].index(int(np.abs(z1 - z2)))
         tp_weight = matrix_assembly['explicit_weight_by_depth'][ind]
@@ -132,6 +164,8 @@ class EMaligner(argschema.ArgSchemaParser):
         renderapi.external.processpools.stdlib_pool.WithThreadPool
 
     def run(self):
+        """main function call for EM_aligner_python solver
+        """
         logger.setLevel(self.args['log_level'])
         utils.logger.setLevel(self.args['log_level'])
         t0 = time.time()
@@ -161,6 +195,16 @@ class EMaligner(argschema.ArgSchemaParser):
         logger.info(' total time: %0.1f' % (time.time() - t0))
 
     def assemble_and_solve(self, zvals):
+        """retrieves a ResolvedTiles object from some source
+           and then assembles/solves, outputs to hdf5 and/or outputs to an
+           output_stack object.
+           
+           Parameters
+           ----------
+           zvals : numpy array
+               int or float, corresponds to renderapi.tilespec.TileSpec.z
+
+        """
         t0 = time.time()
 
         if self.args['ingest_from_file'] != '':
@@ -231,6 +275,15 @@ class EMaligner(argschema.ArgSchemaParser):
         return results
 
     def assemble_from_hdf5(self, filename, zvals, read_data=True):
+        """assembles and solves from an hdf5 matrix assembly 
+           previously created with output_mode = "hdf5".
+           
+           Parameters
+           ----------
+           zvals : numpy array
+               int or float, corresponds to renderapi.tilespec.TileSpec.z
+
+        """
         assemble_result = {}
 
         with h5py.File(filename, 'r') as f:
@@ -321,6 +374,16 @@ class EMaligner(argschema.ArgSchemaParser):
         return assemble_result, results
 
     def assemble_from_db(self, zvals):
+        """assembles a matrix from a pointmatch source given
+           the already-retrieved ResolvedTiles object. Then solves
+           or outputs to hdf5.
+           
+           Parameters
+           ----------
+           zvals : numpy array
+               int or float, corresponds to renderapi.tilespec.TileSpec.z
+
+        """
         # create A matrix in compressed sparse row (CSR) format
         CSR_A = self.create_CSR_A(self.resolvedtiles)
 
@@ -344,6 +407,15 @@ class EMaligner(argschema.ArgSchemaParser):
         return assemble_result
 
     def create_CSR_A(self, resolved):
+        """distributes the work of reading pointmatches and 
+           assembling results
+
+        Parameters
+        ----------
+        resolved : a renderapi.resolvedtiles.ResolvedTiles object
+
+        """
+
         func_result = {
             'A': None,
             'x': None,
@@ -405,7 +477,7 @@ class EMaligner(argschema.ArgSchemaParser):
 
             func_result['metadata'] = []
             for pchunk in proc_chunks:
-                A, w, rhs, z = self.concatenate_results(results[pchunk])
+                A, w, rhs, z = utils.concatenate_results(results[pchunk])
                 if A is not None:
                     fname = self.args['hdf5_options']['output_dir'] + \
                         '/%d_%d.h5' % (z.min(), z.max())
@@ -414,26 +486,36 @@ class EMaligner(argschema.ArgSchemaParser):
 
         else:
             func_result['A'], func_result['weights'], func_result['rhs'], _ = \
-                    self.concatenate_results(results)
+                    utils.concatenate_results(results)
 
         return func_result
 
-    def concatenate_results(self, results):
-        ind = np.flatnonzero(results)
-        if ind.size == 0:
-            return None, None, None, None
-
-        A = sparse.vstack([r['block'] for r in results[ind]])
-        weights = sparse.diags(
-                    [np.concatenate([r['weights'] for r in results[ind]])],
-                    [0],
-                    format='csr')
-        rhs = np.concatenate([r.pop('rhs') for r in results[ind]])
-        zlist = np.concatenate([r.pop('zlist') for r in results[ind]])
-
-        return A, weights, rhs, zlist
 
     def solve_or_not(self, A, weights, reg, x0, rhs):
+        """solves or outputs assembly to hdf5 files
+
+        Parameters
+        ----------
+        A : scipy.sparse.csr_matrix
+            the matrix, N (equations) x M (degrees of freedom)
+        weights : scipy.sparse.csr_matrix
+            N x N diagonal matrix containing weights
+        reg : scipy.sparse.csr_matrix
+            M x M diagonal matrix containing regularizations
+        x0 : numpy array
+            M x nsolve float constraint values for the DOFs
+        rhs : numpy array
+            rhs vector(s)
+            N x nsolve float right-hand-side(s)
+
+        Returns
+        -------
+        message : str
+            solver or hdf5 output message for logging
+        results : dict
+            keys are "x" (the results), "precision", "error"
+            "err", "mag", and "time"
+        """
         # not
         if self.args['output_mode'] in ['hdf5']:
             message = '*****\nno solve for file output\n'

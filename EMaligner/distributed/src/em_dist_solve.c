@@ -3,6 +3,10 @@
   *
   * Reads A from file, reads regularizations and constraints, computes K, solves for x.
 */
+
+/**
+ * \param help message
+ */
 static char help[] = "usage:\n"
   "em_dist_solve -input <input_file_path> -output <output_file_path> <ksp options>\n"
   "ksp options:\n"
@@ -15,9 +19,11 @@ static char help[] = "usage:\n"
 #include <stdio.h>
 #include <petsctime.h>
 #include "ema.h"
-/** @brief em_dist_solve main
-  *
-*/
+
+
+/*! @brief main for EM aligner distributed solve
+ * usage : em_dist_solve -input <input_file_path> -output <output_file_path> <ksp options>
+ */
 int
 main (int argc, char **args)
 {

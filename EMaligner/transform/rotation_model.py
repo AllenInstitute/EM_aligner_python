@@ -7,8 +7,19 @@ __all__ = ['AlignerRotationModel']
 
 
 class AlignerRotationModel(renderapi.transform.AffineModel):
+    """
+    Object for implementing rotation transform
+    """
 
-    def __init__(self, transform=None, order=2):
+    def __init__(self, transform=None):
+        """
+        Parameters
+        ----------
+
+        transform : obj
+            renderapi.transform.transform object. The new AlignerTransform will
+            inherit from this transform, if possible.
+        """
 
         if transform is not None:
             if isinstance(
@@ -31,7 +42,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         Returns
         -------
         vec : numpy array
-            transform parameters in solve form
+            N x 1 transform parameters in solve form
         """
 
         return np.array([self.rotation]).reshape(-1, 1)
@@ -43,12 +54,12 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         ----------
         vec : numpy array
             input to this function is sliced so that vec[0] is the
-            first relevant value for this transform
+            first harvested value for this transform
 
         Returns
         -------
         n : int
-            number of values read from vec. Used to increment vec slice
+            number of rows read from vec. Used to increment vec slice
             for next transform
         """
         newr = aff_matrix(vec[0][0])
@@ -61,7 +72,8 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         Parameters
         ----------
         regdict : dict
-           see regularization class in schemas. controls values
+           EMaligner.schemas.regularization. controls
+           regularization values
 
         Return
         ------
@@ -74,7 +86,9 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         return reg
 
     def block_from_pts(self, pts, w, col_ind, col_max):
-        """partial sparse block for a tilepair/match
+        """partial sparse block for a transform/match.
+           Note: for rotation, a pre-processing step is
+           called at the tilepair level.
 
         Parameters
         ----------
@@ -93,6 +107,9 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
             the partial block for this transform
         w : numpy array
             the weights associated with the rows of this block
+        rhs : numpy array
+            N x 1
+            right hand side for this transform.
         """
 
         data = np.ones(pts.size)
@@ -105,6 +122,33 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
     @staticmethod
     def preprocess(ppts, qpts, w):
+        """tilepair-level preprocessing step for rotation transform.
+           derives the relative center-of-mass angles between all 
+           p's and q's to avoid angular discontinuity. Will filter
+           out points very close to center-of-mass. 
+           Tilepairs with relative rotations near 180deg will not avoid
+           the discontinuity.
+
+        Parameters
+        ----------
+        ppts : numpy array
+            N x 2. The p tile correspondence coordinates
+        qpts : numpy array
+            N x 2. The q tile correspondence coordinates
+        w : numpy array
+            size N. The weights.
+
+        Returns
+        -------
+        pa : numpy array
+            M x 1 preprocessed angular distances. -0.5 x delta angle
+            M <= N depending on filter
+        qa : numpy array
+            M x 1 preprocessed angular distances. 0.5 x delta angle
+            M <= N depending on filter
+        w : numpy array
+            size M. filtered weights.
+        """
         # center of mass
         pcm = ppts - ppts.mean(axis=0)
         qcm = qpts - qpts.mean(axis=0)

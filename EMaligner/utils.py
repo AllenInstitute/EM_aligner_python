@@ -16,10 +16,10 @@ from . import jsongz
 import collections
 import itertools
 import subprocess
+import requests
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
-
 
 logger = logging.getLogger(__name__)
 
@@ -191,12 +191,15 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     dbconnection = make_dbconnection(stack)
     if stack['db_interface'] == 'render':
         try:
+            s = requests.Session()
+            s.mount('http://', requests.adapters.HTTPAdapter(max_retries=5))
             resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
                     stack['name'][0],
                     float(z),
                     render=dbconnection,
                     owner=stack['owner'],
-                    project=stack['project'])
+                    project=stack['project'],
+                    session=s)
         except renderapi.errors.RenderError:
             pass
     if stack['db_interface'] == 'mongo':

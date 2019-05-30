@@ -191,15 +191,15 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     dbconnection = make_dbconnection(stack)
     if stack['db_interface'] == 'render':
         try:
-            s = requests.Session()
-            s.mount('http://', requests.adapters.HTTPAdapter(max_retries=5))
-            resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
-                    stack['name'][0],
-                    float(z),
-                    render=dbconnection,
-                    owner=stack['owner'],
-                    project=stack['project'],
-                    session=s)
+            with requests.Session() as s:
+                s.mount('http://', requests.adapters.HTTPAdapter(max_retries=5))
+                resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
+                        stack['name'][0],
+                        float(z),
+                        render=dbconnection,
+                        owner=stack['owner'],
+                        project=stack['project'],
+                        session=s)
         except renderapi.errors.RenderError:
             pass
     if stack['db_interface'] == 'mongo':

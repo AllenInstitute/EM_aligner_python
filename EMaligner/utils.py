@@ -480,13 +480,20 @@ def write_reg_and_tforms(
 
         str_type = h5py.special_dtype(vlen=bytes)
 
+        rname = os.path.join(
+                os.path.dirname(fname),
+                "resolved.json.gz")
+
         dset = f.create_dataset(
                 "resolved_tiles",
                 (1,),
-                data=np.void(
-                    json.dumps(
-                        resolved.to_dict(),
-                        indent=2).encode()))
+                data=os.path.basename(rname))
+
+        jsongz.dump(resolved.to_dict(), rname)
+        #        data=np.void(
+        #            json.dumps(
+        #                resolved.to_dict(),
+        #                indent=2).encode()))
         #        dtype=str_type)
         # dset[:] = json.dumps(resolved.to_dict(), indent=2)
 

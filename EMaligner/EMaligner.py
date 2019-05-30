@@ -3,6 +3,7 @@ import renderapi
 import argschema
 from .schemas import EMA_Schema
 from . import utils
+from . import jsongz
 import time
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix
@@ -320,8 +321,14 @@ class EMaligner(argschema.ArgSchemaParser):
                 results = json.loads(f.get('results')[()][0].decode('utf-8'))
 
             #r = json.loads(f.get('resolved_tiles')[()][0].decode('utf-8'))
-            r = json.loads(f.get('resolved_tiles')[()][0].tostring())
-            self.resolvedtiles = renderapi.resolvedtiles.ResolvedTiles(json=r)
+            #r = json.loads(f.get('resolved_tiles')[()][0].tostring())
+            r = f.get('resolved_tiles')[()][0]
+            rname = os.path.join(
+                    os.path.dirname(filename),
+                    r)
+            self.resolvedtiles = renderapi.resolvedtiles.ResolvedTiles(
+                    json=jsongz.load(rname))
+
             logger.info(
                 "\n loaded %d tile specs from %s" % (
                     len(self.resolvedtiles.tilespecs),

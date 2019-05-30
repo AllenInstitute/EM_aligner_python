@@ -483,8 +483,10 @@ def write_reg_and_tforms(
         dset = f.create_dataset(
                 "resolved_tiles",
                 (1,),
-                dtype=str_type)
-        dset[:] = json.dumps(resolved.to_dict(), indent=2)
+                data=np.void(json.dumps(
+                    resolved.to_dict(), indent=2)))
+        #        dtype=str_type)
+        # dset[:] = json.dumps(resolved.to_dict(), indent=2)
 
         # keep track of input args
         dset = f.create_dataset(

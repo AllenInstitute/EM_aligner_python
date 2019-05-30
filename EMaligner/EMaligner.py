@@ -319,7 +319,8 @@ class EMaligner(argschema.ArgSchemaParser):
             if "results" in f.keys():
                 results = json.loads(f.get('results')[()][0].decode('utf-8'))
 
-            r = json.loads(f.get('resolved_tiles')[()][0].decode('utf-8'))
+            #r = json.loads(f.get('resolved_tiles')[()][0].decode('utf-8'))
+            r = json.loads(f.get('resolved_tiles')[()][0].tostring())
             self.resolvedtiles = renderapi.resolvedtiles.ResolvedTiles(json=r)
             logger.info(
                 "\n loaded %d tile specs from %s" % (

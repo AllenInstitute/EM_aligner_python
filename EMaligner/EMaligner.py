@@ -455,11 +455,10 @@ class EMaligner(argschema.ArgSchemaParser):
                 yield l[i:i + n]
 
         with renderapi.client.WithPool(self.args['n_parallel_jobs']) as pool:
-            # results = np.array(pool.map(calculate_processing_chunk, list(chunks(fargs, 10)))
             results = np.concatenate(
                     pool.map(
                         calculate_processing_chunk,
-                        list(chunks(fargs, 10))))
+                        list(chunks(fargs, self.args['processing_chunk_size']))))
 
         func_result['x'] = []
         reg = []

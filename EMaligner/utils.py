@@ -310,22 +310,26 @@ def get_matches(iId, jId, collection, dbconnection):
         matches = [m for m in matches
                    if set([m['pGroupId'], m['qGroupId']]) & set([iId, jId])]
     if collection['db_interface'] == 'render':
-        if iId == jId:
-            for name in collection['name']:
-                matches.extend(renderapi.pointmatch.get_matches_within_group(
-                        name,
-                        iId,
-                        owner=collection['owner'],
-                        render=dbconnection))
-        else:
-            for name in collection['name']:
-                matches.extend(
-                        renderapi.pointmatch.get_matches_from_group_to_group(
+        with requests.Session() as s:
+            s.mount('http://', requests.adapters.HTTPAdapter(max_retries=5))
+            if iId == jId:
+                for name in collection['name']:
+                    matches.extend(renderapi.pointmatch.get_matches_within_group(
                             name,
                             iId,
-                            jId,
                             owner=collection['owner'],
-                            render=dbconnection))
+                            render=dbconnection,
+                            session=s))
+            else:
+                for name in collection['name']:
+                    matches.extend(
+                            renderapi.pointmatch.get_matches_from_group_to_group(
+                                name,
+                                iId,
+                                jId,
+                                owner=collection['owner'],
+                                render=dbconnection,
+                                session=s))
     if collection['db_interface'] == 'mongo':
         for dbconn in dbconnection:
             cursor = dbconn.collection.find(

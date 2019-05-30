@@ -35,102 +35,101 @@ def calculate_processing_chunk(fargs):
     """
     t0 = time.time()
     # set up for calling using multiprocessing pool
-    [pair, args, tspecs, tforms, col_ind, ncol] = fargs
-
-    tile_ids = np.array([t.tileId for t in tspecs])
-
+    [pair, args, tspecs, col_ind, ncol] = fargs[0]
+    chunks = []
     dbconnection = utils.make_dbconnection(args['pointmatch'])
-    sorter = np.argsort(tile_ids)
+    for farg in fargs:
+        [pair, args, tspecs, col_ind, ncol] = farg
 
-    # get point matches
-    nmatches = utils.get_matches(
-            pair['section1'],
-            pair['section2'],
-            args['pointmatch'],
-            dbconnection)
+        tile_ids = np.array([t.tileId for t in tspecs])
 
-    # extract IDs for fast checking
-    pid_set = set(m['pId'] for m in nmatches)
-    qid_set = set(m['qId'] for m in nmatches)
+        sorter = np.argsort(tile_ids)
 
-    tile_set = set(tile_ids)
 
-    pid_set.intersection_update(tile_set)
-    qid_set.intersection_update(tile_set)
-
-    matches = [m for m in nmatches if m['pId']
-               in pid_set and m['qId'] in qid_set]
-    del nmatches
-
-    if len(matches) == 0:
-        logger.debug(
-            "no tile pairs in "
-            "stack for pointmatch groupIds %s and %s" % (
-                pair['section1'], pair['section2']))
-        return None
-
-    pids = np.array([m['pId'] for m in matches])
-    qids = np.array([m['qId'] for m in matches])
-
-    logger.debug(
-            "loaded %d matches, using %d, "
-            "for groupIds %s and %s in %0.1f sec "
-            "using interface: %s" % (
-                len(pid_set.union(qid_set)),
-                len(matches),
+        # get point matches
+        nmatches = utils.get_matches(
                 pair['section1'],
                 pair['section2'],
-                time.time() - t0,
-                args['pointmatch']['db_interface']))
+                args['pointmatch'],
+                dbconnection)
 
-    # for the given point matches, these are the indices in tile_ids
-    # these determine the column locations in A for each tile pair
-    # this is a fast version of np.argwhere() loop
-    pinds = sorter[np.searchsorted(tile_ids, pids, sorter=sorter)]
-    qinds = sorter[np.searchsorted(tile_ids, qids, sorter=sorter)]
+        # extract IDs for fast checking
+        pid_set = set(m['pId'] for m in nmatches)
+        qid_set = set(m['qId'] for m in nmatches)
 
-    tilepair_weightfac = tilepair_weight(
-        pair['z1'],
-        pair['z2'],
-        args['matrix_assembly'])
+        tile_set = set(tile_ids)
 
-    wts = []
-    pblocks = []
-    qblocks = []
-    rhss = []
-    for k, match in enumerate(matches):
+        pid_set.intersection_update(tile_set)
+        qid_set.intersection_update(tile_set)
 
-        match = utils.transform_match(
-                match,
-                tspecs[pinds[k]],
-                tspecs[qinds[k]],
-                args['transform_apply'],
-                tforms)
+        matches = [m for m in nmatches if m['pId']
+                   in pid_set and m['qId'] in qid_set]
+        del nmatches
 
-        pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
-                tspecs[pinds[k]],
-                tspecs[qinds[k]],
-                match,
-                col_ind[pinds[k]],
-                col_ind[qinds[k]],
-                ncol,
-                args['matrix_assembly'])
+        if len(matches) == 0:
+            logger.debug(
+                "no tile pairs in "
+                "stack for pointmatch groupIds %s and %s" % (
+                    pair['section1'], pair['section2']))
+            return None
 
-        if pblock is None:
-            continue
+        pids = np.array([m['pId'] for m in matches])
+        qids = np.array([m['qId'] for m in matches])
 
-        pblocks.append(pblock)
-        qblocks.append(qblock)
-        wts.append(weights * tilepair_weightfac)
-        rhss.append(rhs)
+        logger.debug(
+                "loaded %d matches, using %d, "
+                "for groupIds %s and %s in %0.1f sec "
+                "using interface: %s" % (
+                    len(pid_set.union(qid_set)),
+                    len(matches),
+                    pair['section1'],
+                    pair['section2'],
+                    time.time() - t0,
+                    args['pointmatch']['db_interface']))
 
-    chunk = {}
-    chunk['zlist'] = np.array([pair['z1'], pair['z2']])
-    chunk['block'] = sparse.vstack(pblocks) - sparse.vstack(qblocks)
-    chunk['weights'] = np.concatenate(wts)
-    chunk['rhs'] = np.concatenate(rhss)
+        # for the given point matches, these are the indices in tile_ids
+        # these determine the column locations in A for each tile pair
+        # this is a fast version of np.argwhere() loop
+        pinds = sorter[np.searchsorted(tile_ids, pids, sorter=sorter)]
+        qinds = sorter[np.searchsorted(tile_ids, qids, sorter=sorter)]
 
-    return chunk
+        tilepair_weightfac = tilepair_weight(
+            pair['z1'],
+            pair['z2'],
+            args['matrix_assembly'])
+
+        wts = []
+        pblocks = []
+        qblocks = []
+        rhss = []
+        for k, match in enumerate(matches):
+
+            pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
+                    tspecs[pinds[k]],
+                    tspecs[qinds[k]],
+                    match,
+                    col_ind[pinds[k]],
+                    col_ind[qinds[k]],
+                    ncol,
+                    args['matrix_assembly'])
+
+            if pblock is None:
+                continue
+
+            pblocks.append(pblock)
+            qblocks.append(qblock)
+            wts.append(weights * tilepair_weightfac)
+            rhss.append(rhs)
+
+        chunk = {}
+        chunk['zlist'] = np.array([pair['z1'], pair['z2']])
+        chunk['block'] = sparse.vstack(pblocks) - sparse.vstack(qblocks)
+        chunk['weights'] = np.concatenate(wts)
+        chunk['rhs'] = np.concatenate(rhss)
+
+        chunks.append(chunk)
+
+    return chunks
 
 
 def tilepair_weight(z1, z2, matrix_assembly):
@@ -451,8 +450,16 @@ class EMaligner(argschema.ArgSchemaParser):
             col_ind[pair['ind']],
             col_ind.max()] for pair in pairs]
 
+        def chunks(l, n):
+            for i in range(0, len(l), n):
+                yield l[i:i + n]
+
         with renderapi.client.WithPool(self.args['n_parallel_jobs']) as pool:
-            results = np.array(pool.map(calculate_processing_chunk, fargs))
+            # results = np.array(pool.map(calculate_processing_chunk, list(chunks(fargs, 10)))
+            results = np.concatenate(
+                    pool.map(
+                        calculate_processing_chunk,
+                        list(chunks(fargs, 10))))
 
         func_result['x'] = []
         reg = []

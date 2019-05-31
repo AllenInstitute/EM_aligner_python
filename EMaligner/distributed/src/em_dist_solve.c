@@ -133,12 +133,12 @@ main (int argc, char **args)
 		  local_rhs);
   CHKERRQ (ierr);
   /*  Create distributed A!  */
-  //MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
+  MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
+  			     global_nrow, global_ncol, local_indptr,
+  	                     local_jcol, local_data, &A);
+  //MatCreateMPISBAIJWithArrays (PETSC_COMM_WORLD, 1, local_nrow, PETSC_DECIDE,
   //			     global_nrow, global_ncol, local_indptr,
   //			     local_jcol, local_data, &A);
-  MatCreateMPISBAIJWithArrays (PETSC_COMM_WORLD, 1, local_nrow, PETSC_DECIDE,
-			     global_nrow, global_ncol, local_indptr,
-			     local_jcol, local_data, &A);
   free (local_jcol);
   free (local_data);
   free (local_indptr);

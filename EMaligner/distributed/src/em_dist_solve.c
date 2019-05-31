@@ -54,7 +54,7 @@ main (int argc, char **args)
   int mpisupp;
 
   /*  Command line handling and setup  */
-  MPI_Init_thread (0, 0, MPI_THREAD_FUNNELED, &mpisupp);
+  MPI_Init_thread (0, 0, MPI_THREAD_MULTIPLE, &mpisupp);
 
   ierr = PetscInitialize (&argc, &args, (char *) 0, help);
   if (ierr)

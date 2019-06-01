@@ -256,6 +256,8 @@ main (int argc, char **args)
   CHKERRQ (ierr);
   ierr = KSPSetFromOptions (ksp);
   CHKERRQ (ierr);
+  ierr = KSPSetReusePreconditioner(ksp, PETSC_TRUE);
+  CHKERRQ (ierr);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      Solve the linear system

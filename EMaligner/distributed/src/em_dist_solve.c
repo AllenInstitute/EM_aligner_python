@@ -206,8 +206,8 @@ main (int argc, char **args)
   CHKERRQ (ierr);
   MatSetOption (K, MAT_SYMMETRIC, PETSC_TRUE);
   // appropriate for Cholesky
-  ierr = MatConvert (K, MATMPISBAIJ, MAT_INPLACE_MATRIX, &K);
-  CHKERRQ (ierr);
+  // ierr = MatConvert (K, MATMPISBAIJ, MAT_INPLACE_MATRIX, &K);
+  // CHKERRQ (ierr);
 
   if (rank == 0)
     {

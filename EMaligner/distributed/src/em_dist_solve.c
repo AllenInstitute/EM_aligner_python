@@ -205,6 +205,9 @@ main (int argc, char **args)
   ierr = MatAXPY (K, (PetscScalar) 1.0, L, SUBSET_NONZERO_PATTERN);
   CHKERRQ (ierr);
   MatSetOption (K, MAT_SYMMETRIC, PETSC_TRUE);
+  // appropriate for Cholesky
+  ierr = MatConvert (K, MATMPISBAIJ, MAT_INPLACE_MATRIX, &K);
+  CHKERRQ (ierr);
 
   if (rank == 0)
     {

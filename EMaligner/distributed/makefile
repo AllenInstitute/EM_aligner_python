@@ -5,7 +5,7 @@ endif
 
 allen: src/em_dist_solve.o chkopts
 	@echo ${CLINKER}
-	${CLINKER} -lpthread -o bin/em_dist_solve src/em_dist_solve.o  ${PETSC_KSP_LIB}
+	${CLINKER} -o bin/em_dist_solve src/em_dist_solve.o  ${PETSC_KSP_LIB}
 	${RM} src/em_dist_solve.o
 
 cori:

@@ -108,7 +108,10 @@ main (int argc, char **args)
   count = 0;
   for (i=0; i<nnodes; i++)
   {
-    disp_node (nodes[i]);
+    if (rank == 0)
+    {
+	    disp_node (nodes[i]);
+    }
     for (j=0; j<nodes[i].nrank; j++)
     {
       if ((thisnode == i) && (noderank == j))

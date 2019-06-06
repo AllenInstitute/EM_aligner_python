@@ -101,7 +101,7 @@ main (int argc, char **args)
   int count, j, nnodes, thisnode, noderank;
   MPI_Comm MPI_COMM_NODE;
   nodes = hw_config (MPI_COMM_WORLD, &nnodes, &thisnode);
-  split_files (nodes, nnodes, 373);
+  split_files (nodes, nnodes, nfiles);
   MPI_Comm_split (MPI_COMM_WORLD, thisnode, rank, &MPI_COMM_NODE);
   MPI_Comm_rank (MPI_COMM_NODE, &noderank);
   /*  what files will this rank read  */

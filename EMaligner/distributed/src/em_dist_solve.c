@@ -19,7 +19,7 @@ static char help[] = "usage:\n"
 #include <stdio.h>
 #include <petsctime.h>
 #include "ema.h"
-
+#include "hw_config.h"
 
 /*! @brief main for EM aligner distributed solve
  * usage : em_dist_solve -input <input_file_path> -output <output_file_path> <ksp options>
@@ -95,10 +95,34 @@ main (int argc, char **args)
   ierr =
     ReadMetadata (PETSC_COMM_WORLD, sln_input, nfiles, csrnames, metadata);
   CHKERRQ (ierr);
+
+  /*  what does the hardware look like?  */
+  node * nodes;
+  int count, j, nnodes, thisnode, noderank;
+  MPI_Comm MPI_COMM_NODE;
+  nodes = hw_config (MPI_COMM_WORLD, &nnodes, &thisnode);
+  split_files (nodes, nnodes, 373);
+  MPI_Comm_split (MPI_COMM_WORLD, thisnode, rank, &MPI_COMM_NODE);
+  MPI_Comm_rank (MPI_COMM_NODE, &noderank);
   /*  what files will this rank read  */
-  ierr =
-    SetFiles (PETSC_COMM_WORLD, nfiles, &local_firstfile, &local_lastfile);
-  CHKERRQ (ierr);
+  count = 0;
+  for (i=0; i<nnodes; i++)
+  {
+    disp_node (nodes[i]);
+    for (j=0; j<nodes[i].nrank; j++)
+    {
+      if ((thisnode == i) && (noderank == j))
+      {
+	      local_firstfile = count;
+	      local_lastfile = count + nodes[i].files[j] - 1;
+      }
+      count += nodes[i].files[j];
+    }
+  }
+
+  //ierr =
+  //  SetFiles (PETSC_COMM_WORLD, nfiles, &local_firstfile, &local_lastfile);
+  //CHKERRQ (ierr);
   /*  how many rows and nnz per worker  */
   GetGlobalLocalCounts (nfiles, metadata, local_firstfile, local_lastfile,
 			&global_nrow, &global_ncol, &global_nnz, &local_nrow,
@@ -136,9 +160,6 @@ main (int argc, char **args)
   MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
   			     global_nrow, global_ncol, local_indptr,
   	                     local_jcol, local_data, &A);
-  //MatCreateMPISBAIJWithArrays (PETSC_COMM_WORLD, 1, local_nrow, PETSC_DECIDE,
-  //			     global_nrow, global_ncol, local_indptr,
-  //			     local_jcol, local_data, &A);
   free (local_jcol);
   free (local_data);
   free (local_indptr);

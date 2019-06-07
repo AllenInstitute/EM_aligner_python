@@ -211,8 +211,6 @@ main (int argc, char **args)
   ierr = MatMatMult (ATW, A, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &K);
   CHKERRQ (ierr);
 
-  MatDestroy (&A);
-
   /*  find out how the rows are distributed   */
   MatGetOwnershipRange (K, &local_row0, &local_rowN);
   MatGetSize (K, &global_nrow, NULL);
@@ -354,41 +352,7 @@ main (int argc, char **args)
   strcat (strout, "\n");
   strcat (results_out, "],");
 
-
-  printf("destroying K\n");
   MatDestroy (&K);
-  printf("getting A again\n");
-
-  // we want A again. 
-  /*  allocate space for local CSR arrays  */
-  local_indptr = (PetscInt *) calloc (local_nrow + 1, sizeof (PetscInt));
-  local_jcol = (PetscInt *) calloc (local_nnz, sizeof (PetscInt));
-  local_data = (PetscScalar *) calloc (local_nnz, sizeof (PetscScalar));
-  local_weights = (PetscScalar *) calloc (local_nrow, sizeof (PetscScalar));
-  local_rhs = (PetscScalar **) malloc (nsolve * sizeof (PetscInt *));
-  for (i = 0; i < nsolve; i++)
-    {
-      local_rhs[i] =
-	(PetscScalar *) calloc (local_nrow, sizeof (PetscScalar));
-    }
-  /*  read in local hdf5 files and concatenate into CSR arrays  */
-  ierr =
-    ReadLocalCSR (PETSC_COMM_SELF, csrnames, local_firstfile, local_lastfile,
-		  nsolve, local_indptr, local_jcol, local_data, local_weights,
-		  local_rhs);
-  CHKERRQ (ierr);
-  printf("read stuff for A again\n");
-  /*  Create distributed A!  */
-  MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
-  			     global_nrow, global_ncol, local_indptr,
-  	                     local_jcol, local_data, &A);
-  free (local_jcol);
-  free (local_data);
-  free (local_indptr);
-  if (rank == 0)
-    {
-      printf ("A matrix created for error calculation\n");
-    }
 
   PetscInt mA, nA, c0, cn;
   ierr = MatGetSize (A, &mA, &nA);

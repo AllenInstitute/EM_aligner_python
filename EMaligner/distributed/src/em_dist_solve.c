@@ -354,7 +354,10 @@ main (int argc, char **args)
   strcat (strout, "\n");
   strcat (results_out, "],");
 
+
+  printf("destroying K\n");
   MatDestroy (&K);
+  printf("getting A again\n");
 
   // we want A again. 
   /*  allocate space for local CSR arrays  */
@@ -374,6 +377,7 @@ main (int argc, char **args)
 		  nsolve, local_indptr, local_jcol, local_data, local_weights,
 		  local_rhs);
   CHKERRQ (ierr);
+  printf("read stuff for A again\n");
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
   			     global_nrow, global_ncol, local_indptr,

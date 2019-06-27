@@ -38,9 +38,19 @@ extensions = [
         'sphinx.ext.imgmath',
         'sphinxcontrib.bibtex',
         'sphinx.ext.napoleon',
+        'sphinx.ext.intersphinx',
         'breathe',
         'exhale',
         'm2r']
+
+intersphinx_mapping = {
+        'renderapi': ('https://render-python.readthedocs.io/en/latest/', None),
+        'numpy': ('http://docs.scipy.org/doc/numpy/', None),
+        'scipy': ('http://docs.scipy.org/doc/scipy/reference/', None),
+        'argschema': ('https://argschema.readthedocs.io/en/master/', None),
+        'marshmallow':('http://marshmallow.readthedocs.io/en/latest/', None),
+        'python': ('https://docs.python.org/3', None)
+        }
 
 # Setup the breathe extension
 breathe_projects = {

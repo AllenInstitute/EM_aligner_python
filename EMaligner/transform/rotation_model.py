@@ -16,8 +16,8 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
         Parameters
         ----------
 
-        transform : obj
-            renderapi.transform.transform object. The new AlignerTransform will
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
             inherit from this transform, if possible.
         """
 
@@ -41,7 +41,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             N x 1 transform parameters in solve form
         """
 
@@ -52,7 +52,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             input to this function is sliced so that vec[0] is the
             first harvested value for this transform
 
@@ -77,7 +77,7 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
         Return
         ------
-        reg : numpy array
+        reg : :class:`numpy.ndarray`
             array of regularization values of length DOF_per_tile
         """
 
@@ -92,9 +92,9 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        pts :  numpy array
+        pts :  :class:`numpy.ndarray`
             N x 1, preprocessed from preprocess()
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the pts
         col_ind : int
             the starting column index for this tile
@@ -103,11 +103,11 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        block : scipy.sparse.csr_matrix
+        block : :class:`scipy.sparse.csr_matrix`
             the partial block for this transform
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the rows of this block
-        rhs : numpy array
+        rhs : :class:`numpy.ndarray`
             N x 1
             right hand side for this transform.
         """
@@ -131,22 +131,22 @@ class AlignerRotationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        ppts : numpy array
+        ppts : :class:`numpy.ndarray`
             N x 2. The p tile correspondence coordinates
-        qpts : numpy array
+        qpts : :class:`numpy.ndarray`
             N x 2. The q tile correspondence coordinates
-        w : numpy array
+        w : :class:`numpy.ndarray`
             size N. The weights.
 
         Returns
         -------
-        pa : numpy array
+        pa : :class:`numpy.ndarray`
             M x 1 preprocessed angular distances. -0.5 x delta angle
             M <= N depending on filter
-        qa : numpy array
+        qa : :class:`numpy.ndarray`
             M x 1 preprocessed angular distances. 0.5 x delta angle
             M <= N depending on filter
-        w : numpy array
+        w : :class:`numpy.ndarray`
             size M. filtered weights.
         """
         # center of mass

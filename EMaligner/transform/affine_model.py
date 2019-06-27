@@ -15,8 +15,8 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
         Parameters
         ----------
 
-        transform : obj
-            renderapi.transform.transform object. The new AlignerTransform will
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
             inherit from this transform, if possible.
         fullsize : bool
             only applies to affine transform. Remains for legacy reason as an
@@ -47,7 +47,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             N/2 x 2 for halfsize, N x 2 for fullsize
         """
 
@@ -71,7 +71,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             input to this function is sliced so that vec[0] is the
             first harvested value for this transform
 
@@ -113,7 +113,7 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
         Return
         ------
-        reg : numpy array
+        reg : :class:`numpy.ndarray`
             array of regularization values of length DOF_per_tile
         """
 
@@ -128,9 +128,9 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        pts :  numpy array
+        pts :  :class:`numpy.ndarray`
             N x 2, the x, y values of the match (either p or q)
-        w : numpy array
+        w : :class:`numpy.ndarray`
             size N, the weights associated with the pts
         col_ind : int
             the starting column index for this tile
@@ -139,11 +139,11 @@ class AlignerAffineModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        block : scipy.sparse.csr_matrix
+        block : :class:`scipy.sparse.csr_matrix`
             the partial block for this transform
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the rows of this block
-        rhs : numpy array
+        rhs : :class:`numpy.ndarray`
             N/2 x 2 (halfsize) or N x 1 (fullsize)
             right hand side for this transform.
             generally all zeros. could implement fixed tiles in

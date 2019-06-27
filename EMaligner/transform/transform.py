@@ -19,8 +19,8 @@ class AlignerTransform(object):
 
         name : str
             specifies the intended transform for the type of solve
-        transform : obj
-            renderapi.transform.transform object. The new AlignerTransform will
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
             inherit from this transform, if possible.
         fullsize : bool
             only applies to affine transform. Remains for legacy reason as an

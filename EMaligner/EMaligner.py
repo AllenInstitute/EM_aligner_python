@@ -201,8 +201,8 @@ class EMaligner(argschema.ArgSchemaParser):
            
            Parameters
            ----------
-           zvals : numpy array
-               int or float, corresponds to renderapi.tilespec.TileSpec.z
+           zvals : :class:`numpy.ndarray`
+               int or float, z of :class:`renderapi.tilespec.TileSpec`
 
         """
         t0 = time.time()
@@ -280,8 +280,8 @@ class EMaligner(argschema.ArgSchemaParser):
            
            Parameters
            ----------
-           zvals : numpy array
-               int or float, corresponds to renderapi.tilespec.TileSpec.z
+           zvals : :class:`numpy.ndarray`
+               int or float, z of :class:`renderapi.tilespec.TileSpec`
 
         """
         assemble_result = {}
@@ -380,8 +380,8 @@ class EMaligner(argschema.ArgSchemaParser):
            
            Parameters
            ----------
-           zvals : numpy array
-               int or float, corresponds to renderapi.tilespec.TileSpec.z
+           zvals : 
+               int or float, z of :class:`renderapi.tilespec.TileSpec`
 
         """
         # create A matrix in compressed sparse row (CSR) format
@@ -412,7 +412,8 @@ class EMaligner(argschema.ArgSchemaParser):
 
         Parameters
         ----------
-        resolved : a renderapi.resolvedtiles.ResolvedTiles object
+        resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
+            resolved tiles object from which to create A matrix
 
         """
 
@@ -496,15 +497,15 @@ class EMaligner(argschema.ArgSchemaParser):
 
         Parameters
         ----------
-        A : scipy.sparse.csr_matrix
+        A : :class:`scipy.sparse.csr`
             the matrix, N (equations) x M (degrees of freedom)
-        weights : scipy.sparse.csr_matrix
+        weights : :class:`scipy.sparse.csr_matrix`
             N x N diagonal matrix containing weights
-        reg : scipy.sparse.csr_matrix
+        reg : :class:`scipy.sparse.csr_matrix`
             M x M diagonal matrix containing regularizations
-        x0 : numpy array
+        x0 : :class:`numpy.ndarray`
             M x nsolve float constraint values for the DOFs
-        rhs : numpy array
+        rhs : :class:`numpy.ndarray`:
             rhs vector(s)
             N x nsolve float right-hand-side(s)
 

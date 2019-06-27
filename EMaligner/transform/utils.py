@@ -14,12 +14,12 @@ def aff_matrix(theta, offs=None):
     ----------
     theta : float
         rotation angle in radians
-    offs : numpy array
+    offs : :class:`numpy.ndarray`
         the translations to include
 
     Returns
     -------
-    M : numpy array
+    M : :class:`numpy.ndarray`
         2 x 2 (for offs=None) affine matrix
         or 3 x 3 augmented matrix
     """

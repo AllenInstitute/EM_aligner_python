@@ -15,8 +15,8 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         Parameters
         ----------
 
-        transform : obj
-            renderapi.transform.transform object. The new AlignerTransform will
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
             inherit from this transform, if possible.
         """
 
@@ -39,7 +39,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             1 x 2 transform parameters in solve form
         """
         return np.array([[0.0, 0.0]])
@@ -49,7 +49,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             input to this function is sliced so that vec[0] is the
             first harvested value for this transform
 
@@ -75,7 +75,7 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Return
         ------
-        reg : numpy array
+        reg : :class:`numpy.ndarray`
             array of regularization values of length DOF_per_tile
         """
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
@@ -87,9 +87,9 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        pts :  numpy array
+        pts :  :class:`numpy.ndarray`
             N x 2, the x, y values of the match (either p or q)
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the pts
         col_ind : int
             the starting column index for this tile
@@ -98,11 +98,11 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        block : scipy.sparse.csr_matrix
+        block : :class:`scipy.sparse.csr_matrix`
             the partial block for this transform
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the rows of this block
-        rhs : numpy array
+        rhs : :class:`numpy.ndarray`
             N/2 x 2 
             right hand side for this transform.
         """

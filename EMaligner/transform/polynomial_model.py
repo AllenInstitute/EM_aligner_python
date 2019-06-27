@@ -14,8 +14,8 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
         Parameters
         ----------
 
-        transform : obj
-            renderapi.transform.transform object. The new AlignerTransform will
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
             inherit from this transform, if possible.
         order : int
             order of the intended polynomial.
@@ -55,7 +55,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
         Returns
         -------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             N x 2 transform parameters in solve form
         """
 
@@ -67,7 +67,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
         Parameters
         ----------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             input to this function is sliced so that vec[0] is the
             first harvested value for this transform
 
@@ -93,7 +93,7 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
         Return
         ------
-        reg : numpy array
+        reg : :class:`numpy.ndarray`
             array of regularization values of length DOF_per_tile
         """
 
@@ -115,9 +115,9 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
         Parameters
         ----------
-        pts :  numpy array
+        pts :  :class:`numpy.ndarray`
             N x 2, the x, y values of the match (either p or q)
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the pts
         col_ind : int
             the starting column index for this tile
@@ -126,11 +126,11 @@ class AlignerPolynomial2DTransform(renderapi.transform.Polynomial2DTransform):
 
         Returns
         -------
-        block : scipy.sparse.csr_matrix
+        block : :class:`scipy.sparse.csr_matrix`
             the partial block for this transform
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the rows of this block
-        rhs : numpy array
+        rhs : :class:`numpy.ndarray`
             N/2 x 2 (halfsize) or N x 1 (fullsize)
             right hand side for this transform.
             generally all zeros. could implement fixed tiles in

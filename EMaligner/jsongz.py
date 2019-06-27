@@ -31,12 +31,12 @@ def dump(obj, filepath, compress=None, encoding='utf-8', *args, **kwargs):
     compress : bool or None
         if None, file compressed or not according to filepath extension
     encoding : str
-        encoding of json.dumps() before writing to .gz file.
-        not passed into json.dump()
+        encoding of :py:func:`json.dumps` before writing to .gz file.
+        not passed into :py:func:`json.dump`
     *args
-        json.dump args
+        :py:func:`json.dump` args
     **kwargs
-        json.dump kwargs
+        :py:func:`json.dump` kwargs
 
     Returns
     -------
@@ -66,12 +66,12 @@ def load(filepath, encoding='utf-8', *args, **kwargs):
     filepath : str
         path for source of load
     encoding : str
-        encoding for decoding of json.dumps() after .gz read
-        not passed into json.load()
+        encoding for decoding of :py:func:`json.dumps` after .gz read
+        not passed into :py:func:`json.load`
     *args
-        json.load args
+        py:func:`json.load` args
     **kwargs
-        json.load kwargs
+        py:func:`json.load` kwargs
 
     Returns
     -------

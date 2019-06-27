@@ -34,7 +34,7 @@ def make_dbconnection(collection, which='tile', interface=None):
 
     Parameters
     ----------
-    collection : an EMaligner.schemas.db_params object
+    collection : :class:`EMaligner.schemas.db_params`
     which : str
         switch for having mongo retrieve reference transforms
     interface : str or None
@@ -43,7 +43,7 @@ def make_dbconnection(collection, which='tile', interface=None):
     Returns
     -------
     dbconnection : obj
-        a multi-interface object used by other functions in EMaligner.utils
+        a multi-interface object used by other functions in :mod:`EMaligner.utils`
 
     """
     if interface is None:
@@ -95,8 +95,8 @@ def determine_zvalue_pairs(resolved, depths):
 
     Parameters
     ----------
-    resolved : renderapi.resolvedtiles.ResolvedTiles object
-
+    resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
+        input tilespecs
     depths : List
         depths (z-differences) that will be included in the matrix
 
@@ -137,7 +137,7 @@ def ready_transforms(tilespecs, tform_name, fullsize, order):
     Parameters
     ----------
     tilespecs : List
-        renderapi.tilespec.TileSpec objects.
+        :class:`renderapi.tilespec.TileSpec` objects.
     tform_name : str
         intended destination type for the mutation
     fullsize : bool
@@ -171,7 +171,7 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
 
     Parameters
     ----------
-    stack :  EMaligner.schemas.stack object
+    stack :  :class:`EMaligner.schemas.input_stack`
     tform_name : str
         specifies which transform to mutate into (solve for)
     fullsize : bool
@@ -183,7 +183,7 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
 
     Returns
     -------
-    resolved : renderapi.resolvedtiles.ResolvedTiles object
+    resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
 
     """
     resolved = renderapi.resolvedtiles.ResolvedTiles()
@@ -238,7 +238,7 @@ def get_resolved_tilespecs(
 
     Parameters
     ----------
-    stack :  EMaligner.schemas.stack object
+    stack :  :class:`EMaligner.schemas.input_stack`
     tform_name : str
         specifies which transform to mutate into (solve for)
     pool_size : int
@@ -247,12 +247,12 @@ def get_resolved_tilespecs(
         passed as kwarg to the EMaligner.transform.AlignerTransform
     order : int
         passed as kwarg to the EMaligner.transform.AlignerTransform
-    zvals : numpy array
+    zvals : :class:`numpy.ndarray`
         z values for desired sections
 
     Returns
     -------
-    resolved : renderapi.resolvedtiles.ResolvedTiles object
+    resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
 
     """
     t0 = time.time()
@@ -291,8 +291,8 @@ def get_matches(iId, jId, collection, dbconnection):
         sectionId for 1st section
     jId : str
         sectionId for 2nd section
-    collection : EMaligner.schemas.pointmatch object
-    dbconnection : object returned by make_dbconnection
+    collection : :class:`EMaligner.schemas.pointmatch`
+    dbconnection : object returned by :meth:`EMaligner.utils.make_dbconnection`
 
     Returns
     -------
@@ -353,11 +353,11 @@ def write_chunk_to_file(fname, c, file_weights, rhs):
     ----------
     fname : str
         path to output file
-    c : scipy.sparse.csr_matrix
+    c : :class:`scipy.sparse.csr_matrix`
         N x M matrix sub block
-    file_weights : numpy array
+    file_weights : :class:`numpy.ndarray`
         length N array of weights
-    rhs : numpy array
+    rhs : :class:`numpy.ndarray`
         N x nsolve right hand sides
 
     """
@@ -431,13 +431,13 @@ def write_reg_and_tforms(
     ----------
     args : dict
         passed from EMaligner object
-    resolved : obj
-        renderapi.resolvedtiles.ResolvedTiles
+    resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
+        resolved tilespec object to output
     metadata : dict
         helper values about matrix for external solver
-    tforms : numpy array
+    tforms : :class:`numpy.ndarray`
         M x nsolve starting values (x0)
-    reg : scipy.sparse.csr_matrix
+    reg : :class:`scipy.sparse.csr_matrix`
         M x M diagonal regularization values
 
     """
@@ -540,23 +540,23 @@ def write_to_new_stack(
     
     Parameters
     ----------
-    resolved : obj
-        renderapi.resolvedtiles.ResolvedTiles
+    resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
+        resolved tilespecs containing tilespecs to write
     output_stack : dict
-        EMaligner.schemas.output_stack
+        from :class:`EMaligner.schemas.output_stack`
     outarg : str
-        "render_output"
+        render_output argument
     overwrite_zlayer : bool
         delete section first before overwriting?
     args : dict
-        passed from EMaligner instance
+        from :class:`EMaligner.schemas.EMA_Schema`
     results : dict
-        results from solve()
+        results from :meth:`EMaligner.utils.solve()`
 
     Returns
     -------
     output_stack : dict
-        EMaligner.schemas.output_stack
+        representation of :class:`EMaligner.schemas.output_stack`
     """
 
     if output_stack['db_interface'] == 'file':
@@ -612,15 +612,15 @@ def solve(A, weights, reg, x0, rhs):
 
     Parameters
     ----------
-    A : scipy.sparse.csr_matrix
+    A : :class:`scipy.sparse.csr_matrix`
         the matrix, N (equations) x M (degrees of freedom)
-    weights : scipy.sparse.csr_matrix
+    weights : :class:`scipy.sparse.csr_matrix`
         N x N diagonal matrix containing weights
-    reg : scipy.sparse.csr_matrix
+    reg : :class:`scipy.sparse.csr_matrix`
         M x M diagonal matrix containing regularizations
-    x0 : numpy array
+    x0 : :class:`numpy.ndarray`
         M x nsolve float constraint values for the DOFs
-    rhs : numpy array
+    rhs : :class:`numpy.ndarray`
         rhs vector(s)
         N x nsolve float right-hand-side(s)
 
@@ -681,7 +681,7 @@ def message_from_solve_results(results):
     Parameters
     ----------
     results : dict
-       returned from EMaligner.utils.solve() or read from
+       returned from :meth:`EMaligner.utils.solve` or read from
        external solver results
 
     Returns
@@ -707,7 +707,7 @@ def create_or_set_loading(stack):
 
     Parameters
     ----------
-    stack : EMaligner.schemas.stack object
+    stack : :class:`EMaligner.schemas.output_stack`
     """
 
     if stack['db_interface'] == 'file':
@@ -722,9 +722,10 @@ def create_or_set_loading(stack):
 
 def set_complete(stack):
     """set stack state to COMPLETE
+
     Parameters
     ----------
-    stack : EMaligner.schemas.stack object
+    stack : :class:`EMaligner.schemas.output_stack`
     """
     if stack['db_interface'] == 'file':
         return
@@ -743,13 +744,13 @@ def get_z_values_for_stack(stack, zvals):
     
     Parameters
     ----------
-    stack : EMaligner.schema.stack object
-    zvals : numpy array
+    stack : :class:`EMaligner.schema.input_stack`
+    zvals : :class:`numpy.ndarray`
         int or float. input z values
 
     Returns
     -------
-    zvals : numpy array
+    zvals : :class:`numpy.ndarray`
         int or float. overlapping z values
 
     """
@@ -772,11 +773,12 @@ def get_z_values_for_stack(stack, zvals):
 
 def update_tilespecs(resolved, x):
     """update tilespecs with new solution
+
     Parameters
     ----------
-    resolved : obj
-        renderapi.resolvedtiles.ResolvedTiles
-    x : numpy array
+    resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
+        resolved tilespecs to update
+    x : :class:`numpy.ndarray`
         results of solve
     """
     index = 0
@@ -792,9 +794,9 @@ def blocks_from_tilespec_pair(
 
     Parameters
     ----------
-    ptspec : renderapi.tilespec.TileSpec
+    ptspec : :class:`renderapi.tilespec.TileSpec`
         ptspec.tforms[-1] is an AlignerTransform object
-    qtspec : renderapi.tilespec.TileSpec
+    qtspec : :class:`renderapi.tilespec.TileSpec`
         qtspec.tforms[-1] is an AlignerTransform object
     match : dict
         pointmatch between tilepairs
@@ -809,13 +811,13 @@ def blocks_from_tilespec_pair(
 
     Returns
     -------
-    pblock : scipy.sparse.csr_matrix
+    pblock : :class:`scipy.sparse.csr_matrix`
         block for the p tilespec/match entry. The full block can be had
         from pblock - qblock, but, it is a little faster to do
         vstack and then subtract, so p and q remain separate
-    qblock : scipy.sparse.csr_matrix
+    qblock : :class:`scipy.sparse.csr_matrix`
         block for the q tilespec/match entry
-    w : numpy array
+    w : :class:`numpy.ndarray`
         weights for the rows in pblock and qblock
     """
 
@@ -861,15 +863,15 @@ def concatenate_results(results):
 
     Returns
     -------
-    A : scipy.sparse.csr_matrix
+    A : :class:`scipy.sparse.csr_matrix`
         the concatenated matrix, N x M
-    weights : scipy.sparse.csr_matrix
+    weights : :class:`scipy.sparse.csr_matrix`
         diagonal matrix containing concatenated
         weights N x N
-    rhs : numpy array
+    rhs : :class:`numpy.ndarray`
         concatenated rhs vector(s)
         float. N x nsolve
-    zlist : numpy array
+    zlist : :class:`numpy.ndarray`
         float
         concatenated z list
     """

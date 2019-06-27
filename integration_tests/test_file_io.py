@@ -30,7 +30,8 @@ def raw_stack(render):
             renderapi.tilespec.TileSpec(json=d)
             for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack, render=render)
-    renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
+    renderapi.client.import_tilespecs(
+            test_raw_stack, tilespecs, render=render, use_rest=True)
     renderapi.stack.set_stack_state(test_raw_stack, 'COMPLETE', render=render)
     yield test_raw_stack
     renderapi.stack.delete_stack(test_raw_stack, render=render)

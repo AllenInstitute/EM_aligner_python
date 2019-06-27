@@ -6,8 +6,19 @@ __all__ = ['AlignerTranslationModel']
 
 
 class AlignerTranslationModel(renderapi.transform.AffineModel):
+    """
+    Object for implementing translation transform
+    """
 
     def __init__(self, transform=None):
+        """
+        Parameters
+        ----------
+
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
+            inherit from this transform, if possible.
+        """
 
         if transform is not None:
             if isinstance(transform, renderapi.transform.AffineModel):
@@ -28,8 +39,8 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        vec : numpy array
-            transform parameters in solve form
+        vec : :class:`numpy.ndarray`
+            1 x 2 transform parameters in solve form
         """
         return np.array([[0.0, 0.0]])
 
@@ -38,14 +49,14 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             input to this function is sliced so that vec[0] is the
-            first relevant value for this transform
+            first harvested value for this transform
 
         Returns
         -------
         n : int
-            number of values read from vec. Used to increment vec slice
+            number of rows read from vec. Used to increment vec slice
             for next transform
         """
         self.M[0, 2] += vec[0, 0]
@@ -59,11 +70,12 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
         Parameters
         ----------
         regdict : dict
-           see regularization class in schemas. controls values
+           EMaligner.schemas.regularization. controls
+           regularization values
 
         Return
         ------
-        reg : numpy array
+        reg : :class:`numpy.ndarray`
             array of regularization values of length DOF_per_tile
         """
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
@@ -75,9 +87,9 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        pts :  numpy array
+        pts :  :class:`numpy.ndarray`
             N x 2, the x, y values of the match (either p or q)
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the pts
         col_ind : int
             the starting column index for this tile
@@ -86,10 +98,13 @@ class AlignerTranslationModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        block : scipy.sparse.csr_matrix
+        block : :class:`scipy.sparse.csr_matrix`
             the partial block for this transform
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the rows of this block
+        rhs : :class:`numpy.ndarray`
+            N/2 x 2 
+            right hand side for this transform.
         """
         data = np.ones(pts.shape[0])
         indices = data * col_ind

@@ -39,7 +39,8 @@
         "mongo_port": 27017,
         "client_scripts": "/allen/aibs/pipeline/image_processing/volume_assembly/render-jars/production/scripts",
         "collection_type": "stack",
-        "db_interface": "render"
+        "db_interface": "render",
+	"use_rest": true
     }, 
     "output_options": {
         "output_mode": "stack",

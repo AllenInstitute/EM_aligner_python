@@ -6,8 +6,19 @@ __all__ = ['AlignerSimilarityModel']
 
 
 class AlignerSimilarityModel(renderapi.transform.AffineModel):
+    """
+    Object for implementing similarity transform.
+    """
 
     def __init__(self, transform=None):
+        """
+        Parameters
+        ----------
+
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
+            inherit from this transform, if possible.
+        """
 
         if transform is not None:
             if isinstance(transform, renderapi.transform.AffineModel):
@@ -28,8 +39,8 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        vec : numpy array
-            transform parameters in solve form
+        vec : :class:`numpy.ndarray`
+            N x 1 transform parameters in solve form
         """
         vec = np.array([
             self.M[0, 0],
@@ -44,14 +55,14 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
 
         Parameters
         ----------
-        vec : numpy array
+        vec : :class:`numpy.ndarray`
             input to this function is sliced so that vec[0] is the
-            first relevant value for this transform
+            first harvested value for this transform
 
         Returns
         -------
         n : int
-            number of values read from vec. Used to increment vec slice
+            number of rows read from vec. Used to increment vec slice
             for next transform
         """
         self.M[0, 0] = vec[0]
@@ -69,11 +80,12 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         Parameters
         ----------
         regdict : dict
-           see regularization class in schemas. controls values
+           EMaligner.schemas.regularization. controls
+           regularization values
 
         Return
         ------
-        reg : numpy array
+        reg : :class:`numpy.ndarray`
             array of regularization values of length DOF_per_tile
         """
         reg = np.ones(self.DOF_per_tile).astype('float64') * \
@@ -83,13 +95,16 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
         return reg
 
     def block_from_pts(self, pts, w, col_ind, col_max):
-        """partial sparse block for a tilepair/match
+        """partial sparse block for a transform/match.
+           similarity constrains the center-of-mass coordinates
+           to transform according to the same affine transform
+           as the coordinates, save translation.
 
         Parameters
         ----------
-        pts :  numpy array
+        pts :  :class:`numpy.ndarray`
             N x 2, the x, y values of the match (either p or q)
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the pts
         col_ind : int
             the starting column index for this tile
@@ -98,10 +113,15 @@ class AlignerSimilarityModel(renderapi.transform.AffineModel):
 
         Returns
         -------
-        block : scipy.sparse.csr_matrix
+        block : :class:`scipy.sparse.csr_matrix`
             the partial block for this transform
-        w : numpy array
+        w : :class:`numpy.ndarray`
             the weights associated with the rows of this block
+        rhs : :class:`numpy.ndarray`
+            N x 1 (fullsize)
+            right hand side for this transform.
+            generally all zeros. could implement fixed tiles in
+            rhs later.
         """
         px = pts[:, 0]
         py = pts[:, 1]

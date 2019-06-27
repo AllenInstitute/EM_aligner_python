@@ -27,10 +27,6 @@ with open('test_requirements.txt', 'r') as f:
 
 with open('requirements.txt', 'r') as f:
     required = f.read().splitlines()
-print("hacky thing for render-python dev branch. fix me.")
-for i in range(len(required)):
-    if required[i][0:2] == "-e":
-        required[i] = "render-python"
 
 setup(name='EMaligner',
       use_scm_version=True,

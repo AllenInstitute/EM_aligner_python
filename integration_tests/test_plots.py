@@ -29,7 +29,7 @@ def raw_stack(render):
             for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack, render=render)
     renderapi.client.import_tilespecs(
-        test_raw_stack, tilespecs, render=render)
+        test_raw_stack, tilespecs, render=render, use_rest=True)
     renderapi.stack.set_stack_state(
         test_raw_stack, 'COMPLETE', render=render)
     yield test_raw_stack
@@ -50,7 +50,7 @@ def raw_stack_offset_z(render):
     renderapi.stack.create_stack(
         test_raw_stack_offset, render=render)
     renderapi.client.import_tilespecs(
-        test_raw_stack_offset, tilespecs, render=render)
+        test_raw_stack_offset, tilespecs, render=render, use_rest=True)
     renderapi.stack.set_stack_state(
         test_raw_stack_offset, 'COMPLETE', render=render)
     yield test_raw_stack_offset
@@ -65,7 +65,8 @@ def raw_stack_loading(render):
             renderapi.tilespec.TileSpec(json=d)
             for d in montage_raw_tilespecs_json]
     renderapi.stack.create_stack(test_raw_stack, render=render)
-    renderapi.client.import_tilespecs(test_raw_stack, tilespecs, render=render)
+    renderapi.client.import_tilespecs(
+            test_raw_stack, tilespecs, render=render, use_rest=True)
     yield test_raw_stack
     renderapi.stack.delete_stack(test_raw_stack, render=render)
 
@@ -132,6 +133,7 @@ def test_resplot(render, montage_pointmatches, raw_stack, tmpdir):
 def test_trplot(render, montage_pointmatches, raw_stack, tmpdir):
     p = copy.deepcopy(montage_parameters)
     p['input_stack']['name'] = raw_stack
+    p['output_stack']['name'] = raw_stack
     p['pointmatch']['name'] = montage_pointmatches
     mod = CheckTransforms(input_data=p, args=[])
     mod.args['z1'] = 1015

@@ -34,7 +34,9 @@ render_params = {
     'port': render_port,
     'owner': 'test',
     'project': project,
-    'client_scripts': client_script_location
+    'client_scripts': client_script_location,
+    'memGB': '1G',
+    'validate_client': False
 }
 
 montage_raw_tilespecs_json = render_json_template(

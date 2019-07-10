@@ -2,7 +2,7 @@ import numpy as np
 import renderapi
 import argschema
 from ..schemas import *
-from .. EMaligner import make_dbconnection
+from ..utils import make_dbconnection
 import time
 import matplotlib
 matplotlib.use('Agg')

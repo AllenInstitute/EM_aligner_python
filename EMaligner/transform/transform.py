@@ -2,22 +2,41 @@ from .utils import AlignerTransformException
 from .affine_model import AlignerAffineModel
 from .similarity_model import AlignerSimilarityModel
 from .polynomial_model import AlignerPolynomial2DTransform
+from .rotation_model import AlignerRotationModel
+from .translation_model import AlignerTranslationModel
+from .thinplatespline_model import AlignerThinPlateSplineTransform
+__all__ = ['AlignerTransform']
 
 
 class AlignerTransform(object):
+    """general transform object that the solver expects
+    """
 
     def __init__(self, name=None, transform=None, fullsize=False, order=2):
-        if (name is None) & (transform is None):
-            raise AlignerTransformException(
-                   'must specify transform name or provide a transform')
+        """
+        Parameters
+        ----------
 
-        if transform is not None:
-            name = transform.__class__.__name__
+        name : str
+            specifies the intended transform for the type of solve
+        transform : :class:`renderapi.transform.Transform`
+            The new AlignerTransform will
+            inherit from this transform, if possible.
+        fullsize : bool
+            only applies to affine transform. Remains for legacy reason as an
+            explicit demonstration of the equivalence of fullsize and halfsize
+            transforms.
+        order : int
+            used in Polynomial2DTransform
+
+        """
+        if (name is None):
+            raise AlignerTransformException(
+                   'must specify transform name')
 
         # backwards compatibility
         if name == 'affine':
             name = 'AffineModel'
-            fullsize = False
         if name == 'affine_fullsize':
             name = 'AffineModel'
             fullsize = True
@@ -32,11 +51,21 @@ class AlignerTransform(object):
         elif (name == 'SimilarityModel'):
             self.__class__ = AlignerSimilarityModel
             AlignerSimilarityModel.__init__(self, transform=transform)
+        elif (name == 'RotationModel'):
+            self.__class__ = AlignerRotationModel
+            AlignerRotationModel.__init__(self, transform=transform)
+        elif (name == 'TranslationModel'):
+            self.__class__ = AlignerTranslationModel
+            AlignerTranslationModel.__init__(self, transform=transform)
         elif (name == 'Polynomial2DTransform'):
             self.__class__ = AlignerPolynomial2DTransform
             AlignerPolynomial2DTransform.__init__(
                     self, transform=transform,
                     order=order)
+        elif (name == 'ThinPlateSplineTransform'):
+            self.__class__ = AlignerThinPlateSplineTransform
+            AlignerThinPlateSplineTransform.__init__(
+                    self, transform=transform)
         else:
             raise AlignerTransformException(
                     'transform %s not in possible choices:' % name)

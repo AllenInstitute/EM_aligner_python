@@ -2,39 +2,33 @@ import numpy as np
 
 
 class AlignerTransformException(Exception):
-    """Exception raised when there is a \
-            problem creating a mesh lens correction"""
+    """Exception class for AlignerTransforms"""
     pass
 
 
-def ptpair_indices(npts_in, nmin, nmax, nnz, choose_random):
-    npts = npts_in
+def aff_matrix(theta, offs=None):
+    """affine matrix or augmented affine matrix
+    given a rotation angle.
 
-    # some criteria for returning nothing
-    if (npts < nmin):
-        return None, None
+    Parameters
+    ----------
+    theta : float
+        rotation angle in radians
+    offs : :class:`numpy.ndarray`
+        the translations to include
 
-    # determine number of points
-    if npts > nmax:
-        npts = nmax
-
-    # random subset
-    if choose_random:
-        a = np.arange(npts_in)
-        np.random.shuffle(a)
-        match_index = a[0:npts]
-    else:
-        match_index = np.arange(npts)
-    stride = np.arange(npts) * nnz
-
-    return match_index, stride
-
-
-def arrays_for_tilepair(npts, rows_per_ptmatch, nnz_per_row):
-    nd = npts * rows_per_ptmatch * nnz_per_row
-    ni = npts * rows_per_ptmatch
-    data = np.zeros(nd).astype('float64')
-    indices = np.zeros(nd).astype('int64')
-    indptr = np.zeros(ni)
-    weights = np.zeros(ni)
-    return data, indices, indptr, weights
+    Returns
+    -------
+    M : :class:`numpy.ndarray`
+        2 x 2 (for offs=None) affine matrix
+        or 3 x 3 augmented matrix
+    """
+    c, s = np.cos(theta), np.sin(theta)
+    R = np.array([[c, -s], [s, c]])
+    if offs is None:
+        return R
+    M = np.eye(3)
+    M[0:2, 0:2] = R
+    M[0, 2] = offs[0]
+    M[1, 2] = offs[1]
+    return M

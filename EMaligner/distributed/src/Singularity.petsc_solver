@@ -1,5 +1,5 @@
-Bootstrap: shub
-From: AllenInstitute/EM_aligner_python:petsc 
+Bootstrap: library
+From: djkapner/default/emaligner-petsc:v1.0.0
 
 %setup
     # singularity build should be run from repo base dir

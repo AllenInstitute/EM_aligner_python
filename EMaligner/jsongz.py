@@ -69,15 +69,14 @@ def load(filepath, encoding='utf-8', *args, **kwargs):
         encoding for decoding of :py:func:`json.dumps` after .gz read
         not passed into :py:func:`json.load`
     *args
-        py:func:`json.load` args
+        :py:func:`json.load` args
     **kwargs
-        py:func:`json.load` kwargs
+        :py:func:`json.load` kwargs
 
     Returns
     -------
-    obj : obj
-        potentially modified filepath of dumped object
-        uncompressed are forced to '.json' and compressed to '.gz'
+    obj : dict
+        loaded object
     """
 
     compressed = _check_ext(filepath)

@@ -490,12 +490,6 @@ def write_reg_and_tforms(
                 data=os.path.basename(rname))
 
         jsongz.dump(resolved.to_dict(), rname)
-        #        data=np.void(
-        #            json.dumps(
-        #                resolved.to_dict(),
-        #                indent=2).encode()))
-        #        dtype=str_type)
-        # dset[:] = json.dumps(resolved.to_dict(), indent=2)
 
         # keep track of input args
         dset = f.create_dataset(

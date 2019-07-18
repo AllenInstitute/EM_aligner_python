@@ -43,7 +43,8 @@ def make_dbconnection(collection, which='tile', interface=None):
     Returns
     -------
     dbconnection : obj
-        a multi-interface object used by other functions in :mod:`EMaligner.utils`
+        a multi-interface object used by other functions
+        in :mod:`EMaligner.utils`
 
     """
     if interface is None:
@@ -506,7 +507,7 @@ def write_reg_and_tforms(
 
 def get_stderr_stdout(outarg):
     """helper function for suppressing render output
-    
+
     Parameters
     ----------
     outarg : str
@@ -537,7 +538,7 @@ def write_to_new_stack(
         args,
         results):
     """write results to render or file output
-    
+
     Parameters
     ----------
     resolved : :class:`renderapi.resolvedtiles.ResolvedTiles`
@@ -677,7 +678,7 @@ def solve(A, weights, reg, x0, rhs):
 def message_from_solve_results(results):
     """create summarizing string message about solve for
        logging
-    
+
     Parameters
     ----------
     results : dict
@@ -741,7 +742,7 @@ def set_complete(stack):
 def get_z_values_for_stack(stack, zvals):
     """multi-interface wrapper to find overlapping z values
        between a stack and the requested range.
-    
+
     Parameters
     ----------
     stack : :class:`EMaligner.schema.input_stack`
@@ -889,3 +890,43 @@ def concatenate_results(results):
 
     return A, weights, rhs, zlist
 
+
+def transform_match(match, ptspec, qtspec, apply_list, tforms):
+    """transform the match coordinates through a subset of the
+       tilespec transform list
+
+    Parameters
+    ----------
+    match : dict
+        one match object
+    ptspec : :class:`renderapi.tilespec.TileSpec`
+        the tilespec for the p coordinates
+    qtspec : :class:`renderapi.tilespec.TileSpec`
+        the tilespec for the q coordinates
+    apply_list : list
+        list of indices for the transforms
+    tforms : list
+        list of reference transforms
+
+    Returns
+    -------
+    match : dict
+        one match object, with p and q transformed
+
+    """
+    if apply_list:
+        for tspec, pq in zip([ptspec, qtspec], ['p', 'q']):
+            try:
+                dst = renderapi.transform.estimate_dstpts(
+                        [tspec.tforms[i] for i in apply_list],
+                        src=np.array(match['matches'][pq]).transpose(),
+                        reference_tforms=tforms)
+            except IndexError:
+                logger.error("argument apply_list is {} but the tilespec "
+                             " for {} has tforms of length {}.".format(
+                                 apply_list,
+                                 tspec.tileId,
+                                 len(tspec.tforms)))
+                raise
+            match['matches'][pq] = dst.transpose().tolist()
+    return match

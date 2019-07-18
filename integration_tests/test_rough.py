@@ -91,6 +91,30 @@ def rough_input_stack_2(render):
     renderapi.stack.delete_stack(test_rough_stack2, render=render)
 
 
+# raw stack with some extra transforms inserted
+@pytest.fixture(scope='module')
+def rough_input_stack_3(render):
+    test_rough_stack3 = 'rough_input_stack_3'
+    with open(FILE_ROUGH_TILES, 'r') as f:
+        j = json.load(f)
+    tilespecs = [renderapi.tilespec.TileSpec(json=d) for d in j]
+    tfs = [
+            renderapi.transform.AffineModel(M00=2.0, M11=2.0),
+            renderapi.transform.AffineModel(M00=0.5, M11=0.5)]
+    for i in range(len(tilespecs)):
+        tilespecs[i].tforms.insert(0, tfs[1])
+        tilespecs[i].tforms.insert(0, tfs[0])
+
+    renderapi.stack.create_stack(
+            test_rough_stack3, render=render)
+    renderapi.client.import_tilespecs(
+            test_rough_stack3, tilespecs, render=render, use_rest=True)
+    renderapi.stack.set_stack_state(
+            test_rough_stack3, 'COMPLETE', render=render)
+    yield test_rough_stack3
+    renderapi.stack.delete_stack(test_rough_stack3, render=render)
+
+
 @pytest.fixture(scope='module')
 def rough_pointmatches(render):
     test_rough_collection = 'rough_collection'
@@ -248,6 +272,35 @@ def test_rough_rotation(
 
     assert np.all(np.array(mod.results['precision']) < 1e-10)
     assert len(tin) == len(tout)
+    del mod
+
+
+def test_apply_list(
+        render,
+        rough_pointmatches,
+        rough_input_stack_3,
+        output_stack_name):
+    rough_parameters2 = copy.deepcopy(rough_parameters)
+    rough_parameters2['input_stack']['name'] = rough_input_stack_3
+    rough_parameters2['output_stack']['name'] = output_stack_name
+    rough_parameters2['pointmatch']['name'] = rough_pointmatches
+    rough_parameters2['transformation'] = 'RotationModel'
+    rough_parameters2['transform_apply'] = [0, 1]
+    mod = EMaligner.EMaligner(
+            input_data=copy.deepcopy(rough_parameters2), args=[])
+    mod.run()
+    tin = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['input_stack']['name'], render=render)
+    tout = renderapi.tilespec.get_tile_specs_from_stack(
+            rough_parameters2['output_stack']['name'], render=render)
+    assert np.all(np.array(mod.results['precision']) < 1e-10)
+    assert len(tin) == len(tout)
+
+    rough_parameters2['transform_apply'] = [4]
+    with pytest.raises(IndexError):
+        mod = EMaligner.EMaligner(
+                input_data=copy.deepcopy(rough_parameters2), args=[])
+        mod.run()
     del mod
 
 

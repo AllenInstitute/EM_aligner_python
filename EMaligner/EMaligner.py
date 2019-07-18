@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def calculate_processing_chunk(fargs):
     """job to parallelize for creating a sparse matrix block
     and associated vectors from a pair of sections
-    
+
     Parameters
     ----------
     fargs : List
@@ -35,7 +35,7 @@ def calculate_processing_chunk(fargs):
     """
     t0 = time.time()
     # set up for calling using multiprocessing pool
-    [pair, args, tspecs, col_ind, ncol] = fargs
+    [pair, args, tspecs, tforms, col_ind, ncol] = fargs
 
     tile_ids = np.array([t.tileId for t in tspecs])
 
@@ -100,17 +100,12 @@ def calculate_processing_chunk(fargs):
     rhss = []
     for k, match in enumerate(matches):
 
-        # transform through
-        pxy = np.array(match['matches']['p']).transpose()
-        qxy = np.array(match['matches']['q']).transpose()
-        #for tf in tspecs[pinds[k]].tforms[1:-1]:
-        for tf in tspecs[pinds[k]].tforms[:-1]:
-            pxy = tf.tform(pxy)
-        #for tf in tspecs[qinds[k]].tforms[1:-1]:
-        for tf in tspecs[qinds[k]].tforms[:-1]:
-            qxy = tf.tform(qxy)
-        match['matches']['p'] = pxy.transpose().tolist()
-        match['matches']['q'] = qxy.transpose().tolist()
+        match = utils.transform_match(
+                match,
+                tspecs[pinds[k]],
+                tspecs[qinds[k]],
+                args['transform_apply'],
+                tforms)
 
         pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
                 tspecs[pinds[k]],
@@ -210,7 +205,7 @@ class EMaligner(argschema.ArgSchemaParser):
         """retrieves a ResolvedTiles object from some source
            and then assembles/solves, outputs to hdf5 and/or outputs to an
            output_stack object.
-           
+
            Parameters
            ----------
            zvals : :class:`numpy.ndarray`
@@ -287,9 +282,9 @@ class EMaligner(argschema.ArgSchemaParser):
         return results
 
     def assemble_from_hdf5(self, filename, zvals, read_data=True):
-        """assembles and solves from an hdf5 matrix assembly 
+        """assembles and solves from an hdf5 matrix assembly
            previously created with output_mode = "hdf5".
-           
+
            Parameters
            ----------
            zvals : :class:`numpy.ndarray`
@@ -389,10 +384,10 @@ class EMaligner(argschema.ArgSchemaParser):
         """assembles a matrix from a pointmatch source given
            the already-retrieved ResolvedTiles object. Then solves
            or outputs to hdf5.
-           
+
            Parameters
            ----------
-           zvals : 
+           zvals :
                int or float, z of :class:`renderapi.tilespec.TileSpec`
 
         """
@@ -419,7 +414,7 @@ class EMaligner(argschema.ArgSchemaParser):
         return assemble_result
 
     def create_CSR_A(self, resolved):
-        """distributes the work of reading pointmatches and 
+        """distributes the work of reading pointmatches and
            assembling results
 
         Parameters
@@ -452,6 +447,7 @@ class EMaligner(argschema.ArgSchemaParser):
             pair,
             self.args,
             [resolved.tilespecs[k] for k in pair['ind']],
+            resolved.transforms,
             col_ind[pair['ind']],
             col_ind.max()] for pair in pairs]
 
@@ -502,7 +498,6 @@ class EMaligner(argschema.ArgSchemaParser):
                     utils.concatenate_results(results)
 
         return func_result
-
 
     def solve_or_not(self, A, weights, reg, x0, rhs):
         """solves or outputs assembly to hdf5 files

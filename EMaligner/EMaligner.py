@@ -100,6 +100,18 @@ def calculate_processing_chunk(fargs):
     rhss = []
     for k, match in enumerate(matches):
 
+        # transform through
+        pxy = np.array(match['matches']['p']).transpose()
+        qxy = np.array(match['matches']['q']).transpose()
+        #for tf in tspecs[pinds[k]].tforms[1:-1]:
+        for tf in tspecs[pinds[k]].tforms[:-1]:
+            pxy = tf.tform(pxy)
+        #for tf in tspecs[qinds[k]].tforms[1:-1]:
+        for tf in tspecs[qinds[k]].tforms[:-1]:
+            qxy = tf.tform(qxy)
+        match['matches']['p'] = pxy.transpose().tolist()
+        match['matches']['q'] = qxy.transpose().tolist()
+
         pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
                 tspecs[pinds[k]],
                 tspecs[qinds[k]],

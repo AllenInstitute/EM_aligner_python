@@ -36,11 +36,11 @@ def calculate_processing_chunk(fargs):
     """
     t0 = time.time()
     # set up for calling using multiprocessing pool
-    [pair, args, tspecs, col_ind, ncol] = fargs[0]
+    [pair, args, tspecs, tforms, col_ind, ncol] = fargs[0]
     chunks = []
     dbconnection = utils.make_dbconnection(args['pointmatch'])
     for farg in fargs:
-        [pair, args, tspecs, col_ind, ncol] = farg
+        [pair, args, tspecs, tforms, col_ind, ncol] = farg
 
         tile_ids = np.array([t.tileId for t in tspecs])
 
@@ -104,6 +104,13 @@ def calculate_processing_chunk(fargs):
         qblocks = []
         rhss = []
         for k, match in enumerate(matches):
+
+            match = utils.transform_match(
+                match,
+                tspecs[pinds[k]],
+                tspecs[qinds[k]],
+                args['transform_apply'],
+                tforms)
 
             pblock, qblock, weights, rhs = utils.blocks_from_tilespec_pair(
                     tspecs[pinds[k]],

@@ -200,7 +200,8 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
                         owner=stack['owner'],
                         project=stack['project'],
                         session=s)
-        except renderapi.errors.RenderError:
+        except renderapi.errors.RenderError as e:
+            logger.warning(str(e))
             pass
     if stack['db_interface'] == 'mongo':
         filt = {'z': float(z)}

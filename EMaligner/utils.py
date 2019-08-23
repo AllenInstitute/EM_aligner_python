@@ -16,10 +16,10 @@ from . import jsongz
 import collections
 import itertools
 import subprocess
+import requests
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 import h5py
-
 
 logger = logging.getLogger(__name__)
 
@@ -191,12 +191,15 @@ def get_resolved_from_z(stack, tform_name, fullsize, order, z):
     dbconnection = make_dbconnection(stack)
     if stack['db_interface'] == 'render':
         try:
-            resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
-                    stack['name'][0],
-                    float(z),
-                    render=dbconnection,
-                    owner=stack['owner'],
-                    project=stack['project'])
+            with requests.Session() as s:
+                s.mount('http://', requests.adapters.HTTPAdapter(max_retries=5))
+                resolved = renderapi.resolvedtiles.get_resolved_tiles_from_z(
+                        stack['name'][0],
+                        float(z),
+                        render=dbconnection,
+                        owner=stack['owner'],
+                        project=stack['project'],
+                        session=s)
         except renderapi.errors.RenderError:
             pass
     if stack['db_interface'] == 'mongo':
@@ -307,22 +310,26 @@ def get_matches(iId, jId, collection, dbconnection):
         matches = [m for m in matches
                    if set([m['pGroupId'], m['qGroupId']]) & set([iId, jId])]
     if collection['db_interface'] == 'render':
-        if iId == jId:
-            for name in collection['name']:
-                matches.extend(renderapi.pointmatch.get_matches_within_group(
-                        name,
-                        iId,
-                        owner=collection['owner'],
-                        render=dbconnection))
-        else:
-            for name in collection['name']:
-                matches.extend(
-                        renderapi.pointmatch.get_matches_from_group_to_group(
+        with requests.Session() as s:
+            s.mount('http://', requests.adapters.HTTPAdapter(max_retries=5))
+            if iId == jId:
+                for name in collection['name']:
+                    matches.extend(renderapi.pointmatch.get_matches_within_group(
                             name,
                             iId,
-                            jId,
                             owner=collection['owner'],
-                            render=dbconnection))
+                            render=dbconnection,
+                            session=s))
+            else:
+                for name in collection['name']:
+                    matches.extend(
+                            renderapi.pointmatch.get_matches_from_group_to_group(
+                                name,
+                                iId,
+                                jId,
+                                owner=collection['owner'],
+                                render=dbconnection,
+                                session=s))
     if collection['db_interface'] == 'mongo':
         for dbconn in dbconnection:
             cursor = dbconn.collection.find(
@@ -473,11 +480,16 @@ def write_reg_and_tforms(
 
         str_type = h5py.special_dtype(vlen=bytes)
 
+        rname = os.path.join(
+                os.path.dirname(fname),
+                "resolved.json.gz")
+
         dset = f.create_dataset(
                 "resolved_tiles",
                 (1,),
-                dtype=str_type)
-        dset[:] = json.dumps(resolved.to_dict(), indent=2)
+                data=os.path.basename(rname))
+
+        jsongz.dump(resolved.to_dict(), rname)
 
         # keep track of input args
         dset = f.create_dataset(

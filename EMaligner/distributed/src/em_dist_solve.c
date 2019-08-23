@@ -19,7 +19,7 @@ static char help[] = "usage:\n"
 #include <stdio.h>
 #include <petsctime.h>
 #include "ema.h"
-
+#include "hw_config.h"
 
 /*! @brief main for EM aligner distributed solve
  * usage : em_dist_solve -input <input_file_path> -output <output_file_path> <ksp options>
@@ -95,10 +95,37 @@ main (int argc, char **args)
   ierr =
     ReadMetadata (PETSC_COMM_WORLD, sln_input, nfiles, csrnames, metadata);
   CHKERRQ (ierr);
+
+  /*  what does the hardware look like?  */
+  node * nodes;
+  int count, j, nnodes, thisnode, noderank;
+  MPI_Comm MPI_COMM_NODE;
+  nodes = hw_config (MPI_COMM_WORLD, &nnodes, &thisnode);
+  split_files (nodes, nnodes, nfiles);
+  MPI_Comm_split (MPI_COMM_WORLD, thisnode, rank, &MPI_COMM_NODE);
+  MPI_Comm_rank (MPI_COMM_NODE, &noderank);
   /*  what files will this rank read  */
-  ierr =
-    SetFiles (PETSC_COMM_WORLD, nfiles, &local_firstfile, &local_lastfile);
-  CHKERRQ (ierr);
+  count = 0;
+  for (i=0; i<nnodes; i++)
+  {
+    if (rank == 0)
+    {
+	    disp_node (nodes[i]);
+    }
+    for (j=0; j<nodes[i].nrank; j++)
+    {
+      if ((thisnode == i) && (noderank == j))
+      {
+	      local_firstfile = count;
+	      local_lastfile = count + nodes[i].files[j] - 1;
+      }
+      count += nodes[i].files[j];
+    }
+  }
+
+  //ierr =
+  //  SetFiles (PETSC_COMM_WORLD, nfiles, &local_firstfile, &local_lastfile);
+  //CHKERRQ (ierr);
   /*  how many rows and nnz per worker  */
   GetGlobalLocalCounts (nfiles, metadata, local_firstfile, local_lastfile,
 			&global_nrow, &global_ncol, &global_nnz, &local_nrow,
@@ -134,8 +161,8 @@ main (int argc, char **args)
   CHKERRQ (ierr);
   /*  Create distributed A!  */
   MatCreateMPIAIJWithArrays (PETSC_COMM_WORLD, local_nrow, PETSC_DECIDE,
-			     global_nrow, global_ncol, local_indptr,
-			     local_jcol, local_data, &A);
+  			     global_nrow, global_ncol, local_indptr,
+  	                     local_jcol, local_data, &A);
   free (local_jcol);
   free (local_data);
   free (local_indptr);
@@ -202,6 +229,9 @@ main (int argc, char **args)
   ierr = MatAXPY (K, (PetscScalar) 1.0, L, SUBSET_NONZERO_PATTERN);
   CHKERRQ (ierr);
   MatSetOption (K, MAT_SYMMETRIC, PETSC_TRUE);
+  // appropriate for Cholesky
+  // ierr = MatConvert (K, MATMPISBAIJ, MAT_INPLACE_MATRIX, &K);
+  // CHKERRQ (ierr);
 
   if (rank == 0)
     {
@@ -230,7 +260,9 @@ main (int argc, char **args)
       CHKERRQ (ierr);
       ierr = VecAXPY (Lm[i], 1.0, ATWRHS[i]);
       CHKERRQ (ierr);
+      VecDestroy (&ATWRHS[i]);
     }
+
   if (rank == 0)
     {
       printf ("Lm(s) created\n");
@@ -249,6 +281,8 @@ main (int argc, char **args)
   ierr = KSPSetOperators (ksp, K, K);
   CHKERRQ (ierr);
   ierr = KSPSetFromOptions (ksp);
+  CHKERRQ (ierr);
+  ierr = KSPSetReusePreconditioner(ksp, PETSC_TRUE);
   CHKERRQ (ierr);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -317,6 +351,8 @@ main (int argc, char **args)
     }
   strcat (strout, "\n");
   strcat (results_out, "],");
+
+  MatDestroy (&K);
 
   PetscInt mA, nA, c0, cn;
   ierr = MatGetSize (A, &mA, &nA);
@@ -403,10 +439,8 @@ main (int argc, char **args)
       VecDestroy (&x[i]);
       VecDestroy (&x0[i]);
       VecDestroy (&rhs[i]);
-      VecDestroy (&ATWRHS[i]);
     }
   MatDestroy (&A);
-  MatDestroy (&K);
   MatDestroy (&ATW);
   KSPDestroy (&ksp);
   free (dir);

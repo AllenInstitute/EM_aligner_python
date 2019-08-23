@@ -257,6 +257,11 @@ class EMA_Schema(ArgSchema):
         description=("number of parallel jobs that will run for "
                      "retrieving tilespecs, assembly from pointmatches, "
                      "and import_tilespecs_parallel"))
+    processing_chunk_size = Int(
+        default=1,
+        required=False,
+        description=("number of pairs per multiprocessing job. can help "
+                     "parallelizing pymongo calls."))
     solve_type = String(
         default='montage',
         required=False,

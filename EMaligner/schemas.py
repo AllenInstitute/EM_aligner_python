@@ -158,15 +158,15 @@ class regularization(DefaultSchema):
         default=None,
         missing=None,
         cli_as_single_argument=True,
-        description=("List of regularization factors by order (0, 1, ...,  n).\n"
-                     "will override other settings for Polynomial2DTransform.\n"
-                     "multiplies default_lambda"))
+        description=("List of regularization factors by order "
+                     "(0, 1, ...,  n) will override other settings "
+                     "for Polynomial2DTransform. multiplies default_lambda"))
     thinplate_factor = Float(
         required=False,
         default=1e-5,
         missing=1e-5,
-        description=("regularization factor for thin plate spline control points"
-                     "multiplies default_lambda"))
+        description=("regularization factor for thin plate spline "
+                     "control points. multiplies default_lambda."))
 
 
 class input_db(db_params):
@@ -223,7 +223,8 @@ class output_stack(db_params):
         description="'stack' or 'pointmatch'")
     use_rest = Boolean(
         default=False,
-        description="passed as kwarg to renderapi.client.import_tilespecs_parallel")
+        description=("passed as kwarg to "
+                     "renderapi.client.import_tilespecs_parallel"))
 
     @mm.post_load
     def validate_file(self, data):
@@ -324,6 +325,13 @@ class EMA_Schema(ArgSchema):
             regularization,
             description=("options that contol the regularization of different"
                          " types of variables in the solve"))
+    transform_apply = List(
+            Int,
+            default=[],
+            missing=[],
+            description=("tilespec.tforms[i].tform() for i in transform_apply "
+                         "will be performed on the matches before matrix "
+                         "assembly."))
 
     @mm.post_load
     def validate_data(self, data):

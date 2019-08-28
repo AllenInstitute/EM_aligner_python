@@ -6,6 +6,17 @@
 .. image:: https://readthedocs.org/projects/em-aligner-python/badge/?version=latest
   :target: https://em-aligner-python.readthedocs.io/en/latest/?badge=latest
   :alt: Documentation Status
+
+NOTE
+####
+
+This package has been renamed BigFeta and this repo/package will no longer be updated.
+The new repository:
+
+https://github.com/AllenInstitute/BigFeta
+
+The new package:
+https://pypi.org/project/bigfeta/
   
 
 EM_aligner_python

@@ -28,7 +28,7 @@ with open('test_requirements.txt', 'r') as f:
 with open('requirements.txt', 'r') as f:
     required = f.read().splitlines()
 
-with open("README.md", "r") as fh:
+with open("README.rst", "r") as fh:
     long_description = fh.read()
 
 setup(name='EMaligner',
